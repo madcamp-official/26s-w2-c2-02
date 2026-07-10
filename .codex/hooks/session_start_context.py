@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -33,6 +34,17 @@ def detect_commands(root: Path) -> list[str]:
     return commands
 
 
+def upstream_summary(root: Path) -> str:
+    upstream = run(["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], root)
+    if not upstream:
+        return ""
+    ahead = run(["git", "rev-list", "--count", f"{upstream}..HEAD"], root)
+    behind = run(["git", "rev-list", "--count", f"HEAD..{upstream}"], root)
+    if ahead.isdigit() and behind.isdigit():
+        return f"Upstream: {upstream}; ahead {ahead}, behind {behind}."
+    return f"Upstream: {upstream}."
+
+
 def main() -> None:
     payload = json.load(__import__("sys").stdin)
     root = Path(payload.get("cwd") or ".").resolve()
@@ -63,6 +75,13 @@ def main() -> None:
         notes.append("Shared agent docs present: " + ", ".join(tracked_docs) + ".")
     if branch:
         notes.append(f"Current branch: {branch}.")
+    upstream = upstream_summary(root)
+    if upstream:
+        notes.append(upstream)
+    if branch in ("main", "master"):
+        notes.append("For substantial changes on main/master, propose creating a topic branch before editing.")
+        if os.environ.get("CODEX_AUTO_BRANCH") == "1":
+            notes.append("CODEX_AUTO_BRANCH=1 is set; a clean protected branch may be switched to a topic branch before substantial edits.")
     if status:
         notes.append("Worktree is not clean; avoid overwriting unrelated changes.")
         notes.append("Auto-commit will stay off for this session because the worktree already had changes.")

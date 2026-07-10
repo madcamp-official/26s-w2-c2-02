@@ -120,8 +120,10 @@
 - 저장소를 trust 해야 repo-local `.codex/` hook 과 config 가 로드됩니다.
 - `.agents/skills/` 는 레포에 체크인되어 팀 전체가 같은 workflow 를 재사용할 수 있습니다.
 - `.agents/skills/` 와 `.codex/` 는 Codex 친화 레이어이고, 공통 규칙은 `AGENTS.md` 와 `docs/ai_workflows.md` 에 남깁니다.
+- 중요한 변경은 가능하면 `main` 이 아닌 topic branch 에서 시작합니다. `CODEX_AUTO_BRANCH=1` 을 설정하면 clean `main` 에서 중요한 편집 전 로컬 branch 생성을 자동화할 수 있습니다.
 - clean worktree 에서 시작한 Codex session 은 `CODEX_AUTO_COMMIT=1` 이 설정된 경우에만 종료 시 중요한 변경을 자동 커밋할 수 있습니다.
 - 이미 미커밋 변경이 있는 세션은 unrelated work 를 함께 묶지 않도록 자동 커밋을 건너뜁니다.
+- `git push` 와 `git pull` 은 자동 실행하지 않고, 상태 확인 후 제안과 승인 절차를 거쳐 실행합니다. pull 은 `--ff-only` 를 기본으로 사용합니다.
 
 팀원이 Claude Code 를 쓸 경우:
 

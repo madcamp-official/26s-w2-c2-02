@@ -22,6 +22,16 @@
             "statusMessage": "Checking Bash command policy"
           }
         ]
+      },
+      {
+        "matcher": "^apply_patch$|^Edit$|^Write$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.codex/hooks/pre_tool_use_edit_branch.py\"",
+            "statusMessage": "Checking branch workflow"
+          }
+        ]
       }
     ],
     "PostToolUse": [

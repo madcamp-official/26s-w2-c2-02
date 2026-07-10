@@ -85,12 +85,21 @@
 현재 Codex 에는 다음 project-local hook 이 있습니다.
 
 - `SessionStart`: 저장소 문서와 skill 존재를 바탕으로 초기 컨텍스트 보강
-- `PreToolUse` for `Bash`: 위험 명령, production 추정 대상, secret 노출 가능 명령 차단
+- `PreToolUse` for `Bash`: 위험 명령, production 추정 대상, secret 노출 가능 명령, 위험한 git network 명령 차단
+- `PreToolUse` for edits: `main`/`master` 에서 중요한 파일을 수정하기 전 topic branch 사용을 안내하고, `CODEX_AUTO_BRANCH=1` 이 설정된 clean worktree 에서는 로컬 topic branch 를 만들 수 있음
 - `PostToolUse` for `Bash`: 실패한 검증 명령과 후속 확인이 필요한 명령에 대한 경고
 - `PostToolUse` for edits: 큰 삭제나 문서/검증 누락 가능성 경고
 - `Stop`: 변경 파일, 테스트 상태, 남은 리스크를 최종 답변에서 언급하도록 유도하고, clean-start session 에서 `CODEX_AUTO_COMMIT=1` 이 설정된 경우에만 중요한 변경을 자동 커밋할 수 있음
 
 이 자동화는 Codex 전용입니다. Claude Code 사용자는 같은 개념을 수동 체크리스트로 따라가면 됩니다.
+
+## Branch-first 작업
+
+- 목적: 중요한 변경이 기본 브랜치에 바로 쌓이지 않도록 로컬 체크포인트를 분리하기
+- 기본 원칙: `main` 또는 `master` 에서 큰 변경을 시작하기 전 topic branch 생성을 제안합니다.
+- 자동화 opt-in: `CODEX_AUTO_BRANCH=1` 이 설정되어 있고 worktree 가 clean 하면 중요한 편집 전 로컬 topic branch 를 만들 수 있습니다.
+- 자동 생성 대상 예시: `.codex/`, `.agents/`, `docs/`, `AGENTS.md`, `README.md`, `CLAUDE.md`, `KPT.md`
+- 건너뛰는 경우: worktree 가 dirty 한 경우, 이미 topic branch 인 경우, 사용자가 기본 브랜치 작업을 명시한 경우
 
 ## 중요 변경 자동 커밋
 
@@ -107,6 +116,15 @@
   - `chore: auto-commit workflow updates`
   - `docs: auto-commit documentation updates`
   - `chore: auto-commit important changes`
+
+## Push/Pull 승인 흐름
+
+- `git push` 와 `git pull` 은 자동 실행하지 않습니다.
+- 원격보다 앞서거나 뒤처진 상태는 먼저 감지하고 사용자에게 제안합니다.
+- 사용자가 승인한 뒤에만 실행합니다.
+- `git pull` 은 `--ff-only` 를 기본으로 사용하고, `--ff-only` 없는 pull 은 hook 에서 차단합니다.
+- `git push --force`, `git push --force-with-lease`, `git push --mirror`, `git push --delete` 는 hook 에서 차단합니다.
+- 인증 토큰, 비밀번호, private key 는 채팅에 공유하지 않습니다.
 
 ## TDD 와 검증 실패 처리
 

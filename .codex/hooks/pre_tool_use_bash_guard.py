@@ -33,6 +33,17 @@ PROD_PATTERNS = [
     r"\b(kubectl|helm|vercel|flyctl|railway)\b.*\b(prod|production)\b",
 ]
 
+GIT_NETWORK_PATTERNS = [
+    (
+        r"(?:^|[;&]\s*)git\s+push\b[^\n;&]*\s--(?:force|force-with-lease|mirror|delete)\b",
+        "Blocked destructive git push variant. Use a normal push after explicit user approval.",
+    ),
+    (
+        r"(?:^|[;&]\s*)git\s+pull\b(?![^\n;&]*\s--ff-only\b)",
+        "Blocked git pull without --ff-only. Use proposal + approval, then git pull --ff-only.",
+    ),
+]
+
 
 def deny(reason: str) -> None:
     print(
@@ -65,6 +76,11 @@ def main() -> None:
     for pattern in PROD_PATTERNS:
         if re.search(pattern, command, re.IGNORECASE):
             deny("Blocked command that appears to target a production system.")
+            return
+
+    for pattern, reason in GIT_NETWORK_PATTERNS:
+        if re.search(pattern, command, re.IGNORECASE):
+            deny(reason)
             return
 
 
