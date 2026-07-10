@@ -62,7 +62,7 @@ def auto_commit_enabled() -> bool:
 
 
 def classify_commit_message(changed_files: list[str]) -> str:
-    doc_files = {"AGENTS.md", "README.md", "CLAUDE.md"}
+    doc_files = {"AGENTS.md", "README.md", "CHANGELOG.md", "CLAUDE.md"}
     if any(path.startswith(".codex/") for path in changed_files):
         return "chore: workflow 자동화 업데이트"
     if any(path.startswith("docs/") or path in doc_files for path in changed_files):
@@ -71,7 +71,7 @@ def classify_commit_message(changed_files: list[str]) -> str:
 
 
 def should_auto_commit(changed_files: list[str], added: int, deleted: int) -> bool:
-    important_paths = {"AGENTS.md", "README.md", "CLAUDE.md"}
+    important_paths = {"AGENTS.md", "README.md", "CHANGELOG.md", "CLAUDE.md"}
     if len(changed_files) >= 2:
         return True
     if added + deleted >= 25:
@@ -125,7 +125,7 @@ def main() -> None:
     elif changed_files:
         summary_parts.append("Auto-commit skipped because this session started with an already dirty worktree.")
     summary_parts.append("Before finishing, confirm test status and remaining risk in the final response.")
-    summary_parts.append("If behavior or workflow changed, confirm whether AGENTS.md, README.md, KPT.md, or CLAUDE.md need updates.")
+    summary_parts.append("If behavior, workflow, setup, or user-facing impact changed, confirm whether CHANGELOG.md, AGENTS.md, README.md, KPT.md, or CLAUDE.md need updates; use the changelog-generator style for changelog entries.")
     print(
         json.dumps(
             {

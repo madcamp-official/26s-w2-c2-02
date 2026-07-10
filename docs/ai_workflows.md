@@ -10,11 +10,13 @@
 - `.claude/settings.json`: Claude Code 전용 project-local hook config
 - `.agents/skills/`: Codex 전용 shared skill
 - `docs/ai_workflows.md`: 도구를 가리지 않고 이해 가능한 공용 workflow 설명
+- `CHANGELOG.md`: 스크럼과 릴리스 준비 때 최근 변경사항을 빠르게 확인하는 변경 로그
 
 ## 공통 운영 원칙
 
 - unfamiliar code 를 수정하기 전 `AGENTS.md`, `README.md` 를 먼저 읽습니다.
 - 기능 변경, 인터페이스 변경, 운영 기대치 변경이 있으면 관련 문서를 함께 갱신합니다.
+- 중요한 behavior, workflow, setup, user-facing 변경이 있으면 `changelog-generator` 기준으로 `CHANGELOG.md` 를 갱신합니다.
 - 가능하면 가장 관련성 높은 테스트나 lint 를 실행합니다.
 - 검증을 못 했으면 이유를 명시합니다.
 - 공통 규칙은 한곳에만 둡니다. 공통 규칙은 `AGENTS.md`, 도구 전용 규칙은 각 전용 파일에 둡니다.
@@ -82,6 +84,33 @@
 - Codex 구현: `.agents/skills/changelog-generator`
 - 사람용 해석: 내부 구현보다 실제로 무엇이 달라졌는지부터 씁니다.
 
+### scrum notes command
+
+- 목적: `CHANGELOG.md` 를 바탕으로 매일 스크럼 회의록 초안을 생성
+- 구현: `scripts/generate_scrum_notes.py`
+- 사람용 해석: 스크럼 전에 `Unreleased` 변경사항을 "어제까지 한 일", "오늘 할 일", "궁금한/필요한/알아낸 것" 형식으로 정리합니다.
+
+## Changelog 작성 흐름
+
+- 목적: 매일 스크럼 전에 레포 전체를 다시 읽지 않고 최근 변경 영향과 후속 확인 사항을 빠르게 파악하기
+- 작성 대상: behavior, workflow, setup, user-facing 변경, 수동 migration 또는 배포 전 확인이 필요한 변경
+- 작성 위치: `CHANGELOG.md` 의 `Unreleased` 섹션
+- 작성 기준: `changelog-generator` skill 을 사용해 실제 영향, 내부 변경, 수동 조치 여부를 분리합니다.
+- 생략 가능: 오타 수정, 포맷팅만 바뀐 변경, 의미 없는 내부 정리
+- README 동기화: 루트 `README.md` 는 루미 프로젝트의 고정 개요/기획 문서로 둡니다. 앞으로 자잘한 AI workflow, hook, skill 변경은 루트 `README.md` 에 반복 반영하지 않고 `docs/ai_workflows.md`, `AGENTS.md`, 도구별 설정 문서에만 반영합니다. 하위 디렉터리의 `README.md` 는 기존처럼 해당 하위 모듈의 실행 방법, 인터페이스, 운영 기대치가 바뀔 때 함께 갱신합니다.
+- 자동화: Stop hook 은 최종 응답 전에 changelog 갱신 필요 여부를 상기시키고, 에이전트는 변경 diff 를 보고 필요한 항목을 작성합니다.
+
+## 스크럼 회의록 생성 흐름
+
+- 목적: `CHANGELOG.md` 를 다시 회의용 문장으로 옮기는 반복 작업을 줄이기
+- 작성 기준: command 가 `CHANGELOG.md` 의 `Unreleased` 섹션을 먼저 읽습니다.
+- 기본 command: `python3 scripts/generate_scrum_notes.py`
+- 기본 출력은 스크럼에서 말하기 좋은 핵심 항목 위주로 제한합니다. 전체 changelog 항목이 필요하면 `--all` 을 사용합니다.
+- 출력 문체는 회의에서 바로 읽기 쉽도록 "~했습니다" 문장형보다 개조식을 기본으로 사용합니다.
+- 오늘 할 일이 정해져 있으면 `--today "A1. 작업"` 옵션을 여러 번 넘겨 초안에 포함합니다.
+- `CHANGELOG.md` 의 `Notes` 는 "궁금한/필요한/알아낸 것" 과 오늘 follow-up 후보로 사용합니다.
+- 생성 결과는 초안입니다. 팀원이 알고 있는 배포, blocker, 외부 공지 링크 같은 회의 맥락은 사람이 마지막에 보강합니다.
+
 ## Agent automation
 
 현재 Codex 와 Claude Code 에는 다음 project-local hook 흐름이 있습니다. Codex 는 `.codex/hooks.json` 를 사용하고, Claude Code 는 `.claude/settings.json` 를 사용합니다. 두 설정 모두 같은 Python hook 스크립트를 호출합니다.
@@ -113,7 +142,7 @@ Claude Code hook 은 Claude 공식 project-local 설정 파일인 `.claude/setti
 - 중요 변경 판단 기준:
   - 변경 파일이 2개 이상인 경우
   - staged 와 unstaged 변경의 추가/삭제 라인 합이 대략 25줄 이상인 경우
-  - `.codex/`, `docs/`, `AGENTS.md`, `README.md`, `CLAUDE.md` 중 하나가 바뀐 경우
+  - `.codex/`, `docs/`, `AGENTS.md`, `README.md`, `CHANGELOG.md`, `CLAUDE.md` 중 하나가 바뀐 경우
 - 자동 커밋 메시지 예시:
   - `chore: workflow 자동화 업데이트`
   - `docs: 문서 업데이트`
@@ -144,3 +173,11 @@ Claude Code hook 은 Claude 공식 project-local 설정 파일인 `.claude/setti
 - agent workflow 의 목적이나 사용 시점
 - Codex 전용 hook 또는 skill 구성
 - Claude 와 Codex 의 역할 분담 방식
+- changelog 에 남길 만한 behavior, workflow, setup, user-facing 변경
+
+### 루트 README 고정 정책
+
+- 루트 `README.md` 는 루미(Room-AI) 프로젝트의 과제 개요, 기획안, 구현 명세, 설계 문서, 참고 자료를 담는 고정 문서로 유지합니다.
+- AI 협업 설정, hook, skill, agent workflow 의 자잘한 변경은 루트 `README.md` 에 중복 반영하지 않습니다.
+- 루트 `README.md` 를 갱신하는 경우는 프로젝트 자체의 큰 방향, 실행 진입점, 공개 시연/제출에 필요한 핵심 정보가 바뀐 경우로 제한합니다.
+- 하위 디렉터리의 `README.md` 는 기존 정책 그대로 유지합니다. 해당 하위 모듈의 실행법, API, 인터페이스, 운영 기대치가 바뀌면 관련 하위 README 를 갱신합니다.
