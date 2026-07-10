@@ -111,6 +111,7 @@
 
 - `AGENTS.md`: 레포 공통 작업 규칙과 검증 기대치의 단일 소스
 - `CLAUDE.md`: Claude Code 호환용 얇은 안내문
+- `.claude/settings.json`: Claude Code project-local hook 설정
 - `docs/ai_workflows.md`: 사람과 여러 에이전트가 함께 참고하는 공용 workflow 요약
 - `.agents/skills/`: 팀 공용 Codex workflow skill 모음
 - `.codex/`: repo-local Codex config 와 hook
@@ -120,8 +121,8 @@
 - 저장소를 trust 해야 repo-local `.codex/` hook 과 config 가 로드됩니다.
 - `.agents/skills/` 는 레포에 체크인되어 팀 전체가 같은 workflow 를 재사용할 수 있습니다.
 - `.agents/skills/` 와 `.codex/` 는 Codex 친화 레이어이고, 공통 규칙은 `AGENTS.md` 와 `docs/ai_workflows.md` 에 남깁니다.
-- 중요한 변경은 가능하면 `main` 이 아닌 topic branch 에서 시작합니다. `CODEX_AUTO_BRANCH=1` 을 설정하면 clean `main` 에서 중요한 편집 전 로컬 branch 생성을 자동화할 수 있습니다.
-- clean worktree 에서 시작한 Codex session 은 `CODEX_AUTO_COMMIT=1` 이 설정된 경우에만 종료 시 중요한 변경을 자동 커밋할 수 있습니다.
+- 중요한 변경은 가능하면 `main` 이 아닌 topic branch 에서 시작합니다. `AI_AUTO_BRANCH=1`, `CODEX_AUTO_BRANCH=1`, `CLAUDE_AUTO_BRANCH=1` 중 하나를 설정하면 clean `main` 에서 중요한 편집 전 로컬 branch 생성을 자동화할 수 있습니다.
+- clean worktree 에서 시작한 agent session 은 `AI_AUTO_COMMIT=1`, `CODEX_AUTO_COMMIT=1`, `CLAUDE_AUTO_COMMIT=1` 중 하나가 설정된 경우에만 종료 시 중요한 변경을 자동 커밋할 수 있습니다.
 - 이미 미커밋 변경이 있는 세션은 unrelated work 를 함께 묶지 않도록 자동 커밋을 건너뜁니다.
 - `git push` 와 `git pull` 은 자동 실행하지 않고, 상태 확인 후 제안과 승인 절차를 거쳐 실행합니다. pull 은 `--ff-only` 를 기본으로 사용합니다.
 
@@ -129,6 +130,7 @@
 
 - `AGENTS.md` 를 공통 규칙의 기준으로 유지합니다.
 - `CLAUDE.md` 는 Claude 전용 보충 안내만 두고, 공통 규칙은 복제하지 말고 `AGENTS.md` 로 모읍니다.
+- `.claude/settings.json` 이 `.codex/hooks/` 의 같은 hook 스크립트를 호출하므로 Codex 와 비슷한 안전장치를 사용합니다.
 - Codex 전용 skill 이나 hook 세부사항은 `docs/ai_workflows.md` 에서 사람 읽기 좋은 형태로 같이 설명합니다.
 
 ### 실행 방법

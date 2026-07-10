@@ -32,7 +32,17 @@ def run(cmd: list[str], cwd: Path) -> str:
         return ""
 
 
-def touched_paths(payload: dict) -> list[str]:
+def normalize_path(path: str, root: Path) -> str:
+    candidate = Path(path)
+    if candidate.is_absolute():
+        try:
+            return str(candidate.resolve().relative_to(root))
+        except ValueError:
+            return str(candidate)
+    return path.lstrip("./")
+
+
+def touched_paths(payload: dict, root: Path) -> list[str]:
     tool_input = payload.get("tool_input", {})
     paths = []
     for key in ("file_path", "path"):
@@ -41,11 +51,18 @@ def touched_paths(payload: dict) -> list[str]:
             paths.append(value)
     command = str(tool_input.get("command", ""))
     paths.extend(re.findall(r"^\*\*\* (?:Update|Add|Delete) File: (.+)$", command, re.MULTILINE))
-    return [path.lstrip("./") for path in paths]
+    return [normalize_path(path, root) for path in paths]
 
 
 def important_edit(paths: list[str]) -> bool:
     return any(path.startswith(IMPORTANT_PATHS) or path in IMPORTANT_PATHS for path in paths)
+
+
+def auto_branch_enabled() -> bool:
+    return any(
+        os.environ.get(name) == "1"
+        for name in ("AI_AUTO_BRANCH", "CODEX_AUTO_BRANCH", "CLAUDE_AUTO_BRANCH")
+    )
 
 
 def main() -> None:
@@ -53,12 +70,12 @@ def main() -> None:
     root = Path(payload.get("cwd") or ".").resolve()
     branch = run(["git", "branch", "--show-current"], root)
     status = run(["git", "status", "--short"], root)
-    paths = touched_paths(payload)
+    paths = touched_paths(payload, root)
 
     if branch not in ("main", "master") or not important_edit(paths):
         return
 
-    if os.environ.get("CODEX_AUTO_BRANCH") == "1" and not status:
+    if auto_branch_enabled() and not status:
         branch_name = "codex/workflow-updates"
         existing = run(["git", "branch", "--list", branch_name], root)
         if existing:
@@ -88,7 +105,7 @@ def main() -> None:
             {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
-                    "additionalContext": "Important edit on main/master detected. Prefer proposing a topic branch first; set CODEX_AUTO_BRANCH=1 only when automatic local branch creation is desired.",
+                    "additionalContext": "Important edit on main/master detected. Prefer proposing a topic branch first; set AI_AUTO_BRANCH=1, CODEX_AUTO_BRANCH=1, or CLAUDE_AUTO_BRANCH=1 only when automatic local branch creation is desired.",
                 }
             }
         )

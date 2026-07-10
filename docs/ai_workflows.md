@@ -7,6 +7,7 @@
 - `AGENTS.md`: 저장소 공통 규칙, 검증 기대치, 문서 동기화 원칙
 - `CLAUDE.md`: Claude Code 전용 보충 안내
 - `.codex/`: Codex 전용 project-local config 와 hook
+- `.claude/settings.json`: Claude Code 전용 project-local hook config
 - `.agents/skills/`: Codex 전용 shared skill
 - `docs/ai_workflows.md`: 도구를 가리지 않고 이해 가능한 공용 workflow 설명
 
@@ -80,24 +81,24 @@
 - Codex 구현: `.agents/skills/changelog-generator`
 - 사람용 해석: 내부 구현보다 실제로 무엇이 달라졌는지부터 씁니다.
 
-## Codex-specific automation
+## Agent automation
 
-현재 Codex 에는 다음 project-local hook 이 있습니다.
+현재 Codex 와 Claude Code 에는 다음 project-local hook 흐름이 있습니다. Codex 는 `.codex/hooks.json` 를 사용하고, Claude Code 는 `.claude/settings.json` 를 사용합니다. 두 설정 모두 같은 Python hook 스크립트를 호출합니다.
 
 - `SessionStart`: 저장소 문서와 skill 존재를 바탕으로 초기 컨텍스트 보강
 - `PreToolUse` for `Bash`: 위험 명령, production 추정 대상, secret 노출 가능 명령, 위험한 git network 명령 차단
-- `PreToolUse` for edits: `main`/`master` 에서 중요한 파일을 수정하기 전 topic branch 사용을 안내하고, `CODEX_AUTO_BRANCH=1` 이 설정된 clean worktree 에서는 로컬 topic branch 를 만들 수 있음
+- `PreToolUse` for edits: `main`/`master` 에서 중요한 파일을 수정하기 전 topic branch 사용을 안내하고, auto-branch opt-in 이 설정된 clean worktree 에서는 로컬 topic branch 를 만들 수 있음
 - `PostToolUse` for `Bash`: 실패한 검증 명령과 후속 확인이 필요한 명령에 대한 경고
 - `PostToolUse` for edits: 큰 삭제나 문서/검증 누락 가능성 경고
-- `Stop`: 변경 파일, 테스트 상태, 남은 리스크를 최종 답변에서 언급하도록 유도하고, clean-start session 에서 `CODEX_AUTO_COMMIT=1` 이 설정된 경우에만 중요한 변경을 자동 커밋할 수 있음
+- `Stop`: 변경 파일, 테스트 상태, 남은 리스크를 최종 답변에서 언급하도록 유도하고, clean-start session 에서 auto-commit opt-in 이 설정된 경우에만 중요한 변경을 자동 커밋할 수 있음
 
-이 자동화는 Codex 전용입니다. Claude Code 사용자는 같은 개념을 수동 체크리스트로 따라가면 됩니다.
+Claude Code hook 은 Claude 공식 project-local 설정 파일인 `.claude/settings.json` 에서 로드됩니다. Codex skill 자체는 Claude-native 기능이 아니므로, Claude 사용자는 skill 설명을 프로세스 참고문서로 읽습니다.
 
 ## Branch-first 작업
 
 - 목적: 중요한 변경이 기본 브랜치에 바로 쌓이지 않도록 로컬 체크포인트를 분리하기
 - 기본 원칙: `main` 또는 `master` 에서 큰 변경을 시작하기 전 topic branch 생성을 제안합니다.
-- 자동화 opt-in: `CODEX_AUTO_BRANCH=1` 이 설정되어 있고 worktree 가 clean 하면 중요한 편집 전 로컬 topic branch 를 만들 수 있습니다.
+- 자동화 opt-in: `AI_AUTO_BRANCH=1`, `CODEX_AUTO_BRANCH=1`, `CLAUDE_AUTO_BRANCH=1` 중 하나가 설정되어 있고 worktree 가 clean 하면 중요한 편집 전 로컬 topic branch 를 만들 수 있습니다.
 - 자동 생성 대상 예시: `.codex/`, `.agents/`, `docs/`, `AGENTS.md`, `README.md`, `CLAUDE.md`, `KPT.md`
 - 건너뛰는 경우: worktree 가 dirty 한 경우, 이미 topic branch 인 경우, 사용자가 기본 브랜치 작업을 명시한 경우
 
@@ -105,7 +106,7 @@
 
 - 목적: 중요한 변경이 생겼을 때 사람이 커밋 타이밍을 놓쳐도 체크포인트를 남기기
 - 동작 시점: Codex `Stop` hook 실행 시점
-- opt-in: `CODEX_AUTO_COMMIT=1` 환경변수가 설정된 경우에만 자동 커밋 허용
+- opt-in: `AI_AUTO_COMMIT=1`, `CODEX_AUTO_COMMIT=1`, `CLAUDE_AUTO_COMMIT=1` 중 하나가 설정된 경우에만 자동 커밋 허용
 - 안전장치: 세션 시작 시 worktree 가 clean 했던 경우에만 자동 커밋 가능
 - 건너뛰는 경우: 세션 시작 전부터 미커밋 변경이 있었던 경우
 - 중요 변경 판단 기준:

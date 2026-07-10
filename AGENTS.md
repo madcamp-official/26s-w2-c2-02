@@ -6,7 +6,7 @@
 - Before editing unfamiliar code, read `AGENTS.md` first, then `README.md` if present.
 - Call out any required documentation sync before finishing work.
 - Keep tool-specific workflow details out of `AGENTS.md`.
-- Keep repo-shared agent guidance in `AGENTS.md`, Codex skills in `.agents/skills/`, Codex hooks/config in `.codex/`, Claude compatibility notes in `CLAUDE.md`, and cross-tool workflow summaries in `docs/ai_workflows.md`.
+- Keep repo-shared agent guidance in `AGENTS.md`, Codex skills in `.agents/skills/`, Codex hooks/config in `.codex/`, Claude hooks/config in `.claude/`, Claude compatibility notes in `CLAUDE.md`, and cross-tool workflow summaries in `docs/ai_workflows.md`.
 
 ## Verification
 

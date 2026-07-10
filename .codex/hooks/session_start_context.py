@@ -45,6 +45,13 @@ def upstream_summary(root: Path) -> str:
     return f"Upstream: {upstream}."
 
 
+def auto_branch_enabled() -> bool:
+    return any(
+        os.environ.get(name) == "1"
+        for name in ("AI_AUTO_BRANCH", "CODEX_AUTO_BRANCH", "CLAUDE_AUTO_BRANCH")
+    )
+
+
 def main() -> None:
     payload = json.load(__import__("sys").stdin)
     root = Path(payload.get("cwd") or ".").resolve()
@@ -80,8 +87,8 @@ def main() -> None:
         notes.append(upstream)
     if branch in ("main", "master"):
         notes.append("For substantial changes on main/master, propose creating a topic branch before editing.")
-        if os.environ.get("CODEX_AUTO_BRANCH") == "1":
-            notes.append("CODEX_AUTO_BRANCH=1 is set; a clean protected branch may be switched to a topic branch before substantial edits.")
+        if auto_branch_enabled():
+            notes.append("Auto-branch opt-in is set; a clean protected branch may be switched to a topic branch before substantial edits.")
     if status:
         notes.append("Worktree is not clean; avoid overwriting unrelated changes.")
         notes.append("Auto-commit will stay off for this session because the worktree already had changes.")

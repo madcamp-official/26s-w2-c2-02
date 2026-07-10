@@ -55,7 +55,10 @@ def git_diff_numstat(root: Path) -> tuple[int, int]:
 
 
 def auto_commit_enabled() -> bool:
-    return os.environ.get("CODEX_AUTO_COMMIT") == "1"
+    return any(
+        os.environ.get(name) == "1"
+        for name in ("AI_AUTO_COMMIT", "CODEX_AUTO_COMMIT", "CLAUDE_AUTO_COMMIT")
+    )
 
 
 def classify_commit_message(changed_files: list[str]) -> str:
@@ -118,7 +121,7 @@ def main() -> None:
         else:
             summary_parts.append("Auto-commit skipped because the current changes did not meet the important-change heuristic.")
     elif changed_files and session_state.get("baseline_clean"):
-        summary_parts.append("Auto-commit skipped because CODEX_AUTO_COMMIT=1 is not set.")
+        summary_parts.append("Auto-commit skipped because no auto-commit opt-in env var is set.")
     elif changed_files:
         summary_parts.append("Auto-commit skipped because this session started with an already dirty worktree.")
     summary_parts.append("Before finishing, confirm test status and remaining risk in the final response.")
