@@ -105,17 +105,42 @@
 - **실행 방법:**
 - **시연 영상 / 이미지:** (선택)
 
+## AI 협업 설정
+
+이 저장소는 사람 팀원과 코딩 에이전트가 함께 쓰는 기본 설정을 포함합니다.
+
+- `AGENTS.md`: 레포 공통 작업 규칙과 검증 기대치의 단일 소스
+- `CLAUDE.md`: Claude Code 호환용 얇은 안내문
+- `docs/ai_workflows.md`: 사람과 여러 에이전트가 함께 참고하는 공용 workflow 요약
+- `.agents/skills/`: 팀 공용 Codex workflow skill 모음
+- `.codex/`: repo-local Codex config 와 hook
+
+팀원이 Codex 를 쓸 경우:
+
+- 저장소를 trust 해야 repo-local `.codex/` hook 과 config 가 로드됩니다.
+- `.agents/skills/` 는 레포에 체크인되어 팀 전체가 같은 workflow 를 재사용할 수 있습니다.
+- `.agents/skills/` 와 `.codex/` 는 Codex 친화 레이어이고, 공통 규칙은 `AGENTS.md` 와 `docs/ai_workflows.md` 에 남깁니다.
+- clean worktree 에서 시작한 Codex session 은 `CODEX_AUTO_COMMIT=1` 이 설정된 경우에만 종료 시 중요한 변경을 자동 커밋할 수 있습니다.
+- 이미 미커밋 변경이 있는 세션은 unrelated work 를 함께 묶지 않도록 자동 커밋을 건너뜁니다.
+
+팀원이 Claude Code 를 쓸 경우:
+
+- `AGENTS.md` 를 공통 규칙의 기준으로 유지합니다.
+- `CLAUDE.md` 는 Claude 전용 보충 안내만 두고, 공통 규칙은 복제하지 말고 `AGENTS.md` 로 모읍니다.
+- Codex 전용 skill 이나 hook 세부사항은 `docs/ai_workflows.md` 에서 사람 읽기 좋은 형태로 같이 설명합니다.
+
 ### 실행 방법
 
+아직 실제 앱 스택과 실행 진입점이 확정되지 않았습니다. 프로젝트 기술을 선택한 뒤 이 섹션을 실제 명령으로 교체합니다.
+
 ```bash
-# 환경 설정
-cp .env.example .env
+# 예시: Node.js 프로젝트가 된 경우
+npm install
+npm run dev
 
-# 의존성 설치
-npm install   # 또는 pip install -r requirements.txt 등
-
-# 실행
-npm run dev   # 또는 python main.py 등
+# 예시: Python 프로젝트가 된 경우
+pip install -r requirements.txt
+python main.py
 ```
 
 ### 기술 구성

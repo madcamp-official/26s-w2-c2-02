@@ -1,0 +1,5 @@
+project_doc_fallback_filenames = ["README.codex.md", "TEAM_GUIDE.md", "README.md"]
+project_doc_max_bytes = 65536
+
+[mcp_servers.notion]
+url = "https://mcp.notion.com/mcp"
