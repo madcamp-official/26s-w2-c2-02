@@ -120,7 +120,7 @@
 - `PreToolUse` for edits: `main`/`master` 에서 중요한 파일을 수정하기 전 topic branch 사용을 안내하고, auto-branch opt-in 이 설정된 clean worktree 에서는 로컬 topic branch 를 만들 수 있음
 - `PostToolUse` for `Bash`: 실패한 검증 명령과 후속 확인이 필요한 명령에 대한 경고
 - `PostToolUse` for edits: 큰 삭제나 문서/검증 누락 가능성 경고
-- `Stop`: 변경 파일, 테스트 상태, 남은 리스크를 최종 답변에서 언급하도록 유도하고, clean-start session 에서 auto-commit opt-in 이 설정된 경우에만 중요한 변경을 자동 커밋할 수 있음
+- `Stop`: 변경 파일, 테스트 상태, 남은 리스크를 최종 답변에서 언급하도록 유도하고, clean-start session 에서 중요한 변경을 자동 커밋할 수 있음
 
 Claude Code hook 은 Claude 공식 project-local 설정 파일인 `.claude/settings.json` 에서 로드됩니다. Codex skill 자체는 Claude-native 기능이 아니므로, Claude 사용자는 skill 설명을 프로세스 참고문서로 읽습니다.
 
@@ -136,7 +136,7 @@ Claude Code hook 은 Claude 공식 project-local 설정 파일인 `.claude/setti
 
 - 목적: 중요한 변경이 생겼을 때 사람이 커밋 타이밍을 놓쳐도 체크포인트를 남기기
 - 동작 시점: Codex `Stop` hook 실행 시점
-- opt-in: `AI_AUTO_COMMIT=1`, `CODEX_AUTO_COMMIT=1`, `CLAUDE_AUTO_COMMIT=1` 중 하나가 설정된 경우에만 자동 커밋 허용
+- 기본 설정: repo-local Codex/Claude Stop hook 은 `AI_AUTO_COMMIT=1`, `CODEX_AUTO_COMMIT=1`, `CLAUDE_AUTO_COMMIT=1` 을 명령 환경에 주입해 자동 커밋을 켭니다.
 - 안전장치: 세션 시작 시 worktree 가 clean 했던 경우에만 자동 커밋 가능
 - 건너뛰는 경우: 세션 시작 전부터 미커밋 변경이 있었던 경우
 - 중요 변경 판단 기준:

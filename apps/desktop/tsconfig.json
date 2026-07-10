@@ -1,0 +1,4 @@
+{
+  "extends": "@lumi/config/tsconfig.react.json",
+  "include": ["electron.vite.config.ts", "src"]
+}

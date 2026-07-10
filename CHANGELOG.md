@@ -15,6 +15,8 @@
 - Claude Code project-local 설정을 추가해 Codex 와 같은 hook 스크립트를 공유하도록 했습니다.
 - AI 협업 workflow 에 changelog 작성 흐름을 통합했습니다.
 - `CHANGELOG.md` 기반 스크럼 회의록 초안을 생성하는 command 를 추가했습니다.
+- Electron 데스크톱 앱, API 서비스, 공유 TypeScript 계약, 공통 config 패키지를 포함한 루미 초기 monorepo 구조를 추가했습니다.
+- MVP 방 생성, realtime, 환경변수 세팅을 위한 초안 문서 `docs/architecture.md`, `docs/api.md` 를 추가했습니다.
 
 ### Changed
 
@@ -30,11 +32,17 @@
 - 중요한 behavior, workflow, setup, user-facing 변경은 `changelog-generator` 기준으로 영향 중심의 항목을 남기도록 정했습니다.
 - 스크럼 회의록은 `CHANGELOG.md` 의 `Unreleased` 항목 중 중요한 내용만 골라 "어제까지 한 일", "오늘 할 일", "궁금한/필요한/알아낸 것" 형식으로 변환해 시작하도록 정했습니다.
 - 스크럼 회의록 출력 문체는 "~했습니다" 문장형 대신 개조식을 기본으로 사용하도록 정했습니다.
+- Codex/Claude Stop hook 이 자동 커밋 환경변수 `AI_AUTO_COMMIT`, `CODEX_AUTO_COMMIT`, `CLAUDE_AUTO_COMMIT` 를 모두 `1` 로 주입하도록 변경했습니다.
 
 ### Notes
 
 - 수동 설정, migration, 배포 전 확인이 필요한 변경은 항목 안에 명시합니다.
 - Codex 사용자는 저장소를 trust 해야 repo-local `.codex/` hook 과 config 가 로드됩니다.
 - 자동 branch 생성은 `AI_AUTO_BRANCH=1`, `CODEX_AUTO_BRANCH=1`, `CLAUDE_AUTO_BRANCH=1` 중 하나를 설정한 경우에만 사용할 수 있습니다.
-- 자동 커밋은 `AI_AUTO_COMMIT=1`, `CODEX_AUTO_COMMIT=1`, `CLAUDE_AUTO_COMMIT=1` 중 하나를 설정한 경우에만 사용할 수 있습니다.
+- 자동 커밋은 Codex/Claude Stop hook 에서 기본으로 켜집니다.
 - 실제 앱 코드와 실행 진입점은 아직 확정되지 않았습니다. 확정 후 루트 `README.md` 의 실행 방법을 큰 변경으로 갱신합니다.
+
+### Manual Steps
+
+- 새 workspace script 를 사용하기 전에 `pnpm install` 을 실행해야 합니다.
+- Daily 또는 LLM provider 를 연결하기 전에 `.env.example` 을 `.env` 로 복사하고 필요한 service key 를 채워야 합니다.

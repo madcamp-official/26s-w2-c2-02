@@ -61,7 +61,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PROJECT_DIR}/.codex/hooks/stop_turn_summary.py\"",
+            "command": "AI_AUTO_COMMIT=1 CODEX_AUTO_COMMIT=1 CLAUDE_AUTO_COMMIT=1 python3 \"${CLAUDE_PROJECT_DIR}/.codex/hooks/stop_turn_summary.py\"",
             "timeout": 30
           }
         ]

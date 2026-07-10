@@ -61,7 +61,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.codex/hooks/stop_turn_summary.py\"",
+            "command": "AI_AUTO_COMMIT=1 CODEX_AUTO_COMMIT=1 CLAUDE_AUTO_COMMIT=1 python3 \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.codex/hooks/stop_turn_summary.py\"",
             "statusMessage": "Summarizing turn risk"
           }
         ]
