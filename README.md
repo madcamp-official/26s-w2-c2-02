@@ -20,7 +20,7 @@
 
 | 이름 | 학교 | GitHub | 역할 |
 |---|---|---|---|
-| 박채훈 | DGIST | chekspaceone@gmail.com | 실시간 서버, LLM 운영자, API 설계 |
+| 박채훈 | DGIST | chek737 | 실시간 서버, LLM 운영자, API 설계 |
 | 박소요 | 숙명여대 | oyossss | 데스크톱 UI, 세션 플로우, 카메라 집중 감지 |
 
 ## 선택 옵션
