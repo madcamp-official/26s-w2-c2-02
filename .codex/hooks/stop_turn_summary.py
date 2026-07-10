@@ -64,10 +64,10 @@ def auto_commit_enabled() -> bool:
 def classify_commit_message(changed_files: list[str]) -> str:
     doc_files = {"AGENTS.md", "README.md", "CLAUDE.md"}
     if any(path.startswith(".codex/") for path in changed_files):
-        return "chore: auto-commit workflow updates"
+        return "chore: workflow 자동화 업데이트"
     if any(path.startswith("docs/") or path in doc_files for path in changed_files):
-        return "docs: auto-commit documentation updates"
-    return "chore: auto-commit important changes"
+        return "docs: 문서 업데이트"
+    return "chore: 중요 변경사항 저장"
 
 
 def should_auto_commit(changed_files: list[str], added: int, deleted: int) -> bool:

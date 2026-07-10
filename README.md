@@ -125,6 +125,7 @@
 - clean worktree 에서 시작한 agent session 은 `AI_AUTO_COMMIT=1`, `CODEX_AUTO_COMMIT=1`, `CLAUDE_AUTO_COMMIT=1` 중 하나가 설정된 경우에만 종료 시 중요한 변경을 자동 커밋할 수 있습니다.
 - 이미 미커밋 변경이 있는 세션은 unrelated work 를 함께 묶지 않도록 자동 커밋을 건너뜁니다.
 - `git push` 와 `git pull` 은 자동 실행하지 않고, 상태 확인 후 제안과 승인 절차를 거쳐 실행합니다. pull 은 `--ff-only` 를 기본으로 사용합니다.
+- commit 메시지는 한국어를 기본으로 남깁니다. `workflow`, `hook`, `API` 같은 중요한 영어 용어는 필요한 경우 그대로 둡니다.
 
 팀원이 Claude Code 를 쓸 경우:
 

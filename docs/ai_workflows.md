@@ -18,6 +18,7 @@
 - 가능하면 가장 관련성 높은 테스트나 lint 를 실행합니다.
 - 검증을 못 했으면 이유를 명시합니다.
 - 공통 규칙은 한곳에만 둡니다. 공통 규칙은 `AGENTS.md`, 도구 전용 규칙은 각 전용 파일에 둡니다.
+- commit 메시지는 한국어를 기본으로 작성합니다. `workflow`, `hook`, `API` 같은 중요한 영어 용어는 필요한 경우 그대로 둡니다.
 
 ## Workflow 요약
 
@@ -114,9 +115,9 @@ Claude Code hook 은 Claude 공식 project-local 설정 파일인 `.claude/setti
   - staged 와 unstaged 변경의 추가/삭제 라인 합이 대략 25줄 이상인 경우
   - `.codex/`, `docs/`, `AGENTS.md`, `README.md`, `CLAUDE.md` 중 하나가 바뀐 경우
 - 자동 커밋 메시지 예시:
-  - `chore: auto-commit workflow updates`
-  - `docs: auto-commit documentation updates`
-  - `chore: auto-commit important changes`
+  - `chore: workflow 자동화 업데이트`
+  - `docs: 문서 업데이트`
+  - `chore: 중요 변경사항 저장`
 
 ## Push/Pull 승인 흐름
 
