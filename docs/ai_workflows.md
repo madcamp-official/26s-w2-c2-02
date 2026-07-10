@@ -123,7 +123,8 @@
 - 원격보다 앞서거나 뒤처진 상태는 먼저 감지하고 사용자에게 제안합니다.
 - 사용자가 승인한 뒤에만 실행합니다.
 - `git pull` 은 `--ff-only` 를 기본으로 사용하고, `--ff-only` 없는 pull 은 hook 에서 차단합니다.
-- `git push --force`, `git push --force-with-lease`, `git push --mirror`, `git push --delete` 는 hook 에서 차단합니다.
+- `git push --force`, `git push --mirror`, `git push --delete` 는 hook 에서 차단합니다.
+- `git push --force-with-lease` 는 이미 공유된 커밋 author 수정처럼 명시적으로 승인된 history rewrite 에만 사용합니다.
 - 인증 토큰, 비밀번호, private key 는 채팅에 공유하지 않습니다.
 
 ## TDD 와 검증 실패 처리

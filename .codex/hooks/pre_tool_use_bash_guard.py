@@ -35,8 +35,8 @@ PROD_PATTERNS = [
 
 GIT_NETWORK_PATTERNS = [
     (
-        r"(?:^|[;&]\s*)git\s+push\b[^\n;&]*\s--(?:force|force-with-lease|mirror|delete)\b",
-        "Blocked destructive git push variant. Use a normal push after explicit user approval.",
+        r"(?:^|[;&]\s*)git\s+push\b[^\n;&]*\s--(?:force(?!-with-lease)|mirror|delete)\b",
+        "Blocked destructive git push variant. Use a normal push, or --force-with-lease only for explicitly approved history rewrites.",
     ),
     (
         r"(?:^|[;&]\s*)git\s+pull\b(?![^\n;&]*\s--ff-only\b)",
