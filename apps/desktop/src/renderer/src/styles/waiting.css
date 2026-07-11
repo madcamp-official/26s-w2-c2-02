@@ -1,0 +1,194 @@
+.waiting__body {
+  display: flex;
+  gap: 24px;
+  padding: 48px 48px 48px 32px;
+}
+
+.waiting__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.waiting__eyebrow {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--purple-700);
+}
+
+.waiting__title {
+  margin-top: 8px;
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--heading);
+  letter-spacing: -0.4px;
+}
+
+.waiting__subtitle {
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.waiting__label {
+  display: block;
+  margin: 28px 0 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.waiting__goal-input {
+  height: 48px;
+}
+
+/* Lumi suggestion card */
+.lumi-suggest {
+  margin-top: 18px;
+  padding: 20px 22px 22px;
+  border: 1px solid var(--border-purple);
+  border-radius: var(--r-lg);
+  background: var(--card);
+}
+
+.lumi-suggest__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--purple-700);
+}
+
+.lumi-suggest__lead {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.lumi-suggest__quote {
+  margin-top: 4px;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--heading);
+}
+
+.lumi-suggest__note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.lumi-suggest__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.lumi-suggest__actions .btn {
+  height: 38px;
+  font-size: 13px;
+  padding: 0 16px;
+}
+
+/* Right panel */
+.waiting__panel {
+  width: 360px;
+  flex: none;
+  align-self: flex-start;
+  padding: 24px;
+  background: var(--card);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-soft);
+}
+
+.waiting__panel-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--heading);
+}
+
+.waiting__panel-sub {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.people {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.person__avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-pill);
+  background: #cfc9f7;
+  color: #5b4fc7;
+  font-size: 13px;
+  font-weight: 800;
+  flex: none;
+}
+
+.person__avatar--empty {
+  background: transparent;
+  border: 1.5px dashed var(--border-purple);
+}
+
+.person__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.person__name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--heading);
+}
+
+.person__sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.status-card {
+  margin-top: 18px;
+  padding: 16px 18px;
+  background: var(--lavender-card);
+  border-radius: var(--r-md);
+}
+
+.status-card__label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--purple-700);
+}
+
+.status-card__value {
+  margin-top: 6px;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--heading);
+}
+
+.status-card__note {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.waiting__start {
+  width: 100%;
+  height: 48px;
+  margin-top: 18px;
+}

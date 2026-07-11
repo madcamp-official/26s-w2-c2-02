@@ -23,6 +23,9 @@
 - Linux/headless 환경에서도 Electron E2E 를 실행할 수 있도록 `ELECTRON_RUN_AS_NODE` 제거와 `xvfb-run` 실행 흐름을 반영했습니다.
 - Electron renderer, main/preload 단위 테스트와 E2E 테스트 실행법을 `docs/testing.md` 에 정리했습니다.
 - macOS 같은 로컬 GUI 환경에서도 Electron E2E 를 실행할 수 있도록 `test:e2e:local` script 와 문서 안내를 추가했습니다.
+- Figma(Roomi) 디자인 기반으로 온보딩 4단계, 방 만들기, 대기실, 스터디룸, 휴식/복귀, 세션 회고까지 9개 화면과 화면 전환 router 를 renderer 에 추가했습니다.
+- Figma 픽셀에서 직접 추출한 색상/타이포/간격을 `styles/tokens.css` 에 design token 으로 정리하고, 공통 `AppBar`·루미 mascot·badge/pill/button 컴포넌트를 추가했습니다.
+- 개발 중 화면을 빠르게 오갈 수 있는 상단 dev 화면 전환 nav 를 추가했습니다(디자인에는 포함되지 않는 개발용 UI).
 
 ### Changed
 
@@ -53,6 +56,7 @@
 - 자동 branch 생성은 `AI_AUTO_BRANCH=1`, `CODEX_AUTO_BRANCH=1`, `CLAUDE_AUTO_BRANCH=1` 중 하나를 설정한 경우에만 사용할 수 있습니다.
 - 자동 커밋은 Codex/Claude Stop hook 에서 기본으로 켜집니다.
 - 실제 앱 코드와 실행 진입점은 아직 확정되지 않았습니다. 확정 후 루트 `README.md` 의 실행 방법을 큰 변경으로 갱신합니다.
+- 화면 중 온보딩1·2·3, 방 만들기, 스터디룸은 Figma MCP 읽기 한도(Starter 플랜 월 6회) 소진으로 실제 프레임을 확인하지 못해 IA 기반 best-effort 로 구현했습니다. 각 파일 상단 `NOTE:` 주석으로 표시되어 있으며, 시각 자료 확보 시 픽셀 단위로 다시 맞춰야 합니다. 루미 mascot 도 원본 asset 대신 SVG 근사치입니다.
 
 ### Manual Steps
 

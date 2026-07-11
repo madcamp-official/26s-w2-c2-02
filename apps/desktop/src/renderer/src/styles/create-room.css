@@ -1,0 +1,178 @@
+/* Create Room · 방 만들기 설정 (Figma 71:41).
+   NOTE: No screenshot available — layout inferred from the AGENTS.md IA. */
+.create__body {
+  display: flex;
+  justify-content: center;
+  padding: 56px 0 64px;
+}
+
+.create__card {
+  width: 640px;
+  padding: 36px 40px 32px;
+  background: var(--card);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-soft);
+}
+
+.create__title {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--heading);
+  letter-spacing: -0.3px;
+}
+
+.create__subtitle {
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.create__section {
+  margin-top: 28px;
+}
+
+.create__section-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.create__chips {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.chip {
+  height: 42px;
+  padding: 0 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--card);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.chip--active {
+  border-color: var(--purple-600);
+  background: var(--purple-050);
+  color: var(--purple-700);
+}
+
+.create__duo {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.create-opt {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--card);
+  text-align: left;
+}
+
+.create-opt--active {
+  border-color: var(--purple-600);
+  box-shadow: 0 0 0 3px rgba(138, 125, 240, 0.12);
+}
+
+.create-opt__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--heading);
+}
+
+.create-opt__desc {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  margin-top: 12px;
+  background: var(--row-bg);
+  border-radius: var(--r-md);
+}
+
+.toggle-row__text {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--heading);
+}
+
+.toggle-row__sub {
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.switch {
+  position: relative;
+  width: 44px;
+  height: 26px;
+  border-radius: var(--r-pill);
+  background: #d5d8dd;
+  flex: none;
+  transition: background 0.15s ease;
+}
+
+.switch--on {
+  background: var(--purple-600);
+}
+
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s ease;
+}
+
+.switch--on::after {
+  transform: translateX(18px);
+}
+
+.invite {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 14px 20px;
+  margin-top: 12px;
+  border: 1px dashed var(--border-purple);
+  border-radius: var(--r-md);
+  background: var(--purple-050);
+}
+
+.invite__code {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 4px;
+  color: var(--purple-700);
+}
+
+.create__hint {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.create__submit {
+  width: 100%;
+  height: 52px;
+  margin-top: 28px;
+  font-size: 16px;
+}

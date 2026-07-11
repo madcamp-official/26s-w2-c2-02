@@ -1,73 +1,56 @@
-import { Coffee, Copy, Mic, Timer, Video } from 'lucide-react';
+import { useState } from 'react';
+import { OnboardingNickname } from './screens/OnboardingNickname';
+import { OnboardingCreate } from './screens/OnboardingCreate';
+import { OnboardingJoin } from './screens/OnboardingJoin';
+import { OnboardingPermission } from './screens/OnboardingPermission';
+import { CreateRoom } from './screens/CreateRoom';
+import { WaitingRoom } from './screens/WaitingRoom';
+import { StudyRoom } from './screens/StudyRoom';
+import { BreakReturn } from './screens/BreakReturn';
+import { Retrospective } from './screens/Retrospective';
+import type { ScreenId } from './screens/types';
 
-const participants = [
-  { name: '채훈', status: '집중중', goal: 'Socket.IO 방 상태 동기화' },
-  { name: '소요', status: '준비중', goal: '대기실 화면 흐름 다듬기' }
+const SCREENS: { id: ScreenId; label: string }[] = [
+  { id: 'onboarding-nickname', label: '온보딩1 닉네임' },
+  { id: 'onboarding-create', label: '온보딩2 방' },
+  { id: 'onboarding-join', label: '온보딩3 입장' },
+  { id: 'onboarding-permission', label: '온보딩4 권한' },
+  { id: 'create-room', label: '방 만들기' },
+  { id: 'waiting', label: '대기실' },
+  { id: 'study', label: '스터디룸' },
+  { id: 'break', label: '휴식/복귀' },
+  { id: 'retrospective', label: '회고' }
 ];
 
 export function App() {
+  const [screen, setScreen] = useState<ScreenId>('onboarding-nickname');
+  const go = (id: ScreenId) => setScreen(id);
+
   return (
-    <main className="app-shell">
-      <section className="workspace">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">Roomi Study Room</p>
-            <h1>루미</h1>
-          </div>
-          <button className="invite-button" type="button">
-            <Copy size={16} />
-            Q4M2XD
+    <div className="app-root">
+      {screen === 'onboarding-nickname' && <OnboardingNickname go={go} />}
+      {screen === 'onboarding-create' && <OnboardingCreate go={go} />}
+      {screen === 'onboarding-join' && <OnboardingJoin go={go} />}
+      {screen === 'onboarding-permission' && <OnboardingPermission go={go} />}
+      {screen === 'create-room' && <CreateRoom go={go} />}
+      {screen === 'waiting' && <WaitingRoom go={go} />}
+      {screen === 'study' && <StudyRoom go={go} />}
+      {screen === 'break' && <BreakReturn go={go} />}
+      {screen === 'retrospective' && <Retrospective go={go} />}
+
+      {/* Dev-only screen switcher */}
+      <nav className="dev-nav" aria-label="화면 전환(개발용)">
+        {SCREENS.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            className={`dev-nav__btn${screen === s.id ? ' dev-nav__btn--active' : ''}`}
+            onClick={() => go(s.id)}
+          >
+            {s.label}
           </button>
-        </header>
-
-        <section className="study-layout">
-          <div className="video-grid" aria-label="참가자 영상 영역">
-            {participants.map((participant) => (
-              <article className="video-tile" key={participant.name}>
-                <div className="avatar">{participant.name.slice(0, 1)}</div>
-                <div className="tile-footer">
-                  <span>{participant.name}</span>
-                  <span>{participant.status}</span>
-                </div>
-              </article>
-            ))}
-          </div>
-
-          <aside className="session-panel">
-            <div className="timer-block">
-              <Timer size={20} />
-              <span>42:18</span>
-            </div>
-
-            <div className="goal-list">
-              <h2>오늘 목표</h2>
-              {participants.map((participant) => (
-                <div className="goal-row" key={participant.goal}>
-                  <strong>{participant.name}</strong>
-                  <span>{participant.goal}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="roomi-message">
-              <h2>루미</h2>
-              <p>좋아, 지금 목표는 한 세션 안에 확인 가능한 단위로 잘게 나눠보자.</p>
-            </div>
-          </aside>
-        </section>
-
-        <footer className="control-bar">
-          <button type="button" aria-label="마이크">
-            <Mic size={18} />
-          </button>
-          <button type="button" aria-label="카메라">
-            <Video size={18} />
-          </button>
-          <button type="button" aria-label="휴식">
-            <Coffee size={18} />
-          </button>
-        </footer>
-      </section>
-    </main>
+        ))}
+      </nav>
+    </div>
   );
 }

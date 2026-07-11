@@ -1,201 +1,254 @@
-:root {
-  color: #172026;
-  background: #f6f7f4;
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
-}
+@import './styles/tokens.css';
 
 * {
   box-sizing: border-box;
 }
 
-body {
+html,
+body,
+#root {
   margin: 0;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font);
+  color: var(--ink);
+  background: var(--app-bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button {
   font: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
 }
 
-.app-shell {
-  min-height: 100vh;
-  padding: 24px;
-  background:
-    linear-gradient(135deg, rgba(50, 105, 92, 0.12), transparent 36%),
-    #f6f7f4;
-}
-
-.workspace {
-  display: flex;
-  min-height: calc(100vh - 48px);
-  flex-direction: column;
-  gap: 18px;
-}
-
-.topbar,
-.control-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.eyebrow {
-  margin: 0 0 6px;
-  color: #5f6d65;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0;
+input,
+textarea {
+  font: inherit;
 }
 
 h1,
 h2,
+h3,
+h4,
 p {
   margin: 0;
 }
 
-h1 {
-  font-size: 32px;
-  line-height: 1.1;
+/* ---------- App frame / screen host ---------- */
+.app-root {
+  min-height: 100%;
 }
 
-h2 {
-  font-size: 15px;
+/* A screen designed at 1440x900 in Figma. Centered; scrolls if the
+   window is smaller than the design. */
+.screen {
+  position: relative;
+  width: 1440px;
+  min-height: 900px;
+  margin: 0 auto;
+  overflow: hidden;
 }
 
-.invite-button,
-.control-bar button {
+.screen--app {
+  background: var(--app-bg);
+}
+
+.screen--break {
+  background: var(--break-bg);
+}
+
+.screen--onboarding {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(
+    135deg,
+    var(--onboarding-bg-a) 0%,
+    var(--onboarding-bg-b) 100%
+  );
+}
+
+/* ---------- Top app bar (루미 Roomi) ---------- */
+.appbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 72px;
+  padding: 0 32px;
+  background: var(--card);
+}
+
+.appbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.appbar__wordmark {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.appbar__wordmark b {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--heading);
+  letter-spacing: -0.2px;
+}
+
+.appbar__wordmark span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-faint);
+}
+
+/* ---------- Pills / badges ---------- */
+.pill {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  border: 1px solid #cfd8d3;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #172026;
-}
-
-.invite-button {
-  gap: 8px;
-  min-height: 38px;
-  padding: 0 12px;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--r-pill);
+  font-size: 13px;
   font-weight: 700;
 }
 
-.study-layout {
-  display: grid;
-  flex: 1;
-  grid-template-columns: minmax(0, 1fr) 340px;
-  gap: 18px;
+.pill--purple {
+  background: var(--purple-100);
+  color: var(--purple-700);
 }
 
-.video-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
-.video-tile {
-  position: relative;
-  display: grid;
-  min-height: 260px;
-  place-items: center;
-  overflow: hidden;
-  border: 1px solid #d8ddd9;
-  border-radius: 8px;
-  background: #22312d;
+.badge--green {
+  background: var(--green-bg);
+  color: var(--green-text);
+}
+
+.badge--wait {
+  background: var(--purple-100);
+  color: var(--purple-700);
+}
+
+.badge--muted {
+  background: #eef0f2;
+  color: var(--text-muted);
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 45px;
+  padding: 0 22px;
+  border-radius: var(--r-md);
+  font-size: 15px;
+  font-weight: 700;
+  transition: filter 0.15s ease, background 0.15s ease;
+}
+
+.btn--primary {
+  background: var(--purple-600);
   color: #ffffff;
 }
 
-.avatar {
-  display: grid;
-  width: 92px;
-  aspect-ratio: 1;
-  place-items: center;
-  border-radius: 50%;
-  background: #e2efe7;
-  color: #1c3f35;
-  font-size: 34px;
+.btn--primary:hover {
+  filter: brightness(1.04);
+}
+
+.btn--block {
+  width: 100%;
+  height: 52px;
+  font-size: 16px;
+}
+
+.btn--ghost {
+  background: var(--card);
+  color: var(--heading);
+  border: 1px solid var(--border);
+}
+
+.btn--soft {
+  background: var(--purple-100);
+  color: var(--purple-700);
+}
+
+/* ---------- Onboarding card shell ---------- */
+.onb-card {
+  width: 480px;
+  padding: 40px 40px 36px;
+  background: var(--card);
+  border-radius: 28px;
+  box-shadow: var(--shadow-card);
+  text-align: center;
+}
+
+.onb-card__step {
+  margin: 0 auto;
+}
+
+.onb-card__mascot {
+  margin: 24px auto 20px;
+}
+
+.onb-card__title {
+  font-size: 26px;
   font-weight: 800;
+  color: var(--heading);
+  letter-spacing: -0.4px;
 }
 
-.tile-footer {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  left: 12px;
-  display: flex;
-  justify-content: space-between;
-  border-radius: 8px;
-  background: rgba(11, 20, 17, 0.76);
-  padding: 10px 12px;
-  font-size: 13px;
-}
-
-.session-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.timer-block,
-.goal-list,
-.roomi-message {
-  border: 1px solid #d8ddd9;
-  border-radius: 8px;
-  background: #ffffff;
-}
-
-.timer-block {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 18px;
-  font-size: 30px;
-  font-weight: 800;
-}
-
-.goal-list,
-.roomi-message {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-}
-
-.goal-row {
-  display: grid;
-  gap: 4px;
-  padding-top: 12px;
-  border-top: 1px solid #edf0ee;
-}
-
-.goal-row strong {
-  font-size: 13px;
-}
-
-.goal-row span,
-.roomi-message p {
-  color: #4c5c54;
+.onb-card__subtitle {
+  margin-top: 12px;
   font-size: 14px;
-  line-height: 1.45;
+  color: var(--text-muted);
+  line-height: 1.5;
 }
 
-.control-bar {
-  justify-content: center;
-  gap: 10px;
+.field {
+  display: block;
+  width: 100%;
+  height: 52px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--card);
+  color: var(--ink);
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.control-bar button {
-  width: 42px;
-  aspect-ratio: 1;
+.field::placeholder {
+  color: var(--text-faint);
 }
 
-@media (max-width: 860px) {
-  .study-layout {
-    grid-template-columns: 1fr;
-  }
+.field:focus {
+  border-color: var(--purple-300);
+  box-shadow: 0 0 0 3px rgba(138, 125, 240, 0.15);
+}
 
-  .video-grid {
-    grid-template-columns: 1fr;
-  }
+.field--code {
+  text-align: center;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 6px;
 }
