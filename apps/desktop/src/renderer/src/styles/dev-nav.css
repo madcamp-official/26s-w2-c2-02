@@ -1,0 +1,36 @@
+/* Dev-only screen switcher. Not part of the Figma design. */
+.dev-nav {
+  position: fixed;
+  left: 50%;
+  top: 10px;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  max-width: 96vw;
+  padding: 8px 10px;
+  background: rgba(32, 37, 46, 0.9);
+  border-radius: var(--r-pill);
+  backdrop-filter: blur(6px);
+}
+
+.dev-nav__btn {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 700;
+  color: #d7dbe0;
+  background: transparent;
+}
+
+.dev-nav__btn:hover {
+  color: #fff;
+}
+
+.dev-nav__btn--active {
+  background: var(--purple-600);
+  color: #fff;
+}

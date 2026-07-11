@@ -1,23 +1,34 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { App } from './App';
 
-describe('App renderer shell', () => {
-  it('shows the study room heading, invite code, participant area, and controls', () => {
+describe('App screen router', () => {
+  it('starts on the nickname onboarding screen', () => {
+    render(<App />);
+    expect(
+      screen.getByRole('heading', { level: 1, name: '어떻게 부르면 될까요?' })
+    ).toBeInTheDocument();
+  });
+
+  it('lets the dev switcher jump to the waiting room', () => {
     render(<App />);
 
-    expect(screen.getByRole('heading', { level: 1, name: '루미' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Q4M2XD/ })).toBeInTheDocument();
-    expect(screen.getByLabelText('참가자 영상 영역')).toBeInTheDocument();
-    expect(screen.getByText('42:18')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '대기실' }));
 
-    const goals = screen.getByRole('heading', { level: 2, name: '오늘 목표' }).closest('.goal-list');
-    expect(goals).not.toBeNull();
-    expect(within(goals as HTMLElement).getByText('Socket.IO 방 상태 동기화')).toBeInTheDocument();
-    expect(within(goals as HTMLElement).getByText('대기실 화면 흐름 다듬기')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 1, name: '다 같이 목표를 정해볼까요?' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: '함께하는 사람들' })).toBeInTheDocument();
+  });
 
-    expect(screen.getByRole('button', { name: '마이크' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '카메라' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '휴식' })).toBeInTheDocument();
+  it('renders the retrospective summary via the dev switcher', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: '회고' }));
+
+    expect(
+      screen.getByRole('heading', { level: 1, name: '오늘 세션, 잘 마쳤어요!' })
+    ).toBeInTheDocument();
+    expect(screen.getByText('42분')).toBeInTheDocument();
   });
 });

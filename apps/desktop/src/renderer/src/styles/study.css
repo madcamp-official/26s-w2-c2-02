@@ -1,0 +1,287 @@
+/* Study Room · Live Session (Figma 47:2).
+   NOTE: No screenshot available — layout inferred from the AGENTS.md IA. */
+.study__body {
+  display: flex;
+  gap: 20px;
+  padding: 24px 32px 108px;
+}
+
+.study__stage {
+  flex: 1;
+  min-width: 0;
+}
+
+.study__stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.study__stage-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--heading);
+}
+
+.study__grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 260px;
+  border-radius: var(--r-lg);
+  background: #2a2a33;
+  overflow: hidden;
+}
+
+.tile--me {
+  outline: 2px solid var(--purple-600);
+  outline-offset: -2px;
+}
+
+.tile__avatar {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #3f3f4d;
+  color: #fff;
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.tile__foot {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  background: rgba(15, 15, 22, 0.66);
+  color: #fff;
+}
+
+.tile__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tile__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #d7dbe0;
+}
+
+.tile__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #57d38c;
+}
+
+.tile__dot--away {
+  background: #f0b445;
+}
+
+/* Right panel */
+.study__panel {
+  width: 340px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.study-card {
+  padding: 20px;
+  background: var(--card);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-soft);
+}
+
+.study-timer__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--purple-700);
+}
+
+.study-timer__label::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--purple-600);
+}
+
+.study-timer__value {
+  margin-top: 10px;
+  font-size: 44px;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.study-timer__bar {
+  margin-top: 16px;
+  height: 8px;
+  border-radius: var(--r-pill);
+  background: var(--purple-050);
+  overflow: hidden;
+}
+
+.study-timer__fill {
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--purple-600);
+}
+
+.study-card__title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--heading);
+  margin-bottom: 14px;
+}
+
+.goal {
+  display: flex;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border-soft);
+}
+
+.goal:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.goal__who {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--purple-700);
+  min-width: 40px;
+}
+
+.goal__text {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.study-lumi {
+  background: var(--lavender-card);
+}
+
+.study-lumi__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--purple-700);
+  margin-bottom: 10px;
+}
+
+.study-lumi__text {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+/* Bottom control bar */
+.study__controls {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--card);
+  border-radius: var(--r-pill);
+  box-shadow: var(--shadow-card);
+}
+
+.ctrl {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--row-bg);
+  color: var(--heading);
+}
+
+.ctrl--active {
+  background: var(--purple-100);
+  color: var(--purple-700);
+}
+
+.ctrl--end {
+  width: auto;
+  padding: 0 18px;
+  border-radius: var(--r-pill);
+  background: #fdecec;
+  color: #d64545;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* Personal confirm toast */
+.confirm {
+  position: fixed;
+  right: 32px;
+  bottom: 96px;
+  width: 300px;
+  padding: 18px 20px;
+  background: var(--card);
+  border: 1px solid var(--border-purple);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.confirm__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--heading);
+}
+
+.confirm__text {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.confirm__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.confirm__actions .btn {
+  height: 36px;
+  font-size: 13px;
+  padding: 0 14px;
+}

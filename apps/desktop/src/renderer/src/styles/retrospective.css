@@ -1,0 +1,141 @@
+/* Retrospective · 세션 회고 (Figma 72:41), built from exact node metadata. */
+.retro__body {
+  display: flex;
+  justify-content: center;
+  padding: 181px 0;
+}
+
+.retro__doc {
+  width: 880px;
+}
+
+/* Header row (72:52) */
+.retro__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  height: 84px;
+}
+
+.retro__head-text {
+  padding-top: 1.5px;
+}
+
+.retro__badge {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 12px;
+  border-radius: var(--r-pill);
+  background: var(--purple-100);
+  color: var(--purple-700);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.retro__title {
+  margin-top: 6px;
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--heading);
+  letter-spacing: -0.3px;
+}
+
+.retro__subtitle {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Stats row (72:59) */
+.retro__stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.retro-stat {
+  height: 105px;
+  padding: 20px;
+  background: var(--purple-050);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+}
+
+.retro-stat__label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.retro-stat__value {
+  margin-top: 6px;
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--heading);
+}
+
+.retro-stat__note {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+/* Lumi one-line (72:72) */
+.retro__lumi {
+  height: 82px;
+  margin-top: 18px;
+  padding: 20px 22px;
+  background: var(--lavender-card);
+  border-radius: var(--r-md);
+}
+
+.retro__lumi-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--purple-700);
+}
+
+.retro__lumi-text {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+/* Two blocks (72:75) */
+.retro__blocks {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.retro-block {
+  height: 78px;
+  padding: 18px 20px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+.retro-block__title {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--heading);
+}
+
+.retro-block__text {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+/* Buttons (72:82) */
+.retro__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 18px;
+}
