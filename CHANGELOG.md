@@ -21,6 +21,8 @@
 - Electron 없이 renderer 화면만 5175 포트에서 확인할 수 있는 `dev:renderer` script 를 추가했습니다.
 - 실제 Electron 창을 띄워 앱 shell 과 preload API 를 확인하는 Playwright E2E 테스트 설정을 추가했습니다.
 - Linux/headless 환경에서도 Electron E2E 를 실행할 수 있도록 `ELECTRON_RUN_AS_NODE` 제거와 `xvfb-run` 실행 흐름을 반영했습니다.
+- Electron renderer, main/preload 단위 테스트와 E2E 테스트 실행법을 `docs/testing.md` 에 정리했습니다.
+- macOS 같은 로컬 GUI 환경에서도 Electron E2E 를 실행할 수 있도록 `test:e2e:local` script 와 문서 안내를 추가했습니다.
 
 ### Changed
 

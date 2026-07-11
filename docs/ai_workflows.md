@@ -169,7 +169,9 @@ Claude Code hook 은 Claude 공식 project-local 설정 파일인 `.claude/setti
 
 ## Electron E2E 실행 메모
 
-- Electron E2E 는 `npx pnpm@9.15.0 test:e2e` 로 실행합니다.
+- 사람이 따라 할 수 있는 전체 테스트 실행법은 `docs/testing.md` 에서 관리합니다.
+- Electron E2E 는 Linux/headless 환경에서 `npx pnpm@9.15.0 test:e2e` 또는 `npx pnpm@9.15.0 test:e2e:linux` 로 실행합니다.
+- macOS 같은 로컬 GUI 환경에서는 `xvfb-run` 없이 `npx pnpm@9.15.0 test:e2e:local` 로 실행합니다.
 - Linux/headless 환경에서는 `xvfb-run` 이 필요합니다.
 - Codex/VS Code 원격 환경처럼 `ELECTRON_RUN_AS_NODE=1` 이 설정된 셸에서는 Electron 이 Node 처럼 실행될 수 있으므로, E2E script 는 해당 환경변수를 제거하고 실행합니다.
 - Electron 설치가 `Electron failed to install correctly` 로 실패하면 `node_modules` 제거 후 scripts 를 허용한 `pnpm install` 을 다시 실행합니다. `--ignore-scripts` 를 붙이면 Electron 실행 파일이 설치되지 않습니다.

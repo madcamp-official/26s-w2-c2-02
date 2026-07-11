@@ -10,6 +10,8 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "test:e2e": "pnpm --filter @lumi/desktop test:e2e",
+    "test:e2e:linux": "pnpm --filter @lumi/desktop test:e2e:linux",
+    "test:e2e:local": "pnpm --filter @lumi/desktop test:e2e:local",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint"
   },
