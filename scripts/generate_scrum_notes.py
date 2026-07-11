@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+from datetime import date
 import re
 from pathlib import Path
 
@@ -41,6 +42,16 @@ def parse_args() -> argparse.Namespace:
         "--all",
         action="store_true",
         help="Include every changelog item instead of a concise scrum summary.",
+    )
+    parser.add_argument(
+        "--date",
+        default=date.today().isoformat(),
+        help="Scrum note date in YYYY-MM-DD format. Defaults to today.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="scripts/scrum_notes",
+        help="Directory where daily scrum notes are saved.",
     )
     return parser.parse_args()
 
@@ -107,6 +118,43 @@ def concise_items(items: list[str], limit: int) -> list[str]:
     return selected
 
 
+def normalize_note_text(text: str) -> str:
+    text = re.sub(r"^\s*[-*]\s+", "", text).strip()
+    text = re.sub(r"^[A-Z]\d+\.\s*", "", text).strip()
+    text = re.sub(r"\s+", " ", text)
+    return text.rstrip(".").lower()
+
+
+def parse_note_date(path: Path) -> date | None:
+    try:
+        return date.fromisoformat(path.stem)
+    except ValueError:
+        return None
+
+
+def load_previous_note_items(output_dir: Path, current_date: date) -> set[str]:
+    previous_items: set[str] = set()
+    if not output_dir.exists():
+        return previous_items
+
+    for note_path in sorted(output_dir.glob("*.md")):
+        note_date = parse_note_date(note_path)
+        if note_date is None or note_date >= current_date:
+            continue
+        for line in note_path.read_text(encoding="utf-8").splitlines():
+            if re.match(r"^\s*[-*]\s+", line):
+                previous_items.add(normalize_note_text(line))
+    return previous_items
+
+
+def exclude_previous_items(items: list[str], previous_items: set[str]) -> list[str]:
+    return [
+        item
+        for item in items
+        if normalize_note_text(to_note_style(item)) not in previous_items
+    ]
+
+
 def to_note_style(item: str) -> str:
     replacements = (
         (r"하도록 했습니다(?=[:：]|\.?$)", "하도록 구성"),
@@ -160,8 +208,36 @@ def format_today(today_items: list[str], notes: list[str]) -> str:
     return "\n".join(lines)
 
 
+def build_note(done_items: list[str], today_items: list[str], note_items: list[str]) -> str:
+    output = [
+        "### 어제까지 한 일",
+        "",
+        format_bullets(done_items, "새로 공유할 완료 항목이 없습니다."),
+        "",
+        "### **오늘 할 일**",
+        "",
+        format_today(today_items, note_items),
+        "",
+        "### **궁금한/필요한/알아낸 것**",
+        "",
+        format_bullets(note_items, "특별히 공유할 blocker 나 확인 사항이 없습니다."),
+    ]
+    return "\n".join(output)
+
+
 def main() -> None:
     args = parse_args()
+    try:
+        scrum_date = date.fromisoformat(args.date)
+    except ValueError as error:
+        raise SystemExit("--date must use YYYY-MM-DD format.") from error
+
+    output_dir = Path(args.output_dir)
+    output_path = output_dir / f"{scrum_date.isoformat()}.md"
+    if output_path.exists():
+        print(f"이미 스크럼 노트가 생성되었습니다: {output_path}")
+        return
+
     changelog_path = Path(args.changelog)
     if not changelog_path.exists():
         raise SystemExit(f"Changelog not found: {changelog_path}")
@@ -174,24 +250,21 @@ def main() -> None:
     sections = parse_subsections(release_section)
     done_items = collect_items(sections, DONE_SECTIONS)
     note_items = collect_items(sections, NOTE_SECTIONS)
+
+    previous_items = load_previous_note_items(output_dir, scrum_date)
+    done_items = exclude_previous_items(done_items, previous_items)
+    note_items = exclude_previous_items(note_items, previous_items)
+
     if not args.all:
         done_items = concise_items(done_items, DEFAULT_DONE_LIMIT)
         note_items = concise_items(note_items, DEFAULT_NOTE_LIMIT)
 
-    output = [
-        "### 어제까지 한 일",
-        "",
-        format_bullets(done_items, "CHANGELOG.md 에 완료된 변경사항이 아직 정리되지 않았습니다."),
-        "",
-        "### **오늘 할 일**",
-        "",
-        format_today(args.today, note_items),
-        "",
-        "### **궁금한/필요한/알아낸 것**",
-        "",
-        format_bullets(note_items, "특별히 공유할 blocker 나 확인 사항이 없습니다."),
-    ]
-    print("\n".join(output))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        build_note(done_items, args.today, note_items) + "\n",
+        encoding="utf-8",
+    )
+    print(f"스크럼 노트를 생성했습니다: {output_path}")
 
 
 if __name__ == "__main__":
