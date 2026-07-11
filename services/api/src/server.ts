@@ -1,6 +1,6 @@
 import cors from 'cors';
 import express from 'express';
-import type { CreateRoomInput, JoinRoomInput } from '@lumi/shared';
+import type { CreateRoomInput, JoinRoomInput } from '@roomi/shared';
 import { env } from './env';
 import type { RoomService } from './rooms/room-service';
 
@@ -11,7 +11,7 @@ export function createApp(roomService: RoomService) {
   app.use(express.json());
 
   app.get('/health', (_request, response) => {
-    response.json({ ok: true, service: 'lumi-api' });
+    response.json({ ok: true, service: 'roomi-api' });
   });
 
   app.post('/rooms', (request, response) => {

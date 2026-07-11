@@ -1,4 +1,4 @@
 import { contextBridge } from 'electron';
-import { lumiApi } from './lumi-api';
+import { roomiApi } from './roomi-api';
 
-contextBridge.exposeInMainWorld('lumi', lumiApi);
+contextBridge.exposeInMainWorld('roomi', roomiApi);

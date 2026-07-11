@@ -1,4 +1,4 @@
 {
-  "extends": "@lumi/config/tsconfig.node.json",
+  "extends": "@roomi/config/tsconfig.node.json",
   "include": ["src"]
 }

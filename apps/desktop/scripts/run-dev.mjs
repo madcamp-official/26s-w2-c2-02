@@ -32,7 +32,7 @@ async function findAvailablePort(startPort) {
   throw new Error(`No available renderer port found from ${startPort}`);
 }
 
-env.LUMI_RENDERER_PORT ??= String(await findAvailablePort(5175));
+env.ROOMI_RENDERER_PORT ??= String(await findAvailablePort(5175));
 
 const child = spawn(command, args, {
   env,

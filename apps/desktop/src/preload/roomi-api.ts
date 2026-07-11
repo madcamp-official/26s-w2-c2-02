@@ -1,7 +1,7 @@
-export type LumiApi = {
+export type RoomiApi = {
   platform: NodeJS.Platform;
 };
 
-export const lumiApi: LumiApi = {
+export const roomiApi: RoomiApi = {
   platform: process.platform
 };

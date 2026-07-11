@@ -1,4 +1,4 @@
-import type { RoomSettings } from '@lumi/shared';
+import type { RoomSettings } from '@roomi/shared';
 
 export const defaultRoomSettings: RoomSettings = {
   sessionMinutes: 50,
@@ -7,7 +7,7 @@ export const defaultRoomSettings: RoomSettings = {
   maxParticipants: 4,
   authMode: 'nickname_code',
   videoProvider: 'daily',
-  lumiTone: 'friendly_casual',
+  roomiTone: 'friendly_casual',
   rankingMetric: 'focus_minutes',
   videoRequired: true,
   detectionPauseAllowed: true

@@ -1,5 +1,5 @@
 {
-  "name": "@lumi/shared",
+  "name": "@roomi/shared",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -14,7 +14,7 @@
     "lint": "tsc -p tsconfig.json"
   },
   "devDependencies": {
-    "@lumi/config": "workspace:*",
+    "@roomi/config": "workspace:*",
     "@types/node": "^22.10.5",
     "typescript": "^5.7.2"
   }

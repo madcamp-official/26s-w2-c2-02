@@ -15,7 +15,7 @@ export function createMainWindow(options: CreateMainWindowOptions = {}) {
     height: 760,
     minWidth: 960,
     minHeight: 640,
-    title: 'LumI',
+    title: 'Roomi',
     webPreferences: {
       preload: options.preloadPath ?? join(__dirname, '../preload/index.mjs'),
       sandbox: false

@@ -1,4 +1,4 @@
-# 루미(Room-AI)
+# 루미(Roomi)
 
 친구들과 함께 켜두는 AI 운영 스터디룸입니다. 루미는 단순 화상회의가 아니라 공부방의 목표 설정, 집중 세션, 휴식, 복귀, 회고를 친구 같은 말투로 진행해주는 데스크톱 앱을 목표로 합니다.
 
@@ -31,7 +31,7 @@
 
 ## 기획안
 
-- **산출물 주제:** 루미(Room-AI) - 친구들과 함께 켜두는 AI 운영 스터디룸
+- **산출물 주제:** 루미(Roomi) - 친구들과 함께 켜두는 AI 운영 스터디룸
 - **제작 목적:** Zoom, Discord, Google Meet처럼 단순히 함께 켜두는 도구가 아니라, 공부방의 흐름을 AI가 운영해 목표 설정, 집중 유지, 휴식 복귀, 회고를 자연스럽게 돕는 앱을 만듭니다.
 - **MVP 인증 방식:** 별도 계정 없이 닉네임 + 방 코드로 입장합니다.
 - **최대 방 인원:** 4명
@@ -147,7 +147,7 @@ Daily는 영상/음성 인프라를 담당하고, Socket.IO는 방 상태와 세
 #### IA 구조도
 
 ```text
-루미(Room-AI)
+루미(Roomi)
 ├─ 온보딩
 │  ├─ 닉네임 입력
 │  ├─ 방 만들기
@@ -233,7 +233,7 @@ type RoomSettings = {
   maxParticipants: 4;
   authMode: 'nickname_code';
   videoProvider: 'daily';
-  lumiTone: 'friendly_casual';
+  roomiTone: 'friendly_casual';
   rankingMetric: 'focus_minutes';
   videoRequired: boolean;
   detectionPauseAllowed: boolean;
@@ -296,7 +296,7 @@ type UserFeedback = {
   createdAt: string;
 };
 
-type LumiMessage = {
+type RoomiMessage = {
   id: string;
   roomId: string;
   sessionId?: string;
@@ -333,7 +333,7 @@ type SessionSummary = {
 | POST | `/api/goals/refine` | LLM 목표 다듬기 | `rawGoal`, `sessionMinutes` | `refinedGoal`, `reason` | LLM 실패 시 템플릿 반환 |
 | POST | `/api/focus-events` | 로컬 감지 결과 저장 | `sessionId`, `type`, `inferredStatus`, `confidence`, `duration` | `focusEventId`, `shouldPrompt` | 영상 원본은 전송하지 않음 |
 | POST | `/api/focus-events/:id/feedback` | 사용자 확인 응답 저장 | `answer` | `updatedStatus` | 오탐 보정 데이터 |
-| POST | `/api/lumi/messages` | 루미 메시지 생성 | `eventType`, `roomId`, `sessionId`, `targetUserId` | `message` | LLM API 서버 호출 |
+| POST | `/api/roomi/messages` | 루미 메시지 생성 | `eventType`, `roomId`, `sessionId`, `targetUserId` | `message` | LLM API 서버 호출 |
 | GET | `/api/sessions/:sessionId/summary` | 개인/방 전체 요약 조회 | `sessionId` | `personalSummary`, `roomSummary` | 종료 화면에서 사용 |
 | Socket.IO | `room:join` | 실시간 방 참가 | `roomId`, `participantId` | `roomState` | 참가자별 socket room 연결 |
 | Socket.IO | `participant:status` | 참가자 상태 변경 | `participantId`, `status` | `broadcast participant:update` | 집중/휴식/자리비움 동기화 |

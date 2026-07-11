@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 interface Window {
-  lumi: {
+  roomi: {
     platform: NodeJS.Platform;
   };
 }

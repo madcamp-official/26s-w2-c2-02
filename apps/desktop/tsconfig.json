@@ -1,5 +1,5 @@
 {
-  "extends": "@lumi/config/tsconfig.react.json",
+  "extends": "@roomi/config/tsconfig.react.json",
   "include": [
     "electron.vite.config.ts",
     "playwright.e2e.config.ts",

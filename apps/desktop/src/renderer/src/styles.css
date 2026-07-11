@@ -139,7 +139,7 @@ h2 {
 
 .timer-block,
 .goal-list,
-.lumi-message {
+.roomi-message {
   border: 1px solid #d8ddd9;
   border-radius: 8px;
   background: #ffffff;
@@ -155,7 +155,7 @@ h2 {
 }
 
 .goal-list,
-.lumi-message {
+.roomi-message {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -174,7 +174,7 @@ h2 {
 }
 
 .goal-row span,
-.lumi-message p {
+.roomi-message p {
   color: #4c5c54;
   font-size: 14px;
   line-height: 1.45;

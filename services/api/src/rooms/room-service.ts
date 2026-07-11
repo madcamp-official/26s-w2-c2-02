@@ -6,12 +6,12 @@ import type {
   Room,
   RoomSettings,
   RoomSnapshot
-} from '@lumi/shared';
+} from '@roomi/shared';
 import { defaultRoomSettings } from './default-settings';
-import type { InMemoryRoomStore } from '../storage/in-memory-room-store';
+import type { RoomStore } from './room-store';
 
 export class RoomService {
-  constructor(private readonly store: InMemoryRoomStore) {}
+  constructor(private readonly store: RoomStore) {}
 
   createRoom(input: CreateRoomInput): RoomSnapshot {
     const now = new Date().toISOString();
@@ -38,7 +38,7 @@ export class RoomService {
       room,
       participants: [host],
       goals: [],
-      lumiMessages: []
+      roomiMessages: []
     };
 
     this.store.saveRoom(snapshot);
@@ -102,7 +102,7 @@ export class RoomService {
       maxParticipants: 4,
       authMode: 'nickname_code',
       videoProvider: 'daily',
-      lumiTone: 'friendly_casual',
+      roomiTone: 'friendly_casual',
       rankingMetric: 'focus_minutes'
     };
   }

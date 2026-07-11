@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { contextBridge } from 'electron';
-import { lumiApi } from './lumi-api';
+import { roomiApi } from './roomi-api';
 
 vi.mock('electron', () => ({
   contextBridge: {
@@ -15,9 +15,9 @@ describe('preload bridge', () => {
     vi.resetModules();
   });
 
-  it('exposes the LumI preload API to the renderer', async () => {
+  it('exposes the Roomi preload API to the renderer', async () => {
     await import('./index');
 
-    expect(contextBridge.exposeInMainWorld).toHaveBeenCalledWith('lumi', lumiApi);
+    expect(contextBridge.exposeInMainWorld).toHaveBeenCalledWith('roomi', roomiApi);
   });
 });

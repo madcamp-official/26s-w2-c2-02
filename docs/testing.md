@@ -21,7 +21,7 @@ npx pnpm@9.15.0 typecheck
 목적은 Electron 창 없이 React renderer UI 를 빠르게 검증하는 것입니다. 현재는 jsdom 환경에서 Testing Library 로 컴포넌트를 렌더링합니다.
 
 ```bash
-npx pnpm@9.15.0 --filter @lumi/desktop test
+npx pnpm@9.15.0 --filter @roomi/desktop test
 ```
 
 정상 결과는 Vitest 가 `src/renderer/**/*.test.tsx` 테스트를 통과시키는 것입니다. 이 테스트는 브라우저나 Electron 창을 띄우지 않습니다.
@@ -29,7 +29,7 @@ npx pnpm@9.15.0 --filter @lumi/desktop test
 화면을 직접 보며 renderer 만 확인하려면 다음 명령을 실행하고, 로컬 브라우저에서 forwarded `5175` 포트를 엽니다.
 
 ```bash
-npx pnpm@9.15.0 --filter @lumi/desktop dev:renderer
+npx pnpm@9.15.0 --filter @roomi/desktop dev:renderer
 ```
 
 원격 SSH 환경에서는 이 방식이 React 화면을 눈으로 확인하기 가장 단순합니다.
@@ -39,7 +39,7 @@ npx pnpm@9.15.0 --filter @lumi/desktop dev:renderer
 목적은 Electron main process 의 창 생성 옵션과 preload bridge 노출 값을 빠르게 검증하는 것입니다. 실제 `BrowserWindow` 를 띄우지 않고 mock 으로 확인합니다.
 
 ```bash
-npx pnpm@9.15.0 --filter @lumi/desktop test
+npx pnpm@9.15.0 --filter @roomi/desktop test
 ```
 
 renderer 테스트와 같은 명령어를 쓰는 이유는 현재 renderer, main, preload 단위 테스트를 모두 `apps/desktop` 패키지의 Vitest suite 하나로 묶어두었기 때문입니다. 정상 결과는 다음 성격의 테스트가 함께 통과하는 것입니다.
@@ -85,7 +85,7 @@ Windows 에서도 같은 `test:e2e:local` 명령을 사용합니다. desktop pac
 로컬 GUI 환경에서 다음 명령을 실행하는 방식이 가장 좋습니다.
 
 ```bash
-npx pnpm@9.15.0 --filter @lumi/desktop dev
+npx pnpm@9.15.0 --filter @roomi/desktop dev
 ```
 
 Windows 에서도 같은 명령을 사용합니다. desktop package 의 dev runner 가 `ELECTRON_RUN_AS_NODE` 와 기존 `ELECTRON_RENDERER_URL` 을 제거한 뒤 빈 renderer 포트를 골라 `electron-vite dev` 를 실행하므로 PowerShell/CMD 에서 별도 `env` 명령을 설치할 필요가 없습니다. renderer dev server 는 5175 포트를 먼저 시도하고, 이미 점유되어 있으면 다음 사용 가능한 포트를 Electron 에 전달합니다.

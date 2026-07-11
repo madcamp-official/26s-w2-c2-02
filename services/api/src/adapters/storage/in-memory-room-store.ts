@@ -1,13 +1,14 @@
-import type { Goal, LumiMessage, Participant, Room, RoomSnapshot } from '@lumi/shared';
+import type { Goal, RoomiMessage, Participant, Room, RoomSnapshot } from '@roomi/shared';
+import type { RoomStore } from '../../rooms/room-store';
 
 type StoredRoom = {
   room: Room;
   participants: Participant[];
   goals: Goal[];
-  lumiMessages: LumiMessage[];
+  roomiMessages: RoomiMessage[];
 };
 
-export class InMemoryRoomStore {
+export class InMemoryRoomStore implements RoomStore {
   private readonly rooms = new Map<string, StoredRoom>();
 
   saveRoom(snapshot: RoomSnapshot) {

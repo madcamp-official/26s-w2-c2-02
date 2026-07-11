@@ -13,7 +13,7 @@ export const realtimeEvents = {
   server: {
     roomSnapshot: 'room:snapshot',
     roomUpdated: 'room:updated',
-    lumiMessage: 'lumi:message',
+    roomiMessage: 'roomi:message',
     error: 'error'
   }
 } as const;
@@ -32,6 +32,6 @@ export type ClientToServerEvents = {
 export type ServerToClientEvents = {
   [realtimeEvents.server.roomSnapshot]: (snapshot: RoomSnapshot) => void;
   [realtimeEvents.server.roomUpdated]: (snapshot: RoomSnapshot) => void;
-  [realtimeEvents.server.lumiMessage]: (message: string) => void;
+  [realtimeEvents.server.roomiMessage]: (message: string) => void;
   [realtimeEvents.server.error]: (message: string) => void;
 };

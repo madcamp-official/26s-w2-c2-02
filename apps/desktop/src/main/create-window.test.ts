@@ -31,10 +31,10 @@ describe('createMainWindow', () => {
     vi.clearAllMocks();
   });
 
-  it('creates the LumI desktop window with the preload bridge enabled', () => {
+  it('creates the Roomi desktop window with the preload bridge enabled', () => {
     createMainWindow({
       isDev: false,
-      preloadPath: '/tmp/lumi-preload.js',
+      preloadPath: '/tmp/roomi-preload.js',
       rendererIndexPath: '/tmp/renderer/index.html'
     });
 
@@ -44,9 +44,9 @@ describe('createMainWindow', () => {
         height: 760,
         minWidth: 960,
         minHeight: 640,
-        title: 'LumI',
+        title: 'Roomi',
         webPreferences: {
-          preload: '/tmp/lumi-preload.js',
+          preload: '/tmp/roomi-preload.js',
           sandbox: false
         }
       })
