@@ -13,7 +13,7 @@ npx pnpm@9.15.0 typecheck
 
 - `test`: Electron desktop 패키지의 Vitest 단위 테스트를 실행합니다.
 - `test:e2e`: Linux/headless 기준으로 Electron 앱을 build 한 뒤 Playwright 로 실제 앱 shell 을 실행해 확인합니다.
-- `test:e2e:local`: macOS, Windows, 로컬 Linux 처럼 GUI 세션이 있는 환경에서 Electron E2E 를 실행합니다.
+- `test:e2e:local`: macOS, Windows, 로컬 Linux 처럼 GUI 세션이 있는 환경에서 Electron E2E 를 실행합니다. Windows 에도 없는 Unix `env -u` 대신 Node runner 로 `ELECTRON_RUN_AS_NODE` 를 제거합니다.
 - `typecheck`: workspace 전체 TypeScript 검사를 실행합니다.
 
 ## React renderer 테스트
@@ -78,6 +78,8 @@ npx pnpm@9.15.0 test:e2e:linux
 
 현재 루트의 `test:e2e` 는 Linux/headless 기본값으로 `test:e2e:linux` 를 실행합니다. 로컬 mac 에서는 `test:e2e:local` 을 명시해서 실행하는 편이 안전합니다.
 
+Windows 에서도 같은 `test:e2e:local` 명령을 사용합니다. desktop package 의 Node runner 가 `ELECTRON_RUN_AS_NODE` 를 제거한 뒤 `electron-vite build` 와 `playwright test` 를 순서대로 실행하므로 PowerShell/CMD 에서 별도 `env` 명령을 설치할 필요가 없습니다.
+
 ## 실제 Electron 창을 보고 싶을 때
 
 로컬 GUI 환경에서 다음 명령을 실행하는 방식이 가장 좋습니다.
@@ -85,6 +87,8 @@ npx pnpm@9.15.0 test:e2e:linux
 ```bash
 npx pnpm@9.15.0 --filter @lumi/desktop dev
 ```
+
+Windows 에서도 같은 명령을 사용합니다. desktop package 의 dev runner 가 `ELECTRON_RUN_AS_NODE` 와 기존 `ELECTRON_RENDERER_URL` 을 제거한 뒤 빈 renderer 포트를 골라 `electron-vite dev` 를 실행하므로 PowerShell/CMD 에서 별도 `env` 명령을 설치할 필요가 없습니다. renderer dev server 는 5175 포트를 먼저 시도하고, 이미 점유되어 있으면 다음 사용 가능한 포트를 Electron 에 전달합니다.
 
 원격 SSH 환경에서 실제 창까지 보려면 X11 forwarding, VNC, noVNC 같은 별도 데스크톱 전달 환경이 필요합니다. 단순 포트 포워딩으로 볼 수 있는 것은 `dev:renderer` 로 띄운 React renderer 화면뿐입니다.
 

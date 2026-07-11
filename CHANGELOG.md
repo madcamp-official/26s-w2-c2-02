@@ -26,6 +26,9 @@
 
 ### Changed
 
+- Windows 환경에서도 `test:e2e:local` 을 같은 명령으로 실행할 수 있도록 Electron E2E local runner 를 Unix `env -u` 기반 shell command 에서 cross-platform Node runner 로 변경했습니다.
+- Windows 환경에서도 `@lumi/desktop` dev script 가 로컬 Electron GUI 를 띄울 수 있도록 Unix `env -u` 기반 실행을 cross-platform Node runner 로 변경했습니다.
+- Electron dev runner 가 기존 `ELECTRON_RENDERER_URL` 을 제거하고 사용 가능한 renderer 포트를 직접 선택해 로컬 GUI 창이 다른 5175 포트 점유 프로세스에 붙지 않도록 조정했습니다.
 - 루트 `README.md` 를 과제 템플릿과 AI 협업 안내 중심에서 루미 프로젝트 고정 개요/기획 문서 중심으로 재구성했습니다.
 - AI 협업 설정 안내는 루트 `README.md` 에 중복하지 않고 `docs/ai_workflows.md` 에서 관리하도록 문서 동기화 정책을 조정했습니다.
 - 루트 `README.md` 는 앞으로 자잘한 AI workflow 변경에는 고정으로 두고, 하위 디렉터리 `README.md` 는 기존처럼 해당 모듈 변경에 맞춰 갱신하도록 `AGENTS.md` 와 `docs/ai_workflows.md` 에 명시했습니다.
