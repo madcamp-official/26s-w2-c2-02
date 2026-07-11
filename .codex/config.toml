@@ -3,3 +3,6 @@ project_doc_max_bytes = 65536
 
 [mcp_servers.notion]
 url = "https://mcp.notion.com/mcp"
+
+[mcp_servers.figma]
+url = "https://mcp.figma.com/mcp"
