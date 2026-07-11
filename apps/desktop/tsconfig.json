@@ -1,4 +1,10 @@
 {
   "extends": "@lumi/config/tsconfig.react.json",
-  "include": ["electron.vite.config.ts", "src"]
+  "include": [
+    "electron.vite.config.ts",
+    "playwright.e2e.config.ts",
+    "src",
+    "e2e",
+    "vitest.config.ts"
+  ]
 }

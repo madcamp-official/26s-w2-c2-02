@@ -3,10 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "dist/main/index.js",
+  "main": "out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "env -u ELECTRON_RUN_AS_NODE electron-vite dev",
+    "dev:renderer": "vite src/renderer --host 0.0.0.0 --port 5175 --strictPort",
     "build": "electron-vite build",
+    "test": "vitest run",
+    "test:e2e": "env -u ELECTRON_RUN_AS_NODE electron-vite build && xvfb-run -a env -u ELECTRON_RUN_AS_NODE playwright test -c playwright.e2e.config.ts",
+    "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json",
     "lint": "tsc -p tsconfig.json"
   },
@@ -21,12 +25,17 @@
   "devDependencies": {
     "@electron-toolkit/utils": "^3.0.0",
     "@lumi/config": "workspace:*",
+    "@playwright/test": "^1.61.1",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
     "electron": "^33.2.1",
     "electron-vite": "^3.0.0",
+    "jsdom": "^25.0.1",
     "typescript": "^5.7.2",
-    "vite": "^6.0.6"
+    "vite": "^6.0.6",
+    "vitest": "^2.1.8"
   }
 }

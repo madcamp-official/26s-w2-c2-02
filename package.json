@@ -8,11 +8,19 @@
     "dev:api": "pnpm --filter @lumi/api dev",
     "dev:desktop": "pnpm --filter @lumi/desktop dev",
     "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "test:e2e": "pnpm --filter @lumi/desktop test:e2e",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint"
   },
   "devDependencies": {
     "@lumi/config": "workspace:*",
     "typescript": "^5.7.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
   }
 }

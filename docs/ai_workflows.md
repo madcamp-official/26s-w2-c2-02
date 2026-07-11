@@ -105,7 +105,10 @@
 - 목적: `CHANGELOG.md` 를 다시 회의용 문장으로 옮기는 반복 작업을 줄이기
 - 작성 기준: command 가 `CHANGELOG.md` 의 `Unreleased` 섹션을 먼저 읽습니다.
 - 기본 command: `python3 scripts/generate_scrum_notes.py`
-- 기본 출력은 스크럼에서 말하기 좋은 핵심 항목 위주로 제한합니다. 전체 changelog 항목이 필요하면 `--all` 을 사용합니다.
+- 기본 생성 파일: `scripts/scrum_notes/YYYY-MM-DD.md`
+- 같은 날짜의 파일이 이미 있으면 추가 파일을 만들지 않고 이미 생성되었다는 안내만 출력합니다.
+- 기본 내용은 스크럼에서 말하기 좋은 핵심 항목 위주로 제한합니다. 전체 changelog 항목이 필요하면 `--all` 을 사용합니다.
+- 이전 날짜 노트에 이미 들어간 항목은 다음 날짜 노트에서 제외합니다.
 - 출력 문체는 회의에서 바로 읽기 쉽도록 "~했습니다" 문장형보다 개조식을 기본으로 사용합니다.
 - 오늘 할 일이 정해져 있으면 `--today "A1. 작업"` 옵션을 여러 번 넘겨 초안에 포함합니다.
 - `CHANGELOG.md` 의 `Notes` 는 "궁금한/필요한/알아낸 것" 과 오늘 follow-up 후보로 사용합니다.
@@ -163,6 +166,13 @@ Claude Code hook 은 Claude 공식 project-local 설정 파일인 `.claude/setti
 - 일반적인 test, lint, typecheck, format 실패는 즉시 확인하고 수정하거나 남은 위험으로 명시합니다.
 - `tdd`, `red`, `failing`, `regression` 같은 의도가 명령에 드러난 실패는 red 단계일 수 있으므로 즉시 block 하지 않고, 최종 응답 전 green 전환 또는 잔여 실패 보고를 요구합니다.
 - 실패한 검증을 그대로 두고 작업을 끝내지 않습니다.
+
+## Electron E2E 실행 메모
+
+- Electron E2E 는 `npx pnpm@9.15.0 test:e2e` 로 실행합니다.
+- Linux/headless 환경에서는 `xvfb-run` 이 필요합니다.
+- Codex/VS Code 원격 환경처럼 `ELECTRON_RUN_AS_NODE=1` 이 설정된 셸에서는 Electron 이 Node 처럼 실행될 수 있으므로, E2E script 는 해당 환경변수를 제거하고 실행합니다.
+- Electron 설치가 `Electron failed to install correctly` 로 실패하면 `node_modules` 제거 후 scripts 를 허용한 `pnpm install` 을 다시 실행합니다. `--ignore-scripts` 를 붙이면 Electron 실행 파일이 설치되지 않습니다.
 
 ## 문서 업데이트 규칙
 
