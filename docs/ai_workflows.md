@@ -189,7 +189,7 @@ Claude Code hook 은 Claude 공식 project-local 설정 파일인 `.claude/setti
 
 ### 루트 README 고정 정책
 
-- 루트 `README.md` 는 루미(Room-AI) 프로젝트의 과제 개요, 기획안, 구현 명세, 설계 문서, 참고 자료를 담는 고정 문서로 유지합니다.
+- 루트 `README.md` 는 루미(Roomi) 프로젝트의 과제 개요, 기획안, 구현 명세, 설계 문서, 참고 자료를 담는 고정 문서로 유지합니다.
 - AI 협업 설정, hook, skill, agent workflow 의 자잘한 변경은 루트 `README.md` 에 중복 반영하지 않습니다.
 - 루트 `README.md` 를 갱신하는 경우는 프로젝트 자체의 큰 방향, 실행 진입점, 공개 시연/제출에 필요한 핵심 정보가 바뀐 경우로 제한합니다.
 - 하위 디렉터리의 `README.md` 는 기존 정책 그대로 유지합니다. 해당 하위 모듈의 실행법, API, 인터페이스, 운영 기대치가 바뀌면 관련 하위 README 를 갱신합니다.

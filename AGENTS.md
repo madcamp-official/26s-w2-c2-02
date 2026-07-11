@@ -2,7 +2,7 @@
 
 - `AGENTS.md` is the shared source of truth for repository-wide agent rules across tools.
 - Update related documentation when behavior, interfaces, or operational expectations change.
-- Treat the root `README.md` as a stable LumI project overview after the current rewrite: do not update it for small AI workflow/hook/skill changes. Keep those changes in `docs/ai_workflows.md`, `AGENTS.md`, or tool-specific docs. Nested `README.md` files still follow the normal documentation-sync policy for their subtree.
+- Treat the root `README.md` as a stable Roomi project overview after the current rewrite: do not update it for small AI workflow/hook/skill changes. Keep those changes in `docs/ai_workflows.md`, `AGENTS.md`, or tool-specific docs. Nested `README.md` files still follow the normal documentation-sync policy for their subtree.
 - For notable behavior, workflow, setup, or user-facing changes, update `CHANGELOG.md` using the changelog-generator style: impact first, internal details second, and manual steps called out explicitly.
 - If a nested directory has its own `AGENTS.md`, follow that file for work in that subtree.
 - Before editing unfamiliar code, read `AGENTS.md` first, then `README.md` if present.

@@ -11,7 +11,7 @@ export function App() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Room-AI Study Room</p>
+            <p className="eyebrow">Roomi Study Room</p>
             <h1>루미</h1>
           </div>
           <button className="invite-button" type="button">
@@ -49,7 +49,7 @@ export function App() {
               ))}
             </div>
 
-            <div className="lumi-message">
+            <div className="roomi-message">
               <h2>루미</h2>
               <p>좋아, 지금 목표는 한 세션 안에 확인 가능한 단위로 잘게 나눠보자.</p>
             </div>

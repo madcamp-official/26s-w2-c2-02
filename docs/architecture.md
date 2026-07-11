@@ -1,6 +1,6 @@
-# LumI Architecture
+# Roomi Architecture
 
-LumI is organized as a small TypeScript monorepo so the desktop client, API server,
+Roomi is organized as a small TypeScript monorepo so the desktop client, API server,
 and shared realtime contracts can evolve together during the MVP.
 
 ## Packages
@@ -27,7 +27,7 @@ Electron Desktop App
 Backend API Server
   - Room/session endpoints
   - Socket.IO realtime gateway
-  - LumI LLM orchestrator
+  - Roomi LLM orchestrator
   - Daily join info provider
   - Summary/event aggregation
 ```

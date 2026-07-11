@@ -8,7 +8,7 @@ importers:
 
   .:
     devDependencies:
-      '@lumi/config':
+      '@roomi/config':
         specifier: workspace:*
         version: link:packages/config
       typescript:
@@ -17,7 +17,7 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@lumi/shared':
+      '@roomi/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       '@vitejs/plugin-react':
@@ -39,7 +39,7 @@ importers:
       '@electron-toolkit/utils':
         specifier: ^3.0.0
         version: 3.0.0(electron@33.4.11)
-      '@lumi/config':
+      '@roomi/config':
         specifier: workspace:*
         version: link:../../packages/config
       '@playwright/test':
@@ -83,7 +83,7 @@ importers:
 
   packages/shared:
     devDependencies:
-      '@lumi/config':
+      '@roomi/config':
         specifier: workspace:*
         version: link:../config
       '@types/node':
@@ -95,7 +95,7 @@ importers:
 
   services/api:
     dependencies:
-      '@lumi/shared':
+      '@roomi/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       cors:
@@ -111,7 +111,7 @@ importers:
         specifier: ^4.8.1
         version: 4.8.3
     devDependencies:
-      '@lumi/config':
+      '@roomi/config':
         specifier: workspace:*
         version: link:../../packages/config
       '@types/cors':

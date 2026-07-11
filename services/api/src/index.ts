@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { createApp } from './server';
 import { env } from './env';
 import { registerRealtimeGateway } from './realtime/gateway';
-import { InMemoryRoomStore } from './storage/in-memory-room-store';
+import { InMemoryRoomStore } from './adapters/storage/in-memory-room-store';
 import { RoomService } from './rooms/room-service';
 
 const store = new InMemoryRoomStore();
@@ -13,5 +13,5 @@ const httpServer = createServer(app);
 registerRealtimeGateway(httpServer, roomService);
 
 httpServer.listen(env.port, () => {
-  console.log(`LumI API listening on http://localhost:${env.port}`);
+  console.log(`Roomi API listening on http://localhost:${env.port}`);
 });

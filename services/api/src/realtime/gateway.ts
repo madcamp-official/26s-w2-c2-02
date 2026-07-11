@@ -3,7 +3,7 @@ import {
   realtimeEvents,
   type ClientToServerEvents,
   type ServerToClientEvents
-} from '@lumi/shared';
+} from '@roomi/shared';
 import { Server } from 'socket.io';
 import { env } from '../env';
 import type { RoomService } from '../rooms/room-service';

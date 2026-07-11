@@ -8,7 +8,7 @@
 ### Added
 
 - 협업형 실전 산출물 제작 과제용 `README.md` 템플릿을 추가했습니다.
-- 루미(Room-AI) 프로젝트 기획안, 구현 명세, IA 구조도, 데이터 구조, API 초안을 루트 `README.md` 에 정리했습니다.
+- 루미(Roomi) 프로젝트 기획안, 구현 명세, IA 구조도, 데이터 구조, API 초안을 루트 `README.md` 에 정리했습니다.
 - AI 협업을 위한 공통 문서 체계를 추가했습니다: `AGENTS.md`, `CLAUDE.md`, `docs/ai_workflows.md`, `KPT.md`.
 - Codex 공용 workflow skill 을 추가했습니다: repo onboarding, bug investigation, TDD loop, PR review, release check, safe refactor, design vocabulary, planning, grill-me, changelog generation.
 - Codex project-local hook 과 config 를 추가해 세션 시작 컨텍스트, Bash 안전 검사, 편집 후 검토, 종료 시 요약과 선택적 자동 커밋 흐름을 지원합니다.
@@ -26,6 +26,7 @@
 
 ### Changed
 
+- 앱과 문서, workspace package scope, preload API, realtime message event 의 영문 표기를 `Roomi` / `roomi` 로 통일했습니다.
 - 루트 `README.md` 를 과제 템플릿과 AI 협업 안내 중심에서 루미 프로젝트 고정 개요/기획 문서 중심으로 재구성했습니다.
 - AI 협업 설정 안내는 루트 `README.md` 에 중복하지 않고 `docs/ai_workflows.md` 에서 관리하도록 문서 동기화 정책을 조정했습니다.
 - 루트 `README.md` 는 앞으로 자잘한 AI workflow 변경에는 고정으로 두고, 하위 디렉터리 `README.md` 는 기존처럼 해당 모듈 변경에 맞춰 갱신하도록 `AGENTS.md` 와 `docs/ai_workflows.md` 에 명시했습니다.
@@ -52,5 +53,6 @@
 
 ### Manual Steps
 
+- `@roomi/*` workspace package scope 로 변경된 뒤에는 `pnpm install` 을 다시 실행해 로컬 workspace link 를 갱신해야 합니다.
 - 새 workspace script 를 사용하기 전에 `pnpm install` 을 실행해야 합니다.
 - Daily 또는 LLM provider 를 연결하기 전에 `.env.example` 을 `.env` 로 복사하고 필요한 service key 를 채워야 합니다.

@@ -23,7 +23,7 @@ export type RoomSettings = {
   maxParticipants: 4;
   authMode: 'nickname_code';
   videoProvider: 'daily';
-  lumiTone: 'friendly_casual';
+  roomiTone: 'friendly_casual';
   rankingMetric: 'focus_minutes';
   videoRequired: boolean;
   detectionPauseAllowed: boolean;
@@ -59,7 +59,7 @@ export type Goal = {
   createdAt: ISODateString;
 };
 
-export type LumiMessage = {
+export type RoomiMessage = {
   id: string;
   roomId: string;
   kind: 'goal_refine' | 'start' | 'focus_recovery' | 'break_return' | 'summary';
@@ -72,7 +72,7 @@ export type RoomSnapshot = {
   room: Room;
   participants: Participant[];
   goals: Goal[];
-  lumiMessages: LumiMessage[];
+  roomiMessages: RoomiMessage[];
 };
 
 export type CreateRoomInput = {
