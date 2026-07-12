@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { RoomiMascot } from '../components/RoomiMascot';
 import type { ScreenProps } from './types';
 
@@ -8,8 +7,14 @@ import type { ScreenProps } from './types';
  * the confirmed Onboarding-4 card shell; inner copy inferred from the IA.
  * Verify against Figma.
  */
-export function OnboardingJoin({ go }: ScreenProps) {
-  const [code, setCode] = useState('');
+interface OnboardingJoinProps extends ScreenProps {
+  code: string;
+  onCodeChange: (code: string) => void;
+  onJoin: () => void;
+}
+
+export function OnboardingJoin({ code, onCodeChange, onJoin }: OnboardingJoinProps) {
+  const isCodeComplete = code.length === 4;
 
   return (
     <div className="screen screen--onboarding">
@@ -30,7 +35,7 @@ export function OnboardingJoin({ go }: ScreenProps) {
             className="field field--code"
             placeholder="0000"
             value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            onChange={(e) => onCodeChange(e.target.value.replace(/\D/g, '').slice(0, 4))}
             inputMode="numeric"
           />
           <p className="onb-hint">코드는 방장이 알려줘요.</p>
@@ -40,7 +45,8 @@ export function OnboardingJoin({ go }: ScreenProps) {
           <button
             type="button"
             className="btn btn--primary btn--block"
-            onClick={() => go('onboarding-permission')}
+            disabled={!isCodeComplete}
+            onClick={onJoin}
           >
             입장하기
           </button>

@@ -8,7 +8,11 @@ import type { ScreenProps } from './types';
  * create/join fork implied by the IA (Onboarding-2 방 만들기 → Create Room,
  * Onboarding-3 방 코드로 입장). Verify against Figma.
  */
-export function OnboardingCreate({ go }: ScreenProps) {
+interface OnboardingCreateProps extends ScreenProps {
+  nickname: string;
+}
+
+export function OnboardingCreate({ nickname, go }: OnboardingCreateProps) {
   return (
     <div className="screen screen--onboarding">
       <div className="onb-card">
@@ -17,7 +21,9 @@ export function OnboardingCreate({ go }: ScreenProps) {
           <RoomiMascot size={64} />
         </div>
         <h1 className="onb-card__title">어떻게 시작할까요?</h1>
-        <p className="onb-card__subtitle">새로 방을 만들거나, 친구 방에 들어갈 수 있어요.</p>
+        <p className="onb-card__subtitle">
+          {nickname.trim() || '친구'}님, 새로 방을 만들거나 친구 방에 들어갈 수 있어요.
+        </p>
 
         <div className="onb-choices">
           <button type="button" className="choice" onClick={() => go('create-room')}>

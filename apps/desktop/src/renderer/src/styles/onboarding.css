@@ -51,6 +51,10 @@
   color: var(--text-faint);
 }
 
+.onb-note--danger {
+  color: #d64545;
+}
+
 .onb-actions {
   margin-top: 24px;
 }

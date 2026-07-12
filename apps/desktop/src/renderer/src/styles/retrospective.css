@@ -1,8 +1,10 @@
 /* Retrospective · 세션 회고 (Figma 72:41), built from exact node metadata. */
 .retro__body {
   display: flex;
+  align-items: center;
   justify-content: center;
-  padding: clamp(48px, 12vw, 181px) 20px;
+  min-height: 100%;
+  padding: clamp(32px, 6vw, 80px) 20px 48px;
 }
 
 .retro__doc {

@@ -8,7 +8,6 @@ import './styles/break.css';
 import './styles/retrospective.css';
 import './styles/create-room.css';
 import './styles/study.css';
-import './styles/dev-nav.css';
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>

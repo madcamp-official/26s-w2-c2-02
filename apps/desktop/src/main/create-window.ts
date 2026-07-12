@@ -3,6 +3,7 @@ import { is } from '@electron-toolkit/utils';
 import { BrowserWindow, Menu, shell } from 'electron';
 
 type CreateMainWindowOptions = {
+  iconPath?: string;
   isDev?: boolean;
   preloadPath?: string;
   rendererIndexPath?: string;
@@ -13,12 +14,13 @@ export function createMainWindow(options: CreateMainWindowOptions = {}) {
   const mainWindow = new BrowserWindow({
     width: 1180,
     height: 760,
-    minWidth: 760,
-    minHeight: 560,
+    minWidth: 900,
+    minHeight: 680,
     title: 'Roomi',
     frame: false,
     titleBarStyle: 'hidden',
     backgroundColor: '#f4f5f7',
+    icon: options.iconPath ?? join(__dirname, '../../resources/roomi-icon.png'),
     webPreferences: {
       preload: options.preloadPath ?? join(__dirname, '../preload/index.mjs'),
       sandbox: false

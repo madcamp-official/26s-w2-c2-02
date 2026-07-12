@@ -28,7 +28,7 @@
 }
 
 .create__section {
-  margin-top: 28px;
+  margin-top: clamp(20px, 3.2vh, 28px);
 }
 
 .create__section-label {
@@ -193,4 +193,16 @@
   height: 52px;
   margin-top: 28px;
   font-size: 16px;
+}
+
+@media (max-height: 760px) {
+  .create__body {
+    padding-top: 20px;
+    padding-bottom: 32px;
+  }
+
+  .create__card {
+    padding-top: 28px;
+    padding-bottom: 26px;
+  }
 }

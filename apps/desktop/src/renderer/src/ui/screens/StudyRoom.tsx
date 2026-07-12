@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { Coffee, Mic, MicOff, PauseCircle, Video, VideoOff } from 'lucide-react';
+import {
+  Coffee,
+  LogOut,
+  Mic,
+  MicOff,
+  MoreHorizontal,
+  PauseCircle,
+  Video,
+  VideoOff
+} from 'lucide-react';
 import { RoomiMascot } from '../components/RoomiMascot';
-import { AppBar } from '../components/AppBar';
+import type { Room } from '@roomi/shared';
 import type { ScreenProps } from './types';
 
 /**
@@ -23,11 +32,19 @@ const goals = [
   { who: '민지', text: '영어 단어 60개 암기' }
 ];
 
-export function StudyRoom({ go }: ScreenProps) {
+interface StudyRoomProps extends ScreenProps {
+  isHost: boolean;
+  onEndSession: () => void;
+  room: Room;
+}
+
+export function StudyRoom({ isHost, onEndSession, room, go }: StudyRoomProps) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCameraOn, setIsCameraOn] = useState(true);
+  const [isHostMenuOpen, setIsHostMenuOpen] = useState(false);
+  const [isEndConfirmOpen, setIsEndConfirmOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,13 +97,14 @@ export function StudyRoom({ go }: ScreenProps) {
 
   return (
     <div className="screen screen--app">
-      <AppBar right={<span className="pill pill--purple">방 코드 4821</span>} />
-
       <div className="study__body">
         <section className="study__stage">
           <div className="study__stage-head">
             <div className="study__stage-title">집중 세션 진행 중</div>
-            <span className="badge badge--wait">4명 참여</span>
+            <div className="study__stage-meta">
+              <span className="pill pill--purple">방 코드 {room.inviteCode}</span>
+              <span className="badge badge--wait">4명 참여</span>
+            </div>
           </div>
 
           <div className="study__grid" aria-label="참가자 영상 영역">
@@ -203,10 +221,68 @@ export function StudyRoom({ go }: ScreenProps) {
         <button type="button" className="ctrl" aria-label="휴식" onClick={() => go('break')}>
           <Coffee size={20} />
         </button>
-        <button type="button" className="ctrl--end" onClick={() => go('retrospective')}>
-          세션 종료
+        {isHost && (
+          <div className="host-actions">
+            <button
+              type="button"
+              className="ctrl"
+              aria-expanded={isHostMenuOpen}
+              aria-label="방장 메뉴"
+              onClick={() => setIsHostMenuOpen((isOpen) => !isOpen)}
+            >
+              <MoreHorizontal size={20} />
+            </button>
+            {isHostMenuOpen && (
+              <div className="host-menu" role="menu" aria-label="방장 전용 액션">
+                <button
+                  type="button"
+                  className="host-menu__item host-menu__item--danger"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsHostMenuOpen(false);
+                    setIsEndConfirmOpen(true);
+                  }}
+                >
+                  세션 종료
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        <button type="button" className="ctrl ctrl--leave" aria-label="나가기" onClick={() => go('waiting')}>
+          <LogOut size={20} />
         </button>
       </div>
+
+      {isEndConfirmOpen && (
+        <div className="session-end-modal" role="dialog" aria-modal="true" aria-label="세션 종료 확인">
+          <div className="session-end-modal__panel">
+            <div className="session-end-modal__title">모두의 세션을 종료할까요?</div>
+            <p className="session-end-modal__text">
+              방장만 할 수 있는 액션이에요. 종료하면 모든 참가자가 회고 화면으로 이동해요.
+            </p>
+            <div className="session-end-modal__actions">
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={() => setIsEndConfirmOpen(false)}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                className="btn btn--danger"
+                onClick={() => {
+                  setIsEndConfirmOpen(false);
+                  onEndSession();
+                }}
+              >
+                세션 종료
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

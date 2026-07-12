@@ -3,7 +3,7 @@
 .study__body {
   display: flex;
   gap: 20px;
-  padding: clamp(18px, 3vw, 24px) clamp(18px, 3vw, 32px) 108px;
+  padding: clamp(18px, 3vw, 24px) clamp(18px, 3vw, 32px) 24px;
 }
 
 .study__stage {
@@ -15,6 +15,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   margin-bottom: 16px;
 }
 
@@ -22,6 +23,13 @@
   font-size: 16px;
   font-weight: 800;
   color: var(--heading);
+}
+
+.study__stage-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .study__grid {
@@ -216,13 +224,14 @@
 
 /* Bottom control bar */
 .study__controls {
-  position: fixed;
-  left: 50%;
+  position: sticky;
   bottom: 24px;
-  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 10px;
+  width: max-content;
+  max-width: calc(100% - 48px);
+  margin: 0 auto 24px;
   padding: 10px 14px;
   background: var(--card);
   border-radius: var(--r-pill);
@@ -237,6 +246,21 @@
   border-radius: 50%;
   background: var(--row-bg);
   color: var(--heading);
+  transition:
+    background 0.16s ease,
+    box-shadow 0.18s ease,
+    color 0.16s ease,
+    transform 0.16s cubic-bezier(0.2, 1.7, 0.4, 1);
+}
+
+.ctrl:hover {
+  box-shadow: 0 8px 18px rgba(79, 70, 150, 0.14);
+  transform: translateY(-2px) scale(1.06);
+}
+
+.ctrl:active {
+  box-shadow: 0 2px 8px rgba(79, 70, 150, 0.14);
+  transform: translateY(2px) scale(0.88);
 }
 
 .ctrl--active {
@@ -249,22 +273,105 @@
   color: #d64545;
 }
 
-.ctrl--end {
-  width: auto;
-  padding: 0 18px;
-  border-radius: var(--r-pill);
+.ctrl--leave {
   background: #fdecec;
   color: #d64545;
-  font-size: 14px;
-  font-weight: 700;
+}
+
+.ctrl--leave:hover {
+  background: #fbdada;
+}
+
+.host-actions {
+  position: relative;
+}
+
+.host-menu {
+  position: absolute;
+  left: 50%;
+  bottom: 60px;
+  min-width: 132px;
+  padding: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+  transform: translateX(-50%);
+  z-index: 5;
+}
+
+.host-menu__item {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: var(--r-sm);
+  color: var(--heading);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: left;
+  transition:
+    background 0.15s ease,
+    transform 0.16s cubic-bezier(0.2, 1.7, 0.4, 1);
+}
+
+.host-menu__item:hover {
+  background: var(--row-bg);
+  transform: translateY(-1px);
+}
+
+.host-menu__item:active {
+  transform: translateY(1px) scale(0.96);
+}
+
+.host-menu__item--danger {
+  color: #d64545;
+}
+
+.session-end-modal {
+  position: fixed;
+  inset: 44px 0 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(32, 37, 46, 0.24);
+  z-index: 20;
+}
+
+.session-end-modal__panel {
+  width: min(360px, 100%);
+  padding: 22px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+}
+
+.session-end-modal__title {
+  color: var(--heading);
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.session-end-modal__text {
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.session-end-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
 }
 
 /* Personal confirm toast */
 .confirm {
-  position: fixed;
-  right: 32px;
+  position: sticky;
   bottom: 96px;
   width: 300px;
+  margin: 0 32px 16px auto;
   padding: 18px 20px;
   background: var(--card);
   border: 1px solid var(--border-purple);
@@ -286,6 +393,15 @@
 }
 
 @media (max-width: 760px) {
+  .study__stage-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .study__stage-meta {
+    justify-content: flex-start;
+  }
+
   .study__grid,
   .study__panel {
     grid-template-columns: 1fr;
@@ -296,19 +412,19 @@
   }
 
   .study__controls {
-    left: 12px;
-    right: 12px;
     bottom: 12px;
-    transform: none;
     justify-content: center;
     border-radius: var(--r-card);
+    max-width: calc(100% - 24px);
+    margin-bottom: 12px;
   }
 
   .confirm {
-    left: 18px;
-    right: 18px;
+    left: auto;
+    right: auto;
     bottom: 92px;
-    width: auto;
+    width: calc(100% - 36px);
+    margin: 0 auto 16px;
   }
 }
 

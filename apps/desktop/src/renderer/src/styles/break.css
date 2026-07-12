@@ -23,6 +23,12 @@
   background: var(--purple-600);
 }
 
+.break__meta {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+
 .break__hint {
   margin-top: 14px;
   font-size: 14px;
