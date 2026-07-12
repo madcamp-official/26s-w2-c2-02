@@ -40,6 +40,13 @@
 - 스터디룸의 세션 종료 버튼을 아이콘형 나가기 컨트롤로 바꾸고, 회고 화면 묶음과 스크롤바 형태를 다듬었습니다.
 - Electron 창과 renderer favicon 이 기본 React 아이콘 대신 루미 아이콘을 사용하도록 변경했습니다.
 - 루미 앱 아이콘 배경을 투명화하고, 개발용 화면 전환 nav 제거, 방장 전용 세션 종료 메뉴/확인 모달, 전역 버튼 press 애니메이션을 추가했습니다.
+- 화면 전환 enter animation, 카드 pop, 선택/컨트롤 버튼 press 모션, 메뉴와 모달 pop animation 을 추가했습니다.
+- 스터디룸 참가자 타일과 목표/확인 메시지가 입력한 닉네임과 현재 방 참가자 상태를 반영하도록 변경했습니다.
+- 방 생성/입장 REST 응답에 현재 클라이언트의 participant id 를 포함하고, renderer 가 서버 room session 과 realtime snapshot 을 구독하도록 연결했습니다.
+- 방 생성/입장 API 변경에 맞춰 `docs/api.md` 에 `RoomSession` 응답과 `room:subscribe` realtime 이벤트를 문서화했습니다.
+- Daily Client SDK 기반 화상 세션 연결을 추가해 서버가 private Daily room 과 participant token 을 발급하고, renderer 가 기존 스터디룸 타일에 Daily media track 을 렌더링하도록 변경했습니다.
+- 방 코드 생성 규칙을 혼동 문자 제외 6자리 영문/숫자로 맞추고, REST 입장 성공 시 기존 구독자에게도 `room:updated` 를 broadcast 하도록 수정했습니다.
+- 한 컴퓨터에서 Electron 과 브라우저 게스트를 함께 테스트할 수 있도록 로컬 API CORS 허용 origin 을 `localhost`/`127.0.0.1` dev 포트로 확장했습니다.
 - Electron dev runner 가 기존 `ELECTRON_RENDERER_URL` 을 제거하고 사용 가능한 renderer 포트를 직접 선택해 로컬 GUI 창이 다른 5175 포트 점유 프로세스에 붙지 않도록 조정했습니다.
 - 앱과 문서, workspace package scope, preload API, realtime message event 의 영문 표기를 `Roomi` / `roomi` 로 통일했습니다.
 - 루트 `README.md` 를 과제 템플릿과 AI 협업 안내 중심에서 루미 프로젝트 고정 개요/기획 문서 중심으로 재구성했습니다.

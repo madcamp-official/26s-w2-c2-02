@@ -10,8 +10,9 @@ import {
   VideoOff
 } from 'lucide-react';
 import { RoomiMascot } from '../components/RoomiMascot';
-import type { Room } from '@roomi/shared';
+import { formatInviteCode, type Participant, type Room, type VideoJoinInfo } from '@roomi/shared';
 import type { ScreenProps } from './types';
+import { useDailyRoom } from '../../use-daily-room';
 
 /**
  * Study Room · Live Session (Figma 47:2).
@@ -19,34 +20,56 @@ import type { ScreenProps } from './types';
  * inferred from the AGENTS.md IA (video grid, timer, goals, Lumi panel,
  * personal confirm message, detection pause, controls). Verify against Figma.
  */
-const tiles = [
-  { name: '소요', initial: '소', status: '집중중', away: false, me: true, muted: false },
-  { name: '채훈', initial: '채', status: '집중중', away: false, me: false, muted: false },
-  { name: '민지', initial: '민', status: '자리비움', away: true, me: false, muted: true },
-  { name: '지호', initial: '지', status: '집중중', away: false, me: false, muted: false }
-];
-
-const goals = [
-  { who: '소요', text: '수학 문제집 5장 풀기' },
-  { who: '채훈', text: 'Socket.IO 방 상태 동기화' },
-  { who: '민지', text: '영어 단어 60개 암기' }
-];
-
 interface StudyRoomProps extends ScreenProps {
+  currentParticipantId: string;
   isHost: boolean;
   onEndSession: () => void;
+  participants: Participant[];
   room: Room;
+  videoJoin?: VideoJoinInfo;
 }
 
-export function StudyRoom({ isHost, onEndSession, room, go }: StudyRoomProps) {
+const statusLabel: Record<Participant['status'], string> = {
+  online: '집중중',
+  focused: '집중중',
+  distracted: '주의 필요',
+  away: '자리비움',
+  break: '휴식중',
+  paused: '감지 정지'
+};
+
+function participantInitial(nickname: string) {
+  return nickname.trim().slice(0, 1) || '?';
+}
+
+function defaultGoalFor(participant: Participant) {
+  return participant.role === 'host' ? '세션 흐름 정리하기' : '이번 세션 목표 집중하기';
+}
+
+export function StudyRoom({
+  currentParticipantId,
+  isHost,
+  onEndSession,
+  participants,
+  room,
+  videoJoin,
+  go
+}: StudyRoomProps) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const { callObject, participantsByRoomiId, status: dailyStatus } = useDailyRoom(videoJoin);
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [isHostMenuOpen, setIsHostMenuOpen] = useState(false);
   const [isEndConfirmOpen, setIsEndConfirmOpen] = useState(false);
+  const currentParticipant =
+    participants.find((participant) => participant.id === currentParticipantId) ?? participants[0];
 
   useEffect(() => {
+    if (videoJoin) {
+      return undefined;
+    }
+
     let cancelled = false;
 
     async function connectLocalMedia() {
@@ -71,7 +94,7 @@ export function StudyRoom({ isHost, onEndSession, room, go }: StudyRoomProps) {
       localStreamRef.current?.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
     };
-  }, []);
+  }, [videoJoin]);
 
   useEffect(() => {
     if (localVideoRef.current && localStreamRef.current) {
@@ -81,17 +104,25 @@ export function StudyRoom({ isHost, onEndSession, room, go }: StudyRoomProps) {
 
   const toggleAudio = () => {
     const next = !isMicOn;
-    localStreamRef.current?.getAudioTracks().forEach((track) => {
-      track.enabled = next;
-    });
+    if (callObject) {
+      callObject.setLocalAudio(next);
+    } else {
+      localStreamRef.current?.getAudioTracks().forEach((track) => {
+        track.enabled = next;
+      });
+    }
     setIsMicOn(next);
   };
 
   const toggleVideo = () => {
     const next = !isCameraOn;
-    localStreamRef.current?.getVideoTracks().forEach((track) => {
-      track.enabled = next;
-    });
+    if (callObject) {
+      callObject.setLocalVideo(next);
+    } else {
+      localStreamRef.current?.getVideoTracks().forEach((track) => {
+        track.enabled = next;
+      });
+    }
     setIsCameraOn(next);
   };
 
@@ -102,15 +133,28 @@ export function StudyRoom({ isHost, onEndSession, room, go }: StudyRoomProps) {
           <div className="study__stage-head">
             <div className="study__stage-title">집중 세션 진행 중</div>
             <div className="study__stage-meta">
-              <span className="pill pill--purple">방 코드 {room.inviteCode}</span>
-              <span className="badge badge--wait">4명 참여</span>
+              <span className="pill pill--purple">방 코드 {formatInviteCode(room.inviteCode)}</span>
+              <span className="badge badge--wait">
+                {participants.length}명 참여
+              </span>
             </div>
           </div>
 
           <div className="study__grid" aria-label="참가자 영상 영역">
-            {tiles.map((t) => (
-              <div className={`tile${t.me ? ' tile--me' : ''}`} key={t.name}>
-                {t.me && isCameraOn ? (
+            {participants.map((participant) => {
+              const isMe = participant.id === currentParticipantId;
+              const isAway = participant.status === 'away' || participant.status === 'break';
+
+              return (
+                <div className={`tile${isMe ? ' tile--me' : ''}`} key={participant.id}>
+                {videoJoin ? (
+                  <DailyParticipantMedia
+                    isCameraOn={isCameraOn}
+                    participant={participantsByRoomiId.get(participant.id)}
+                    fallbackInitial={participantInitial(participant.nickname)}
+                    isMe={isMe}
+                  />
+                ) : isMe && isCameraOn ? (
                   <video
                     ref={localVideoRef}
                     className="tile__video"
@@ -120,31 +164,30 @@ export function StudyRoom({ isHost, onEndSession, room, go }: StudyRoomProps) {
                     aria-label="내 웹캠 미리보기"
                   />
                 ) : (
-                  <div className="tile__avatar">{t.initial}</div>
+                  <div className="tile__avatar">{participantInitial(participant.nickname)}</div>
                 )}
                 <div className="tile__foot">
                   <span className="tile__name">
-                    {t.me ? (
+                    {isMe ? (
                       isMicOn ? (
                         <Mic size={13} />
                       ) : (
                         <MicOff size={13} />
                       )
-                    ) : t.muted ? (
-                      <MicOff size={13} />
                     ) : (
                       <Mic size={13} />
                     )}
-                    {t.name}
-                    {t.me && ' (나)'}
+                    {participant.nickname}
+                    {isMe && ' (나)'}
                   </span>
                   <span className="tile__status">
-                    <span className={`tile__dot${t.away ? ' tile__dot--away' : ''}`} />
-                    {t.status}
+                    <span className={`tile__dot${isAway ? ' tile__dot--away' : ''}`} />
+                    {statusLabel[participant.status]}
                   </span>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 
@@ -159,10 +202,10 @@ export function StudyRoom({ isHost, onEndSession, room, go }: StudyRoomProps) {
 
           <div className="study-card">
             <div className="study-card__title">오늘 목표</div>
-            {goals.map((g) => (
-              <div className="goal" key={g.who}>
-                <span className="goal__who">{g.who}</span>
-                <span className="goal__text">{g.text}</span>
+            {participants.map((participant) => (
+              <div className="goal" key={participant.id}>
+                <span className="goal__who">{participant.nickname}</span>
+                <span className="goal__text">{defaultGoalFor(participant)}</span>
               </div>
             ))}
           </div>
@@ -183,7 +226,7 @@ export function StudyRoom({ isHost, onEndSession, room, go }: StudyRoomProps) {
       <div className="confirm" role="dialog" aria-label="집중 확인">
         <div className="confirm__head">
           <RoomiMascot size={22} />
-          소요, 아직 집중 중이야?
+          {currentParticipant?.nickname ?? '나'}, 아직 집중 중이야?
         </div>
         <p className="confirm__text">잠깐 자리를 비운 것 같아. 맞다면 알려줘, 아니면 계속 갈게.</p>
         <div className="confirm__actions">
@@ -254,6 +297,13 @@ export function StudyRoom({ isHost, onEndSession, room, go }: StudyRoomProps) {
         </button>
       </div>
 
+      {dailyStatus === 'joining' && <div className="study__call-status">화상 세션 연결 중</div>}
+      {dailyStatus === 'error' && (
+        <div className="study__call-status study__call-status--error">
+          화상 세션 연결에 실패했어요
+        </div>
+      )}
+
       {isEndConfirmOpen && (
         <div className="session-end-modal" role="dialog" aria-modal="true" aria-label="세션 종료 확인">
           <div className="session-end-modal__panel">
@@ -284,5 +334,62 @@ export function StudyRoom({ isHost, onEndSession, room, go }: StudyRoomProps) {
         </div>
       )}
     </div>
+  );
+}
+
+function DailyParticipantMedia({
+  fallbackInitial,
+  isCameraOn,
+  isMe,
+  participant
+}: {
+  fallbackInitial: string;
+  isCameraOn: boolean;
+  isMe: boolean;
+  participant?: {
+    tracks?: {
+      audio?: { persistentTrack?: MediaStreamTrack; state?: string };
+      video?: { persistentTrack?: MediaStreamTrack; state?: string };
+    };
+  };
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const videoTrack = participant?.tracks?.video?.persistentTrack;
+  const audioTrack = participant?.tracks?.audio?.persistentTrack;
+  const isVideoPlayable = participant?.tracks?.video?.state === 'playable';
+
+  useEffect(() => {
+    if (!videoRef.current || !videoTrack) {
+      return;
+    }
+
+    videoRef.current.srcObject = new MediaStream([videoTrack]);
+  }, [videoTrack]);
+
+  useEffect(() => {
+    if (!audioRef.current || !audioTrack || isMe) {
+      return;
+    }
+
+    audioRef.current.srcObject = new MediaStream([audioTrack]);
+  }, [audioTrack, isMe]);
+
+  return (
+    <>
+      {isVideoPlayable && (isCameraOn || !isMe) ? (
+        <video
+          ref={videoRef}
+          className="tile__video"
+          autoPlay
+          muted={isMe}
+          playsInline
+          aria-label={isMe ? '내 웹캠 미리보기' : undefined}
+        />
+      ) : (
+        <div className="tile__avatar">{fallbackInitial}</div>
+      )}
+      {!isMe && <audio ref={audioRef} autoPlay />}
+    </>
   );
 }

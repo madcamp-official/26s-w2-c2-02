@@ -14,10 +14,21 @@ interface OnboardingNicknameProps extends ScreenProps {
 
 export function OnboardingNickname({ nickname, onNicknameChange, go }: OnboardingNicknameProps) {
   const trimmedNickname = nickname.trim();
+  const submitNickname = () => {
+    if (trimmedNickname) {
+      go('onboarding-create');
+    }
+  };
 
   return (
     <div className="screen screen--onboarding">
-      <div className="onb-card">
+      <form
+        className="onb-card"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submitNickname();
+        }}
+      >
         <span className="pill pill--purple onb-card__step">STEP 1 / 4 · 닉네임</span>
         <div className="onb-card__mascot">
           <RoomiMascot size={64} />
@@ -42,15 +53,14 @@ export function OnboardingNickname({ nickname, onNicknameChange, go }: Onboardin
 
         <div className="onb-actions">
           <button
-            type="button"
+            type="submit"
             className="btn btn--primary btn--block"
             disabled={!trimmedNickname}
-            onClick={() => go('onboarding-create')}
           >
             다음
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

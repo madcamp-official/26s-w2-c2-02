@@ -5,7 +5,7 @@ import {
   type ServerToClientEvents
 } from '@roomi/shared';
 import { Server } from 'socket.io';
-import { env } from '../env';
+import { isAllowedClientOrigin } from '../env';
 import type { RoomService } from '../rooms/room-service';
 
 export function registerRealtimeGateway(
@@ -13,7 +13,15 @@ export function registerRealtimeGateway(
   roomService: RoomService
 ) {
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
-    cors: { origin: env.clientOrigin }
+    cors: {
+      origin: (origin, callback) => {
+        callback(null, isAllowedClientOrigin(origin));
+      }
+    }
+  });
+
+  roomService.onRoomUpdated((snapshot) => {
+    io.to(snapshot.room.id).emit(realtimeEvents.server.roomUpdated, snapshot);
   });
 
   io.on('connection', (socket) => {
@@ -22,10 +30,23 @@ export function registerRealtimeGateway(
         const snapshot = roomService.joinRoom(input);
         socket.join(snapshot.room.id);
         acknowledge(snapshot);
-        io.to(snapshot.room.id).emit(realtimeEvents.server.roomUpdated, snapshot);
       } catch (error) {
         socket.emit(realtimeEvents.server.error, errorMessage(error));
       }
+    });
+
+    socket.on(realtimeEvents.client.subscribeRoom, (roomId, acknowledge) => {
+      const snapshot = roomService.getByRoomId(roomId);
+
+      if (!snapshot) {
+        acknowledge(undefined);
+        socket.emit(realtimeEvents.server.error, 'Room not found');
+        return;
+      }
+
+      socket.join(snapshot.room.id);
+      acknowledge(snapshot);
+      socket.emit(realtimeEvents.server.roomSnapshot, snapshot);
     });
 
     socket.on(realtimeEvents.client.updateStatus, (input) => {
@@ -35,7 +56,6 @@ export function registerRealtimeGateway(
           input.participantId,
           input.status
         );
-        io.to(input.roomId).emit(realtimeEvents.server.roomUpdated, snapshot);
       } catch (error) {
         socket.emit(realtimeEvents.server.error, errorMessage(error));
       }

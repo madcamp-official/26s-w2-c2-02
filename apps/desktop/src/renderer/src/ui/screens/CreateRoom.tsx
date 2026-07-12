@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Copy } from 'lucide-react';
-import type { RoomSettings } from '@roomi/shared';
+import { formatInviteCode, type RoomSettings } from '@roomi/shared';
 import type { ScreenProps } from './types';
 
 /**
@@ -40,7 +40,7 @@ export function CreateRoom({ inviteCode, onCreateRoom }: CreateRoomProps) {
       <div className="create__body">
         <div className="create__card">
           <div className="screen-meta screen-meta--end">
-            <span className="pill pill--purple">현재 코드 {inviteCode}</span>
+            <span className="pill pill--purple">현재 코드 {formatInviteCode(inviteCode)}</span>
           </div>
           <h1 className="create__title">방을 만들어볼까요?</h1>
           <p className="create__subtitle">세션 규칙을 정하면 초대 코드가 만들어져요.</p>

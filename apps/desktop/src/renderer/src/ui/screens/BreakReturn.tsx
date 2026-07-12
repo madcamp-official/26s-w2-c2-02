@@ -9,7 +9,7 @@ export function BreakReturn({ go }: ScreenProps) {
       <div className="break__wrap">
         <div className="break__status">휴식 중</div>
         <div className="break__meta">
-          <span className="pill pill--purple">방 코드 4821</span>
+          <span className="pill pill--purple">방 코드 7KQ-2MD</span>
         </div>
         <p className="break__hint">다 같이 쉬는 시간</p>
         <div className="break__timer">04:32</div>

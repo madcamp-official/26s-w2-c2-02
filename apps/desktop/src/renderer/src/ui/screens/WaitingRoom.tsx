@@ -1,5 +1,5 @@
 import { RoomiMascot } from '../components/RoomiMascot';
-import type { Participant, Room } from '@roomi/shared';
+import { formatInviteCode, type Participant, type Room } from '@roomi/shared';
 import type { ScreenProps } from './types';
 
 interface WaitingRoomProps extends ScreenProps {
@@ -33,7 +33,7 @@ export function WaitingRoom({ room, participants, go }: WaitingRoomProps) {
     <div className="screen screen--app">
       <div className="waiting__body">
         <main className="waiting__main">
-          <p className="waiting__eyebrow">대기실 · 방 코드 {room.inviteCode}</p>
+          <p className="waiting__eyebrow">대기실 · 방 코드 {formatInviteCode(room.inviteCode)}</p>
           <h1 className="waiting__title">다 같이 목표를 정해볼까요?</h1>
           <p className="waiting__subtitle">
             각자 목표를 적으면 루미가 세션 안에 끝낼 수 있는 크기로 다듬어줘요.

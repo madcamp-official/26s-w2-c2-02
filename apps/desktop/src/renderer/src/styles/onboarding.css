@@ -80,6 +80,11 @@
   text-align: left;
 }
 
+.onb-hint--error {
+  color: #c2475a;
+  font-weight: 700;
+}
+
 /* Create (방 만들기) two big choice buttons */
 .onb-choices {
   display: flex;
@@ -97,12 +102,25 @@
   border-radius: var(--r-lg);
   background: var(--card);
   text-align: left;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.18s ease,
+    transform 0.2s cubic-bezier(0.18, 1.8, 0.35, 1);
+  transform-origin: center center;
+  will-change: transform;
 }
 
 .choice:hover {
   border-color: var(--purple-300);
   background: var(--purple-050);
+  box-shadow: 0 12px 24px rgba(79, 70, 150, 0.1);
+  transform: translateY(-3px) scale(1.012);
+}
+
+.choice:active {
+  box-shadow: 0 3px 8px rgba(79, 70, 150, 0.12);
+  transform: translateY(1px) scale(0.975);
 }
 
 .choice__icon {

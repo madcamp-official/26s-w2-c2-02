@@ -1,5 +1,15 @@
-import { useState } from 'react';
-import type { Participant, Room, RoomSettings } from '@roomi/shared';
+import { useEffect, useRef, useState } from 'react';
+import {
+  createInviteCode,
+  normalizeInviteCode,
+  type Participant,
+  type Room,
+  type RoomSettings,
+  type RoomSession,
+  type VideoJoinInfo
+} from '@roomi/shared';
+import type { Socket } from 'socket.io-client';
+import type { ClientToServerEvents, ServerToClientEvents } from '@roomi/shared';
 import { WindowTitleBar } from './components/WindowTitleBar';
 import { OnboardingNickname } from './screens/OnboardingNickname';
 import { OnboardingCreate } from './screens/OnboardingCreate';
@@ -11,6 +21,13 @@ import { StudyRoom } from './screens/StudyRoom';
 import { BreakReturn } from './screens/BreakReturn';
 import { Retrospective } from './screens/Retrospective';
 import type { ScreenId } from './screens/types';
+import {
+  createRoomSession,
+  createRoomSocket,
+  joinRoomSession,
+  RoomApiError,
+  subscribeToRoom
+} from '../room-client';
 
 type MediaPermissionState = 'idle' | 'checking' | 'granted' | 'denied';
 
@@ -18,6 +35,8 @@ type RoomDraft = {
   currentParticipantId: string;
   room: Room;
   participants: Participant[];
+  realtime: 'local' | 'server';
+  videoJoin?: VideoJoinInfo;
 };
 
 const now = () => new Date().toISOString();
@@ -37,9 +56,10 @@ const defaultRoomSettings: RoomSettings = {
 
 const fallbackRoom: RoomDraft = {
   currentParticipantId: 'participant-demo',
+  realtime: 'local',
   room: {
     id: 'room-demo',
-    inviteCode: '4821',
+    inviteCode: '7KQ2MD',
     hostUserId: 'user-demo',
     settings: defaultRoomSettings,
     status: 'waiting',
@@ -90,9 +110,10 @@ function createRoomDraft(nickname: string, settings: RoomSettings): RoomDraft {
 
   return {
     currentParticipantId: participantId,
+    realtime: 'local',
     room: {
       id: roomId,
-      inviteCode: String(Math.floor(1000 + Math.random() * 9000)),
+      inviteCode: createInviteCode(),
       hostUserId: userId,
       settings,
       status: 'waiting',
@@ -122,6 +143,7 @@ function joinRoomDraft(nickname: string, inviteCode: string): RoomDraft {
 
   return {
     currentParticipantId: participantId,
+    realtime: 'local',
     room: {
       ...fallbackRoom.room,
       id: roomId,
@@ -156,18 +178,97 @@ function joinRoomDraft(nickname: string, inviteCode: string): RoomDraft {
   };
 }
 
+function roomSessionToDraft(session: RoomSession): RoomDraft {
+  return {
+    currentParticipantId: session.currentParticipantId,
+    realtime: 'server',
+    room: session.snapshot.room,
+    participants: session.snapshot.participants,
+    videoJoin: session.videoJoin
+  };
+}
+
 export function App() {
   const [screen, setScreen] = useState<ScreenId>('onboarding-nickname');
   const [nickname, setNickname] = useState('');
   const [joinCode, setJoinCode] = useState('');
+  const [joinError, setJoinError] = useState<string | undefined>();
   const [mediaPermission, setMediaPermission] = useState<MediaPermissionState>('idle');
   const [roomDraft, setRoomDraft] = useState<RoomDraft | null>(null);
+  const socketRef = useRef<Socket<ServerToClientEvents, ClientToServerEvents> | null>(null);
   const go = (id: ScreenId) => setScreen(id);
   const activeRoom = roomDraft ?? fallbackRoom;
   const currentParticipant = activeRoom.participants.find(
     (participant) => participant.id === activeRoom.currentParticipantId
   );
   const isHost = currentParticipant?.role === 'host';
+
+  useEffect(() => {
+    if (!roomDraft || roomDraft.realtime !== 'server') {
+      return undefined;
+    }
+
+    const socket = createRoomSocket();
+    socketRef.current = socket;
+
+    return subscribeToRoom(
+      socket,
+      roomDraft.room.id,
+      (snapshot) => {
+        setRoomDraft((current) =>
+          current && current.room.id === snapshot.room.id
+            ? {
+                ...current,
+                room: snapshot.room,
+                participants: snapshot.participants
+              }
+            : current
+        );
+      },
+      (message) => {
+        console.warn(`Room realtime error: ${message}`);
+      }
+    );
+  }, [roomDraft?.room.id, roomDraft?.realtime]);
+
+  const createRoom = async (settings: RoomSettings) => {
+    const input = { nickname: nickname || '나', settings };
+
+    try {
+      const session = await createRoomSession(input);
+      setRoomDraft(roomSessionToDraft(session));
+    } catch {
+      setRoomDraft(createRoomDraft(input.nickname, settings));
+    }
+
+    go('onboarding-permission');
+  };
+
+  const joinRoom = async () => {
+    const input = { nickname: nickname || '나', inviteCode: normalizeInviteCode(joinCode) };
+    setJoinError(undefined);
+
+    try {
+      const session = await joinRoomSession(input);
+      setRoomDraft(roomSessionToDraft(session));
+    } catch (error) {
+      if (error instanceof RoomApiError) {
+        setJoinError(
+          error.status === 409
+            ? '방이 가득 찼어요. 방장에게 새 방을 요청해주세요.'
+            : error.status === 503
+              ? '화상 세션을 준비하지 못했어요. 잠시 후 다시 시도해주세요.'
+            : '방 코드를 찾지 못했어요. 코드를 다시 확인해주세요.'
+        );
+        return;
+      }
+
+      setJoinError('서버에 연결하지 못했어요. API 서버가 실행 중인지 확인해주세요.');
+      return;
+    }
+
+    go('onboarding-permission');
+  };
 
   return (
     <div className="app-root">
@@ -181,11 +282,12 @@ export function App() {
         {screen === 'onboarding-join' && (
           <OnboardingJoin
             code={joinCode}
-            onCodeChange={setJoinCode}
-            onJoin={() => {
-              setRoomDraft(joinRoomDraft(nickname || '나', joinCode));
-              go('onboarding-permission');
+            error={joinError}
+            onCodeChange={(code) => {
+              setJoinCode(code);
+              setJoinError(undefined);
             }}
+            onJoin={joinRoom}
             go={go}
           />
         )}
@@ -205,10 +307,7 @@ export function App() {
         {screen === 'create-room' && (
           <CreateRoom
             inviteCode={activeRoom.room.inviteCode}
-            onCreateRoom={(settings) => {
-              setRoomDraft(createRoomDraft(nickname || '나', settings));
-              go('onboarding-permission');
-            }}
+            onCreateRoom={createRoom}
             go={go}
           />
         )}
@@ -217,9 +316,12 @@ export function App() {
         )}
         {screen === 'study' && (
           <StudyRoom
+            currentParticipantId={activeRoom.currentParticipantId}
             isHost={isHost}
             onEndSession={() => go('retrospective')}
+            participants={activeRoom.participants}
             room={activeRoom.room}
+            videoJoin={activeRoom.videoJoin}
             go={go}
           />
         )}

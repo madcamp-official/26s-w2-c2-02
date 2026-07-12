@@ -1,4 +1,5 @@
 import { RoomiMascot } from '../components/RoomiMascot';
+import { formatInviteCode, isInviteCodeComplete, normalizeInviteCode } from '@roomi/shared';
 import type { ScreenProps } from './types';
 
 /**
@@ -9,12 +10,13 @@ import type { ScreenProps } from './types';
  */
 interface OnboardingJoinProps extends ScreenProps {
   code: string;
+  error?: string;
   onCodeChange: (code: string) => void;
   onJoin: () => void;
 }
 
-export function OnboardingJoin({ code, onCodeChange, onJoin }: OnboardingJoinProps) {
-  const isCodeComplete = code.length === 4;
+export function OnboardingJoin({ code, error, onCodeChange, onJoin }: OnboardingJoinProps) {
+  const isCodeComplete = isInviteCodeComplete(code);
 
   return (
     <div className="screen screen--onboarding">
@@ -24,7 +26,7 @@ export function OnboardingJoin({ code, onCodeChange, onJoin }: OnboardingJoinPro
           <RoomiMascot size={64} />
         </div>
         <h1 className="onb-card__title">방 코드를 입력해주세요</h1>
-        <p className="onb-card__subtitle">친구에게 받은 4자리 코드를 넣으면 바로 입장해요.</p>
+        <p className="onb-card__subtitle">친구에게 받은 6자리 코드를 넣으면 바로 입장해요.</p>
 
         <div className="onb-fieldgroup">
           <label className="onb-fieldgroup__label" htmlFor="room-code">
@@ -33,12 +35,14 @@ export function OnboardingJoin({ code, onCodeChange, onJoin }: OnboardingJoinPro
           <input
             id="room-code"
             className="field field--code"
-            placeholder="0000"
-            value={code}
-            onChange={(e) => onCodeChange(e.target.value.replace(/\D/g, '').slice(0, 4))}
-            inputMode="numeric"
+            placeholder="ABC-234"
+            value={formatInviteCode(code)}
+            onChange={(e) => onCodeChange(normalizeInviteCode(e.target.value))}
+            inputMode="text"
           />
-          <p className="onb-hint">코드는 방장이 알려줘요.</p>
+          <p className={`onb-hint${error ? ' onb-hint--error' : ''}`} aria-live="polite">
+            {error ?? '코드는 방장이 알려줘요.'}
+          </p>
         </div>
 
         <div className="onb-actions">
