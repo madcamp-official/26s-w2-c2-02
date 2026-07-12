@@ -2,11 +2,11 @@
 .retro__body {
   display: flex;
   justify-content: center;
-  padding: 181px 0;
+  padding: clamp(48px, 12vw, 181px) 20px;
 }
 
 .retro__doc {
-  width: 880px;
+  width: min(880px, 100%);
 }
 
 /* Header row (72:52) */
@@ -14,7 +14,7 @@
   display: flex;
   align-items: flex-start;
   gap: 16px;
-  height: 84px;
+  min-height: 84px;
 }
 
 .retro__head-text {
@@ -56,7 +56,7 @@
 }
 
 .retro-stat {
-  height: 105px;
+  min-height: 105px;
   padding: 20px;
   background: var(--purple-050);
   border: 1px solid var(--border-soft);
@@ -84,7 +84,7 @@
 
 /* Lumi one-line (72:72) */
 .retro__lumi {
-  height: 82px;
+  min-height: 82px;
   margin-top: 18px;
   padding: 20px 22px;
   background: var(--lavender-card);
@@ -113,7 +113,7 @@
 }
 
 .retro-block {
-  height: 78px;
+  min-height: 78px;
   padding: 18px 20px;
   background: var(--card);
   border: 1px solid var(--border);
@@ -138,4 +138,16 @@
   justify-content: flex-end;
   gap: 12px;
   margin-top: 18px;
+}
+
+@media (max-width: 720px) {
+  .retro__stats,
+  .retro__blocks {
+    grid-template-columns: 1fr;
+  }
+
+  .retro__actions {
+    justify-content: stretch;
+    flex-direction: column;
+  }
 }

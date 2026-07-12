@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { is } from '@electron-toolkit/utils';
-import { BrowserWindow, shell } from 'electron';
+import { BrowserWindow, Menu, shell } from 'electron';
 
 type CreateMainWindowOptions = {
   isDev?: boolean;
@@ -13,14 +13,19 @@ export function createMainWindow(options: CreateMainWindowOptions = {}) {
   const mainWindow = new BrowserWindow({
     width: 1180,
     height: 760,
-    minWidth: 960,
-    minHeight: 640,
+    minWidth: 760,
+    minHeight: 560,
     title: 'Roomi',
+    frame: false,
+    titleBarStyle: 'hidden',
+    backgroundColor: '#f4f5f7',
     webPreferences: {
       preload: options.preloadPath ?? join(__dirname, '../preload/index.mjs'),
       sandbox: false
     }
   });
+
+  Menu.setApplicationMenu(null);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);

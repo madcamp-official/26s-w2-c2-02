@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BrowserWindow, shell } from 'electron';
+import { BrowserWindow, Menu, shell } from 'electron';
 import { createMainWindow } from './create-window';
 
 const mocks = vi.hoisted(() => {
@@ -21,6 +21,9 @@ vi.mock('@electron-toolkit/utils', () => ({
 
 vi.mock('electron', () => ({
   BrowserWindow: vi.fn(() => mocks.window),
+  Menu: {
+    setApplicationMenu: vi.fn()
+  },
   shell: {
     openExternal: vi.fn()
   }
@@ -42,15 +45,19 @@ describe('createMainWindow', () => {
       expect.objectContaining({
         width: 1180,
         height: 760,
-        minWidth: 960,
-        minHeight: 640,
+        minWidth: 760,
+        minHeight: 560,
         title: 'Roomi',
+        frame: false,
+        titleBarStyle: 'hidden',
+        backgroundColor: '#f4f5f7',
         webPreferences: {
           preload: '/tmp/roomi-preload.js',
           sandbox: false
         }
       })
     );
+    expect(Menu.setApplicationMenu).toHaveBeenCalledWith(null);
     expect(mocks.window.loadFile).toHaveBeenCalledWith('/tmp/renderer/index.html');
   });
 

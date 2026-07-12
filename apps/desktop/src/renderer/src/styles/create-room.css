@@ -3,11 +3,11 @@
 .create__body {
   display: flex;
   justify-content: center;
-  padding: 56px 0 64px;
+  padding: clamp(24px, 6vw, 56px) 20px 64px;
 }
 
 .create__card {
-  width: 640px;
+  width: min(640px, 100%);
   padding: 36px 40px 32px;
   background: var(--card);
   border-radius: var(--r-card);
@@ -39,6 +39,7 @@
 
 .create__chips {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: 12px;
 }
@@ -155,6 +156,23 @@
   border: 1px dashed var(--border-purple);
   border-radius: var(--r-md);
   background: var(--purple-050);
+}
+
+@media (max-width: 640px) {
+  .create__card {
+    padding: 28px 22px;
+  }
+
+  .create__duo {
+    grid-template-columns: 1fr;
+  }
+
+  .toggle-row,
+  .invite {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
 }
 
 .invite__code {

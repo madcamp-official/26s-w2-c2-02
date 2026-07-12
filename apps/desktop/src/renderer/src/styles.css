@@ -17,6 +17,7 @@ body {
   background: var(--app-bg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  overflow: hidden;
 }
 
 button {
@@ -42,17 +43,111 @@ p {
 
 /* ---------- App frame / screen host ---------- */
 .app-root {
+  display: flex;
+  flex-direction: column;
   min-height: 100%;
 }
 
-/* A screen designed at 1440x900 in Figma. Centered; scrolls if the
-   window is smaller than the design. */
+.app-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* ---------- Custom Electron title bar ---------- */
+.window-titlebar {
+  display: grid;
+  grid-template-columns: 180px 1fr 180px;
+  align-items: center;
+  height: 44px;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.9);
+  border-bottom: 1px solid var(--border-soft);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.window-titlebar--mac {
+  grid-template-columns: 120px 1fr 120px;
+}
+
+.window-titlebar__brand {
+  display: inline-flex;
+  align-items: center;
+  justify-self: center;
+  gap: 8px;
+  color: var(--heading);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.window-titlebar__controls {
+  display: flex;
+  align-items: center;
+  -webkit-app-region: no-drag;
+}
+
+.window-titlebar__controls--mac {
+  gap: 8px;
+}
+
+.window-titlebar__controls--windows {
+  justify-self: end;
+  gap: 4px;
+}
+
+.window-titlebar__mac-spacer {
+  width: 120px;
+}
+
+.window-control {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 30px;
+  border-radius: var(--r-sm);
+  color: var(--text-muted);
+}
+
+.window-control:hover {
+  background: var(--purple-100);
+  color: var(--purple-700);
+}
+
+.window-control--danger:hover {
+  background: #fdecec;
+  color: #d64545;
+}
+
+.window-control--mac {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1px solid rgba(32, 37, 46, 0.12);
+}
+
+.window-control--close {
+  background: #ff6b6b;
+}
+
+.window-control--minimize {
+  background: #f6c85f;
+}
+
+.window-control--maximize {
+  background: #57d38c;
+}
+
+.window-control--mac:hover {
+  filter: brightness(0.94);
+}
+
+/* ---------- App frame / screen host ---------- */
 .screen {
   position: relative;
-  width: 1440px;
-  min-height: 900px;
-  margin: 0 auto;
-  overflow: hidden;
+  width: 100%;
+  min-height: calc(100vh - 44px);
+  overflow: visible;
 }
 
 .screen--app {
@@ -66,6 +161,7 @@ p {
 .screen--onboarding {
   display: grid;
   place-items: center;
+  padding: 24px;
   background: linear-gradient(
     135deg,
     var(--onboarding-bg-a) 0%,
@@ -193,12 +289,46 @@ p {
 
 /* ---------- Onboarding card shell ---------- */
 .onb-card {
-  width: 480px;
+  width: min(480px, 100%);
   padding: 40px 40px 36px;
   background: var(--card);
   border-radius: 28px;
   box-shadow: var(--shadow-card);
   text-align: center;
+}
+
+@media (max-width: 720px) {
+  .window-titlebar {
+    grid-template-columns: 108px 1fr 108px;
+  }
+
+  .window-titlebar--mac {
+    grid-template-columns: 82px 1fr 82px;
+  }
+
+  .window-titlebar__brand span {
+    display: none;
+  }
+
+  .window-control {
+    width: 32px;
+  }
+
+  .appbar {
+    height: auto;
+    min-height: 64px;
+    padding: 12px 18px;
+    gap: 12px;
+  }
+
+  .appbar__wordmark span {
+    display: none;
+  }
+
+  .onb-card {
+    padding: 30px 24px;
+    border-radius: var(--r-card);
+  }
 }
 
 .onb-card__step {

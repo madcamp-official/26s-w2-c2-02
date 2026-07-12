@@ -1,4 +1,5 @@
-import { Coffee, Mic, MicOff, PauseCircle, Video } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Coffee, Mic, MicOff, PauseCircle, Video, VideoOff } from 'lucide-react';
 import { RoomiMascot } from '../components/RoomiMascot';
 import { AppBar } from '../components/AppBar';
 import type { ScreenProps } from './types';
@@ -23,6 +24,60 @@ const goals = [
 ];
 
 export function StudyRoom({ go }: ScreenProps) {
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const [isMicOn, setIsMicOn] = useState(true);
+  const [isCameraOn, setIsCameraOn] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function connectLocalMedia() {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+
+      if (cancelled) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
+      localStreamRef.current = stream;
+
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+      }
+    }
+
+    void connectLocalMedia();
+
+    return () => {
+      cancelled = true;
+      localStreamRef.current?.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (localVideoRef.current && localStreamRef.current) {
+      localVideoRef.current.srcObject = localStreamRef.current;
+    }
+  }, [isCameraOn]);
+
+  const toggleAudio = () => {
+    const next = !isMicOn;
+    localStreamRef.current?.getAudioTracks().forEach((track) => {
+      track.enabled = next;
+    });
+    setIsMicOn(next);
+  };
+
+  const toggleVideo = () => {
+    const next = !isCameraOn;
+    localStreamRef.current?.getVideoTracks().forEach((track) => {
+      track.enabled = next;
+    });
+    setIsCameraOn(next);
+  };
+
   return (
     <div className="screen screen--app">
       <AppBar right={<span className="pill pill--purple">방 코드 4821</span>} />
@@ -37,10 +92,31 @@ export function StudyRoom({ go }: ScreenProps) {
           <div className="study__grid" aria-label="참가자 영상 영역">
             {tiles.map((t) => (
               <div className={`tile${t.me ? ' tile--me' : ''}`} key={t.name}>
-                <div className="tile__avatar">{t.initial}</div>
+                {t.me && isCameraOn ? (
+                  <video
+                    ref={localVideoRef}
+                    className="tile__video"
+                    autoPlay
+                    muted
+                    playsInline
+                    aria-label="내 웹캠 미리보기"
+                  />
+                ) : (
+                  <div className="tile__avatar">{t.initial}</div>
+                )}
                 <div className="tile__foot">
                   <span className="tile__name">
-                    {t.muted ? <MicOff size={13} /> : <Mic size={13} />}
+                    {t.me ? (
+                      isMicOn ? (
+                        <Mic size={13} />
+                      ) : (
+                        <MicOff size={13} />
+                      )
+                    ) : t.muted ? (
+                      <MicOff size={13} />
+                    ) : (
+                      <Mic size={13} />
+                    )}
                     {t.name}
                     {t.me && ' (나)'}
                   </span>
@@ -103,11 +179,23 @@ export function StudyRoom({ go }: ScreenProps) {
       </div>
 
       <div className="study__controls">
-        <button type="button" className="ctrl ctrl--active" aria-label="마이크">
-          <Mic size={20} />
+        <button
+          type="button"
+          className={`ctrl${isMicOn ? ' ctrl--active' : ' ctrl--muted'}`}
+          aria-label={isMicOn ? '마이크 끄기' : '마이크 켜기'}
+          aria-pressed={isMicOn}
+          onClick={toggleAudio}
+        >
+          {isMicOn ? <Mic size={20} /> : <MicOff size={20} />}
         </button>
-        <button type="button" className="ctrl ctrl--active" aria-label="카메라">
-          <Video size={20} />
+        <button
+          type="button"
+          className={`ctrl${isCameraOn ? ' ctrl--active' : ' ctrl--muted'}`}
+          aria-label={isCameraOn ? '카메라 끄기' : '카메라 켜기'}
+          aria-pressed={isCameraOn}
+          onClick={toggleVideo}
+        >
+          {isCameraOn ? <Video size={20} /> : <VideoOff size={20} />}
         </button>
         <button type="button" className="ctrl" aria-label="감지 일시정지">
           <PauseCircle size={20} />

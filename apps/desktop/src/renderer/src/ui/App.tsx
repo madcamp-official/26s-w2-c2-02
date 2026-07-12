@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { WindowTitleBar } from './components/WindowTitleBar';
 import { OnboardingNickname } from './screens/OnboardingNickname';
 import { OnboardingCreate } from './screens/OnboardingCreate';
 import { OnboardingJoin } from './screens/OnboardingJoin';
@@ -28,15 +29,19 @@ export function App() {
 
   return (
     <div className="app-root">
-      {screen === 'onboarding-nickname' && <OnboardingNickname go={go} />}
-      {screen === 'onboarding-create' && <OnboardingCreate go={go} />}
-      {screen === 'onboarding-join' && <OnboardingJoin go={go} />}
-      {screen === 'onboarding-permission' && <OnboardingPermission go={go} />}
-      {screen === 'create-room' && <CreateRoom go={go} />}
-      {screen === 'waiting' && <WaitingRoom go={go} />}
-      {screen === 'study' && <StudyRoom go={go} />}
-      {screen === 'break' && <BreakReturn go={go} />}
-      {screen === 'retrospective' && <Retrospective go={go} />}
+      <WindowTitleBar />
+
+      <main className="app-content">
+        {screen === 'onboarding-nickname' && <OnboardingNickname go={go} />}
+        {screen === 'onboarding-create' && <OnboardingCreate go={go} />}
+        {screen === 'onboarding-join' && <OnboardingJoin go={go} />}
+        {screen === 'onboarding-permission' && <OnboardingPermission go={go} />}
+        {screen === 'create-room' && <CreateRoom go={go} />}
+        {screen === 'waiting' && <WaitingRoom go={go} />}
+        {screen === 'study' && <StudyRoom go={go} />}
+        {screen === 'break' && <BreakReturn go={go} />}
+        {screen === 'retrospective' && <Retrospective go={go} />}
+      </main>
 
       {/* Dev-only screen switcher */}
       <nav className="dev-nav" aria-label="화면 전환(개발용)">
