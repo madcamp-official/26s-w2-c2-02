@@ -29,6 +29,7 @@
 - 온보딩 닉네임/방 코드 입력, 카메라·마이크 권한 확인, 로컬 방 생성 설정이 대기실 상태로 이어지도록 연결했습니다.
 - Figma 픽셀에서 직접 추출한 색상/타이포/간격을 `styles/tokens.css` 에 design token 으로 정리하고, 공통 `AppBar`·루미 mascot·badge/pill/button 컴포넌트를 추가했습니다.
 - 개발 중 화면을 빠르게 오갈 수 있는 상단 dev 화면 전환 nav 를 추가했습니다(디자인에는 포함되지 않는 개발용 UI).
+- MediaPipe 테스트 화면에서 웹캠 얼굴 landmark 기반 Rule-Based 집중도 label, 점수, feature 지속 시간을 확인할 수 있게 추가했습니다.
 
 ### Changed
 
@@ -73,6 +74,7 @@
 - 스크럼 회의록 생성 script 는 `scripts/scrum_notes/YYYY-MM-DD.md` 에 날짜별로 저장하고, 이전 날짜 노트와 겹치는 항목은 제외하도록 변경했습니다.
 - 같은 날짜의 스크럼 회의록이 이미 있으면 새 파일을 만들지 않고 안내 메시지만 출력하도록 변경했습니다.
 - Codex/Claude Stop hook 이 자동 커밋 환경변수 `AI_AUTO_COMMIT`, `CODEX_AUTO_COMMIT`, `CLAUDE_AUTO_COMMIT` 를 모두 `1` 로 주입하도록 변경했습니다.
+- MediaPipe WASM 초기화를 위해 desktop renderer CSP 에 `wasm-unsafe-eval` 을 허용하고, Rule-Based 기준값을 화면에서 조정할 수 있는 설정 모달을 추가했습니다.
 
 ### Notes
 
@@ -87,4 +89,5 @@
 
 - `@roomi/*` workspace package scope 로 변경된 뒤에는 `pnpm install` 을 다시 실행해 로컬 workspace link 를 갱신해야 합니다.
 - 새 workspace script 를 사용하기 전에 `pnpm install` 을 실행해야 합니다.
+- MediaPipe 테스트 화면을 사용하려면 `pnpm install` 로 `@mediapipe/tasks-vision` dependency 를 설치해야 합니다.
 - Daily 또는 LLM provider 를 연결하기 전에 `.env.example` 을 `.env` 로 복사하고 필요한 service key 를 채워야 합니다.
