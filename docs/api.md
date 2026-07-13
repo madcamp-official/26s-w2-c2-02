@@ -9,6 +9,7 @@
 | `POST` | `/rooms/join` | Join an existing room by invite code and return the caller participant id. |
 | `POST` | `/rooms/:roomId/goals` | Upsert the calling participant's goal (`participantId`, `rawText`) and return the room snapshot. Allowed regardless of room status (late joiners can set goals). |
 | `POST` | `/goals/refine` | Refine a raw goal (`rawGoal`, `sessionMinutes`) via Gemini and return `{ refinedText, reason, source }`. Always `200`; `source` is `template` when the LLM is unavailable. The raw goal is not persisted. |
+| `POST` | `/sessions` | Host starts the study session (`roomId`, `participantId`). Sets `room.status = 'studying'` and `currentSession`, returns the snapshot. `403` for non-host, `409` if not `waiting`, `404` for unknown room. Transition reaches everyone via `room:updated`. |
 | `GET` | `/rooms/:inviteCode` | Read a room snapshot by invite code. |
 
 Invite codes are 6-character uppercase alphanumeric strings. Roomi excludes ambiguous characters (`0`, `O`, `1`, `I`, `L`) and normalizes user input before lookup.

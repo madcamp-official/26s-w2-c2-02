@@ -8,6 +8,7 @@ import type {
   RoomSession,
   RoomSettings,
   RoomSnapshot,
+  StudySession,
   VideoJoinInfo
 } from '@roomi/shared';
 import {
@@ -187,6 +188,41 @@ export class RoomService {
       snapshot.goals = [...snapshot.goals, goal];
     }
 
+    this.store.update(snapshot);
+    this.emitRoomUpdated(snapshot);
+    return snapshot;
+  }
+
+  startSession(roomId: string, participantId: string): RoomSnapshot {
+    const snapshot = this.store.findByRoomId(roomId);
+
+    if (!snapshot) {
+      throw new Error('Room not found');
+    }
+
+    const host = snapshot.participants.find(
+      (participant) => participant.id === participantId
+    );
+
+    if (!host || host.role !== 'host') {
+      throw new Error('Only the host can start the session');
+    }
+
+    if (snapshot.room.status !== 'waiting') {
+      throw new Error('Session already started');
+    }
+
+    const now = new Date().toISOString();
+    const session: StudySession = {
+      id: crypto.randomUUID(),
+      roomId,
+      startedAt: now,
+      plannedMinutes: snapshot.room.settings.sessionMinutes,
+      mode: 'study'
+    };
+
+    snapshot.room = { ...snapshot.room, status: 'studying' };
+    snapshot.currentSession = session;
     this.store.update(snapshot);
     this.emitRoomUpdated(snapshot);
     return snapshot;

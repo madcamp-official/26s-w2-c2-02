@@ -155,3 +155,61 @@ describe('RoomService goals', () => {
     expect(() => service.submitGoal('missing-room', 'x', '목표')).toThrow('Room not found');
   });
 });
+
+describe('RoomService.startSession', () => {
+  it('starts a study session when the host requests it', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+
+    const snapshot = service.startSession(created.room.id, host.id);
+
+    expect(snapshot.room.status).toBe('studying');
+    expect(snapshot.currentSession?.mode).toBe('study');
+    expect(snapshot.currentSession?.plannedMinutes).toBe(created.room.settings.sessionMinutes);
+    expect(snapshot.currentSession?.startedAt).toBeTruthy();
+  });
+
+  it('broadcasts a room update when the session starts', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    let received: string | undefined;
+    service.onRoomUpdated((snapshot) => {
+      received = snapshot.room.status;
+    });
+
+    service.startSession(created.room.id, host.id);
+
+    expect(received).toBe('studying');
+  });
+
+  it('rejects a non-host participant', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const joined = service.joinRoom({
+      nickname: 'member',
+      inviteCode: created.room.inviteCode
+    });
+    const member = joined.participants.at(-1)!;
+
+    expect(() => service.startSession(created.room.id, member.id)).toThrow('Only the host');
+  });
+
+  it('rejects starting when the room is not waiting', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    service.startSession(created.room.id, host.id);
+
+    expect(() => service.startSession(created.room.id, host.id)).toThrow(
+      'Session already started'
+    );
+  });
+
+  it('throws when the room does not exist', () => {
+    const service = createService();
+
+    expect(() => service.startSession('missing-room', 'x')).toThrow('Room not found');
+  });
+});

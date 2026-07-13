@@ -72,6 +72,73 @@ describe('POST /rooms/:roomId/goals', () => {
   });
 });
 
+describe('POST /sessions', () => {
+  let httpServer: HttpServer;
+  let roomService: RoomService;
+  let baseUrl: string;
+
+  beforeEach(async () => {
+    roomService = new RoomService(new InMemoryRoomStore());
+    httpServer = createServer(createApp(roomService, new RoomiOrchestrator()));
+    await new Promise<void>((resolve) => httpServer.listen(0, resolve));
+    const { port } = httpServer.address() as AddressInfo;
+    baseUrl = `http://localhost:${port}`;
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  });
+
+  function startSession(body: unknown) {
+    return fetch(`${baseUrl}/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  }
+
+  it('starts the session for the host and returns the studying snapshot', async () => {
+    const created = roomService.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+
+    const response = await startSession({ roomId: created.room.id, participantId: host.id });
+    const snapshot = (await response.json()) as RoomSnapshot;
+
+    expect(response.status).toBe(200);
+    expect(snapshot.room.status).toBe('studying');
+    expect(snapshot.currentSession?.mode).toBe('study');
+  });
+
+  it('returns 403 when a non-host tries to start', async () => {
+    const created = roomService.createRoom({ nickname: 'host' });
+    const joined = roomService.joinRoom({
+      nickname: 'member',
+      inviteCode: created.room.inviteCode
+    });
+    const member = joined.participants.at(-1)!;
+
+    const response = await startSession({ roomId: created.room.id, participantId: member.id });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('returns 409 when the session already started', async () => {
+    const created = roomService.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    await startSession({ roomId: created.room.id, participantId: host.id });
+
+    const response = await startSession({ roomId: created.room.id, participantId: host.id });
+
+    expect(response.status).toBe(409);
+  });
+
+  it('returns 404 for an unknown room', async () => {
+    const response = await startSession({ roomId: 'missing', participantId: 'x' });
+
+    expect(response.status).toBe(404);
+  });
+});
+
 describe('POST /goals/refine', () => {
   let httpServer: HttpServer;
   let baseUrl: string;

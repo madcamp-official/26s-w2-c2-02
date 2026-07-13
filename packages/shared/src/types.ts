@@ -136,6 +136,11 @@ export type GoalRefineInput = {
   sessionMinutes: number;
 };
 
+export type SessionStartInput = {
+  roomId: string;
+  participantId: string;
+};
+
 export type GoalRefinement = {
   refinedText: string;
   reason: string;

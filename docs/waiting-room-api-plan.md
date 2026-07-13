@@ -78,11 +78,11 @@
 - **위험**: LLM 키/네트워크 실패로 흐름 블록 → try/catch 동기 fallback으로 항상 200.
 - **검증**: orchestrator 단위 3건(gemini/throw→template/무generator→template) + GeminiClient fetch-mock 3건(무키 throw/파싱/비정상응답) + REST 2건(무LLM 200 template / generator 주입 시 gemini). vitest 27건 통과. 키 없는 상태에서도 200 + 템플릿 확인.
 
-### 6. 세션 시작 API
-- **행동**: `POST /sessions`(host 권한 검증, `room.status === 'waiting'`일 때만 허용, 아니면 409, `StudySession` 생성) → `session:start` broadcast로 전원 스터디룸 전환.
-- **이유**: 대기실의 종료 지점이자 스터디룸 게이트. 늦은 참가자·중복 클릭의 두 번째 세션 생성 차단.
-- **위험**: host 아닌 참가자 시작 / 준비 미완료 시작 → 서버에서 강제(클라 버튼 신뢰 금지).
-- **검증**: member 호출 시 403, 이미 `studying`이면 409, host는 전환 broadcast.
+### 6. 세션 시작 API ✅ (완료)
+- **행동**: `POST /sessions`(host 권한 검증, `room.status === 'waiting'`일 때만 허용, 아니면 409, `StudySession` 생성) → `room.status='studying'`+`currentSession` 세팅 → **기존 `room:updated`로 전원 전환**.
+- **설계 결정**: 별도 `session:start` 이벤트를 만들지 않고 `room:updated` 재사용(스냅샷에 `currentSession`+`studying`이 실려 나가 단일 소스). 클라(7단계)는 status 변화로 스터디룸 전환.
+- **위험**: host 아닌 참가자 시작 / 준비 미완료 시작 → 서버에서 강제(클라 버튼 신뢰 금지). 중복 클릭·늦은 참가자의 두 번째 세션 생성은 `waiting` 가드(409)로 차단.
+- **검증**: `startSession` 단위 5건(host 성공/broadcast/비host 403 사유/이미 시작 409 사유/미존재 방) + REST 4건(200·403·409·404). vitest 36건 통과.
 
 ### 7. 대기실 2모드 분기 (프론트)
 - **행동**: `WaitingRoom.tsx` 하드코딩 제거 → snapshot 구독. `room.status`로 시작 전/진행 중 모드 렌더, host/member CTA 분기, 늦은 합류 라우팅(`currentSession`·타이머 스냅샷 동반).
