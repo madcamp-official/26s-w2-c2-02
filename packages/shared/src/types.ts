@@ -130,3 +130,14 @@ export type GoalSubmitInput = {
   participantId: string;
   rawText: string;
 };
+
+export type GoalRefineInput = {
+  rawGoal: string;
+  sessionMinutes: number;
+};
+
+export type GoalRefinement = {
+  refinedText: string;
+  reason: string;
+  source: 'gemini' | 'template';
+};

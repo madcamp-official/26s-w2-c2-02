@@ -72,11 +72,11 @@
 - **위험**: 같은 participant 다중 goal → 목록 중복. participantId 기준 upsert로 방지(재제출 시 `refinedText` 무효화).
 - **검증**: 같은 참가자 2회 제출 시 goal 1건 유지 — `submitGoal` 단위 테스트(생성/upsert/참가자별 분리/broadcast/studying 허용/미존재 방·참가자) + REST(`server.test.ts`) + gateway `goal:submit` 통합. vitest 19건 통과.
 
-### 5. 루미 목표 다듬기 API (LLM)
-- **행동**: `POST /goals/refine`(`rawGoal`, `sessionMinutes`) → `RoomiOrchestrator` 통해 `refinedText`+사유 반환, **LLM 실패 시 템플릿 fallback**. 원본은 서버에만.
-- **이유**: 대기실의 AI 운영자 가치 제안 핵심.
-- **위험**: LLM 키/네트워크 실패로 흐름 블록 → 반드시 동기 fallback.
-- **검증**: 키 없는 상태에서도 200 + 템플릿 문구 반환.
+### 5. 루미 목표 다듬기 API (LLM) ✅ (완료)
+- **행동**: `POST /goals/refine`(`rawGoal`, `sessionMinutes`) → `RoomiOrchestrator.refineGoal()`가 `{ refinedText, reason, source }` 반환. **Gemini(`gemini-2.5-flash`) 호출 실패·무키 시 템플릿 fallback**. 원본 rawGoal은 서버에만(응답에 미포함).
+- **아키텍처**: `GeminiClient`(raw fetch, 외부 경계 1곳: `GEMINI_API_KEY`·모델·타임아웃) → `RoomiOrchestrator`(seam: kind별 프롬프트+fallback, `TextGenerator` 주입). `.env`에 `GEMINI_API_KEY`만 넣으면 라이브, 없으면 템플릿 자동. 나머지 kind(start/focus/break/summary)는 같은 client·패턴 재사용.
+- **위험**: LLM 키/네트워크 실패로 흐름 블록 → try/catch 동기 fallback으로 항상 200.
+- **검증**: orchestrator 단위 3건(gemini/throw→template/무generator→template) + GeminiClient fetch-mock 3건(무키 throw/파싱/비정상응답) + REST 2건(무LLM 200 template / generator 주입 시 gemini). vitest 27건 통과. 키 없는 상태에서도 200 + 템플릿 확인.
 
 ### 6. 세션 시작 API
 - **행동**: `POST /sessions`(host 권한 검증, `room.status === 'waiting'`일 때만 허용, 아니면 409, `StudySession` 생성) → `session:start` broadcast로 전원 스터디룸 전환.

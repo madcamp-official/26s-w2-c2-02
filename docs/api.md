@@ -8,6 +8,7 @@
 | `POST` | `/rooms` | Create a room with a host participant and return the caller participant id. |
 | `POST` | `/rooms/join` | Join an existing room by invite code and return the caller participant id. |
 | `POST` | `/rooms/:roomId/goals` | Upsert the calling participant's goal (`participantId`, `rawText`) and return the room snapshot. Allowed regardless of room status (late joiners can set goals). |
+| `POST` | `/goals/refine` | Refine a raw goal (`rawGoal`, `sessionMinutes`) via Gemini and return `{ refinedText, reason, source }`. Always `200`; `source` is `template` when the LLM is unavailable. The raw goal is not persisted. |
 | `GET` | `/rooms/:inviteCode` | Read a room snapshot by invite code. |
 
 Invite codes are 6-character uppercase alphanumeric strings. Roomi excludes ambiguous characters (`0`, `O`, `1`, `I`, `L`) and normalizes user input before lookup.
@@ -71,7 +72,7 @@ Copy the root `.env.example` to the repository root `.env` on the API server mac
 | `CLIENT_ORIGIN` | Comma-separated allowlist of renderer/browser origins allowed by REST CORS and Socket.IO CORS. |
 | `DAILY_API_KEY` | Daily API key for room/token creation. |
 | `DAILY_DOMAIN` | Daily domain used by the video provider. |
-| `OPENAI_API_KEY` | LLM provider API key, kept server-side only. |
+| `GEMINI_API_KEY` | Google Gemini API key for goal refinement, kept server-side only. When unset, `POST /goals/refine` returns a deterministic template instead of calling the LLM. |
 
 During local development, the API also accepts renderer origins on `localhost` and `127.0.0.1` in the `5100-5199` port range. This lets Electron and a browser guest join the same local API during one-machine testing.
 
@@ -103,7 +104,7 @@ API_HOST=0.0.0.0
 CLIENT_ORIGIN=http://localhost:5175,http://127.0.0.1:5175,http://192.168.0.23:5175
 DAILY_API_KEY=...
 DAILY_DOMAIN=...
-OPENAI_API_KEY=
+GEMINI_API_KEY=
 ```
 
 Start the API:
@@ -144,7 +145,7 @@ API_HOST=127.0.0.1
 CLIENT_ORIGIN=http://localhost:5175,http://127.0.0.1:5175
 DAILY_API_KEY=...
 DAILY_DOMAIN=...
-OPENAI_API_KEY=
+GEMINI_API_KEY=
 ```
 
 Run Roomi API locally on the internal server:

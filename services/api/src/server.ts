@@ -1,10 +1,11 @@
 import cors from 'cors';
 import express from 'express';
-import type { CreateRoomInput, JoinRoomInput } from '@roomi/shared';
+import type { CreateRoomInput, GoalRefineInput, JoinRoomInput } from '@roomi/shared';
 import { isAllowedClientOrigin } from './env';
 import type { RoomService } from './rooms/room-service';
+import type { RoomiOrchestrator } from './roomi/roomi-orchestrator';
 
-export function createApp(roomService: RoomService) {
+export function createApp(roomService: RoomService, roomiOrchestrator: RoomiOrchestrator) {
   const app = express();
 
   app.use(
@@ -52,6 +53,13 @@ export function createApp(roomService: RoomService) {
       const message = error instanceof Error ? error.message : 'Goal submission failed';
       response.status(statusForRoomError(message, 404)).json({ message });
     }
+  });
+
+  app.post('/goals/refine', async (request, response) => {
+    // The raw goal stays server-side; only the refined text and reason go back.
+    const { rawGoal, sessionMinutes } = request.body as GoalRefineInput;
+    const refinement = await roomiOrchestrator.refineGoal(rawGoal, sessionMinutes);
+    response.json(refinement);
   });
 
   app.get('/rooms/:inviteCode', (request, response) => {

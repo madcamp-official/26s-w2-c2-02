@@ -23,5 +23,5 @@ export const env = {
   clientOrigins: parseClientOrigins(process.env.CLIENT_ORIGIN),
   dailyApiKey: process.env.DAILY_API_KEY,
   dailyDomain: process.env.DAILY_DOMAIN,
-  openaiApiKey: process.env.OPENAI_API_KEY
+  geminiApiKey: process.env.GEMINI_API_KEY
 };

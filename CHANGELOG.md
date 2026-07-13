@@ -73,14 +73,6 @@
 - Codex/Claude Stop hook 이 자동 커밋 환경변수 `AI_AUTO_COMMIT`, `CODEX_AUTO_COMMIT`, `CLAUDE_AUTO_COMMIT` 를 모두 `1` 로 주입하도록 변경했습니다.
 
 ### Notes
-
-- 수동 설정, migration, 배포 전 확인이 필요한 변경은 항목 안에 명시합니다.
-- Codex 사용자는 저장소를 trust 해야 repo-local `.codex/` hook 과 config 가 로드됩니다.
-- 자동 branch 생성은 `AI_AUTO_BRANCH=1`, `CODEX_AUTO_BRANCH=1`, `CLAUDE_AUTO_BRANCH=1` 중 하나를 설정한 경우에만 사용할 수 있습니다.
-- 자동 커밋은 Codex/Claude Stop hook 에서 기본으로 켜집니다.
-- 실제 앱 코드와 실행 진입점은 아직 확정되지 않았습니다. 확정 후 루트 `README.md` 의 실행 방법을 큰 변경으로 갱신합니다.
-- 화면 중 온보딩1·2·3, 방 만들기, 스터디룸은 Figma MCP 읽기 한도(Starter 플랜 월 6회) 소진으로 실제 프레임을 확인하지 못해 IA 기반 best-effort 로 구현했습니다. 각 파일 상단 `NOTE:` 주석으로 표시되어 있으며, 시각 자료 확보 시 픽셀 단위로 다시 맞춰야 합니다. 루미 mascot 도 원본 asset 대신 SVG 근사치입니다.
-
 ### Manual Steps
 
 - `@roomi/*` workspace package scope 로 변경된 뒤에는 `pnpm install` 을 다시 실행해 로컬 workspace link 를 갱신해야 합니다.
