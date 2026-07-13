@@ -220,6 +220,29 @@ p {
   margin-bottom: 16px;
 }
 
+.screen-meta--split {
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  /* 아이콘(16) + gap(4) + 좌측 패딩(8)만큼 당겨 "이전" 글자를 아래 텍스트 왼쪽에 맞춘다. */
+  margin-left: -28px;
+  padding: 6px 10px 6px 8px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.back-link:hover {
+  background: var(--purple-100);
+  color: var(--purple-700);
+}
+
 .pill {
   display: inline-flex;
   align-items: center;

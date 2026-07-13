@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Copy } from 'lucide-react';
+import { ArrowLeft, Copy } from 'lucide-react';
 import { formatInviteCode, type RoomSettings } from '@roomi/shared';
 import type { ScreenProps } from './types';
 
@@ -15,7 +15,7 @@ interface CreateRoomProps extends ScreenProps {
   onCreateRoom: (settings: RoomSettings) => void;
 }
 
-export function CreateRoom({ error, inviteCode, onCreateRoom }: CreateRoomProps) {
+export function CreateRoom({ error, inviteCode, onCreateRoom, go }: CreateRoomProps) {
   const [minutes, setMinutes] = useState(50);
   const [breakMode, setBreakMode] = useState<'room' | 'individual'>('room');
   const [scorePublic, setScorePublic] = useState(true);
@@ -40,7 +40,16 @@ export function CreateRoom({ error, inviteCode, onCreateRoom }: CreateRoomProps)
     <div className="screen screen--app">
       <div className="create__body">
         <div className="create__card">
-          <div className="screen-meta screen-meta--end">
+          <div className="screen-meta screen-meta--split">
+            <button
+              type="button"
+              className="back-link"
+              onClick={() => go('onboarding-create')}
+              aria-label="이전 화면으로"
+            >
+              <ArrowLeft size={16} />
+              <span>이전</span>
+            </button>
             <span className="pill pill--purple">현재 코드 {formatInviteCode(inviteCode)}</span>
           </div>
           <h1 className="create__title">방을 만들어볼까요?</h1>
