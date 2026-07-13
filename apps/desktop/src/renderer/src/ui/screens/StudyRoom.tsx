@@ -94,6 +94,19 @@ export function reconcilePendingCameraState(
     : { cameraOn: reported, pending: undefined };
 }
 
+export function setDailyCameraEnabled(
+  enabled: boolean,
+  call: { setLocalVideo: (enabled: boolean) => unknown },
+  restart: () => void
+) {
+  if (enabled) {
+    restart();
+    return;
+  }
+
+  call.setLocalVideo(false);
+}
+
 export function StudyRoom({
   currentParticipantId,
   isHost,
@@ -115,7 +128,8 @@ export function StudyRoom({
     callObject,
     localMedia,
     participantsByRoomiId,
-    status: dailyStatus
+    status: dailyStatus,
+    restart: restartDailyRoom
   } = useDailyRoom(videoJoin);
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCameraOn, setIsCameraOn] = useState(true);
@@ -219,7 +233,7 @@ export function StudyRoom({
     const next = !isCameraOn;
     if (callObject) {
       pendingCameraStateRef.current = next;
-      callObject.setLocalVideo(next);
+      setDailyCameraEnabled(next, callObject, restartDailyRoom);
     } else {
       localStreamRef.current?.getVideoTracks().forEach((track) => {
         track.enabled = next;

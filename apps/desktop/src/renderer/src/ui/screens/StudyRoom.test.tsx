@@ -5,6 +5,7 @@ import {
   formatSessionTime,
   participantsInStudyRoom,
   reconcilePendingCameraState,
+  setDailyCameraEnabled,
   remainingSessionSeconds
 } from './StudyRoom';
 
@@ -67,7 +68,19 @@ describe('DailyParticipantMedia', () => {
     expect(reconcilePendingCameraState(true, true)).toEqual({ cameraOn: true, pending: undefined });
   });
 
-  it('reattaches the same Daily video track when local camera is toggled back on', async () => {
+  it('restarts the Daily call instead of reusing a stopped track when camera is enabled', () => {
+    const setLocalVideo = vi.fn();
+    const restart = vi.fn();
+
+    setDailyCameraEnabled(false, { setLocalVideo }, restart);
+    setDailyCameraEnabled(true, { setLocalVideo }, restart);
+
+    expect(setLocalVideo).toHaveBeenCalledTimes(1);
+    expect(setLocalVideo).toHaveBeenCalledWith(false);
+    expect(restart).toHaveBeenCalledTimes(1);
+  });
+
+  it('attaches the new playable Daily video track after camera recovery', async () => {
     const stream = { id: 'stream-1' };
     const MediaStreamMock = vi.fn(() => stream);
     vi.stubGlobal('MediaStream', MediaStreamMock);
@@ -76,7 +89,7 @@ describe('DailyParticipantMedia', () => {
     const videoTrack = { id: 'video-track-1' } as unknown as MediaStreamTrack;
     const participant = {
       tracks: {
-        video: { state: 'playable', track: videoTrack, persistentTrack: staleVideoTrack }
+        video: { state: 'playable', track: staleVideoTrack }
       }
     };
 
@@ -106,7 +119,7 @@ describe('DailyParticipantMedia', () => {
         fallbackInitial="나"
         isCameraOn
         isMe
-        participant={participant}
+        participant={{ tracks: { video: { state: 'playable', track: videoTrack } } }}
       />
     );
     const secondVideo = screen.getByLabelText('내 웹캠 미리보기') as HTMLVideoElement;
