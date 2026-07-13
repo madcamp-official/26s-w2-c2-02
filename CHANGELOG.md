@@ -54,6 +54,7 @@
 - 스터디룸 나가기 버튼이 Socket.IO `room:leave` 로 현재 participant 를 서버 방 목록에서 제거하고, 남은 참가자에게 `room:updated` 가 broadcast 되도록 수정했습니다.
 - 한 컴퓨터에서 Electron 과 브라우저 게스트를 함께 테스트할 수 있도록 로컬 API CORS 허용 origin 을 `localhost`/`127.0.0.1` dev 포트로 확장했습니다.
 - Electron dev runner 가 기존 `ELECTRON_RENDERER_URL` 을 제거하고 사용 가능한 renderer 포트를 직접 선택해 로컬 GUI 창이 다른 5175 포트 점유 프로세스에 붙지 않도록 조정했습니다.
+- Roomi 중앙 API 서버용 루트 `.env` 와 desktop renderer 용 `apps/desktop/.env` 를 분리해, 클라이언트 PC 에 Daily API key 같은 서버 secret 을 두지 않도록 정리했습니다.
 - 앱과 문서, workspace package scope, preload API, realtime message event 의 영문 표기를 `Roomi` / `roomi` 로 통일했습니다.
 - 루트 `README.md` 를 과제 템플릿과 AI 협업 안내 중심에서 루미 프로젝트 고정 개요/기획 문서 중심으로 재구성했습니다.
 - AI 협업 설정 안내는 루트 `README.md` 에 중복하지 않고 `docs/ai_workflows.md` 에서 관리하도록 문서 동기화 정책을 조정했습니다.

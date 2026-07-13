@@ -55,7 +55,12 @@ REST joins also publish `room:updated` to clients already subscribed to the room
 
 ## Environment
 
-Copy `.env.example` to `.env` before running local services.
+Roomi uses separate environment files for the API server and the desktop renderer.
+Keep server secrets only on the machine that runs the central API server.
+
+### API Server Environment
+
+Copy the root `.env.example` to the repository root `.env` on the API server machine.
 
 | Variable | Purpose |
 |---|---|
@@ -69,6 +74,20 @@ Copy `.env.example` to `.env` before running local services.
 During local development, the API also accepts renderer origins on `localhost` and `127.0.0.1` in the `5100-5199` port range. This lets Electron and a browser guest join the same local API during one-machine testing.
 
 Daily credentials belong only in the API server `.env`. The renderer receives a Daily room URL and participant token from `POST /rooms` or `POST /rooms/join`; it must not receive `DAILY_API_KEY`.
+
+### Desktop Renderer Environment
+
+Copy `apps/desktop/.env.example` to `apps/desktop/.env` on each client machine.
+
+| Variable | Purpose |
+|---|---|
+| `VITE_ROOMI_API_URL` | Central Roomi API base URL used by REST and Socket.IO from the renderer. |
+
+Client-only machines should only need this renderer env file:
+
+```env
+VITE_ROOMI_API_URL=https://api.roomi.madcamp-kaist.org
+```
 
 ## Central Development Server
 
@@ -103,7 +122,7 @@ Expected response:
 { "ok": true, "service": "roomi-api" }
 ```
 
-Client `.env` example for the desktop renderer:
+Client `apps/desktop/.env` example for the desktop renderer:
 
 ```env
 VITE_ROOMI_API_URL=http://192.168.0.23:4100
@@ -153,7 +172,7 @@ cloudflared tunnel --url http://localhost:4100
 Clients outside the campus network should use the Cloudflare HTTPS URL:
 
 ```env
-VITE_ROOMI_API_URL=https://roomi-api.example.com
+VITE_ROOMI_API_URL=https://api.roomi.madcamp-kaist.org
 ```
 
 Socket.IO uses the same API base URL, so WebSocket/polling traffic follows the tunnel with the REST API. If the renderer is served from a non-local browser origin, add that browser origin to `CLIENT_ORIGIN`; do not add the API hostname unless the browser page itself is served from that hostname.
