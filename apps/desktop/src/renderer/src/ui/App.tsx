@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import {
   createInviteCode,
   normalizeInviteCode,
+  type Goal,
   type Participant,
   type Room,
   type RoomSettings,
   type RoomSession,
+  type StudySession,
   type VideoJoinInfo
 } from '@roomi/shared';
 import type { Socket } from 'socket.io-client';
@@ -27,6 +29,9 @@ import {
   joinRoomSession,
   leaveRoom,
   RoomApiError,
+  setReady,
+  startSession,
+  submitGoal,
   subscribeToRoom
 } from '../room-client';
 
@@ -36,6 +41,8 @@ type RoomDraft = {
   currentParticipantId: string;
   room: Room;
   participants: Participant[];
+  goals: Goal[];
+  currentSession?: StudySession;
   realtime: 'local' | 'server';
   videoJoin?: VideoJoinInfo;
 };
@@ -103,7 +110,8 @@ const fallbackRoom: RoomDraft = {
       joinedAt: now(),
       lastSeenAt: now()
     }
-  ]
+  ],
+  goals: []
 };
 
 function createRoomDraft(nickname: string, settings: RoomSettings): RoomDraft {
@@ -136,7 +144,8 @@ function createRoomDraft(nickname: string, settings: RoomSettings): RoomDraft {
         joinedAt: timestamp,
         lastSeenAt: timestamp
       }
-    ]
+    ],
+    goals: []
   };
 }
 
@@ -181,7 +190,8 @@ function joinRoomDraft(nickname: string, inviteCode: string): RoomDraft {
         joinedAt: timestamp,
         lastSeenAt: timestamp
       }
-    ]
+    ],
+    goals: []
   };
 }
 
@@ -191,6 +201,8 @@ function roomSessionToDraft(session: RoomSession): RoomDraft {
     realtime: 'server',
     room: session.snapshot.room,
     participants: session.snapshot.participants,
+    goals: session.snapshot.goals,
+    currentSession: session.snapshot.currentSession,
     videoJoin: session.videoJoin
   };
 }
@@ -228,7 +240,9 @@ export function App() {
             ? {
                 ...current,
                 room: snapshot.room,
-                participants: snapshot.participants
+                participants: snapshot.participants,
+                goals: snapshot.goals,
+                currentSession: snapshot.currentSession
               }
             : current
         );
@@ -238,6 +252,25 @@ export function App() {
       }
     );
   }, [roomDraft?.room.id, roomDraft?.realtime]);
+
+  // Members who are present when the host starts follow the session automatically.
+  // A late joiner arrives with the room already studying (prev !== 'waiting'), so
+  // they stay in the in-progress waiting mode and join via the "합류하기" button.
+  const prevStatusRef = useRef(activeRoom.room.status);
+  useEffect(() => {
+    const previous = prevStatusRef.current;
+    const currentStatus = activeRoom.room.status;
+    prevStatusRef.current = currentStatus;
+
+    if (
+      screen === 'waiting' &&
+      !isHost &&
+      previous === 'waiting' &&
+      (currentStatus === 'studying' || currentStatus === 'break')
+    ) {
+      go('study');
+    }
+  }, [screen, isHost, activeRoom.room.status]);
 
   const createRoom = async (settings: RoomSettings) => {
     const input = { nickname: nickname || '나', settings };
@@ -297,6 +330,90 @@ export function App() {
     go('onboarding-create');
   };
 
+  const toggleReady = (isReady: boolean) => {
+    if (!roomDraft) return;
+    const participantId = roomDraft.currentParticipantId;
+
+    if (roomDraft.realtime === 'server') {
+      setReady(socketRef.current, { roomId: roomDraft.room.id, participantId, isReady });
+    }
+
+    setRoomDraft((current) =>
+      current
+        ? {
+            ...current,
+            participants: current.participants.map((participant) =>
+              participant.id === participantId ? { ...participant, isReady } : participant
+            )
+          }
+        : current
+    );
+  };
+
+  const submitCurrentGoal = (rawText: string) => {
+    if (!roomDraft) return;
+    const participantId = roomDraft.currentParticipantId;
+
+    if (roomDraft.realtime === 'server') {
+      submitGoal({ roomId: roomDraft.room.id, participantId, rawText }).catch(() => {});
+    }
+
+    setRoomDraft((current) => {
+      if (!current) return current;
+      const existing = current.goals.find((goal) => goal.participantId === participantId);
+      const goals = existing
+        ? current.goals.map((goal) =>
+            goal.participantId === participantId
+              ? { ...goal, rawText, refinedText: undefined }
+              : goal
+          )
+        : [
+            ...current.goals,
+            {
+              id: `goal-${Date.now()}`,
+              roomId: current.room.id,
+              participantId,
+              rawText,
+              createdAt: now()
+            }
+          ];
+      return { ...current, goals };
+    });
+  };
+
+  const startCurrentSession = async () => {
+    if (!roomDraft) return;
+
+    if (roomDraft.realtime === 'server') {
+      try {
+        const snapshot = await startSession({
+          roomId: roomDraft.room.id,
+          participantId: roomDraft.currentParticipantId
+        });
+        setRoomDraft((current) =>
+          current
+            ? {
+                ...current,
+                room: snapshot.room,
+                participants: snapshot.participants,
+                goals: snapshot.goals,
+                currentSession: snapshot.currentSession
+              }
+            : current
+        );
+        go('study');
+        return;
+      } catch {
+        // Fall back to a local transition so the host is never blocked by the API.
+      }
+    }
+
+    setRoomDraft((current) =>
+      current ? { ...current, room: { ...current.room, status: 'studying' } } : current
+    );
+    go('study');
+  };
+
   return (
     <div className="app-root">
       <WindowTitleBar />
@@ -341,7 +458,18 @@ export function App() {
           />
         )}
         {screen === 'waiting' && (
-          <WaitingRoom room={activeRoom.room} participants={activeRoom.participants} go={go} />
+          <WaitingRoom
+            room={activeRoom.room}
+            participants={activeRoom.participants}
+            goals={activeRoom.goals}
+            currentParticipantId={activeRoom.currentParticipantId}
+            isHost={isHost}
+            onToggleReady={toggleReady}
+            onSubmitGoal={submitCurrentGoal}
+            onStartSession={startCurrentSession}
+            onJoinSession={() => go('study')}
+            go={go}
+          />
         )}
         {screen === 'study' && (
           <StudyRoom

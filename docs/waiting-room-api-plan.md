@@ -84,11 +84,10 @@
 - **위험**: host 아닌 참가자 시작 / 준비 미완료 시작 → 서버에서 강제(클라 버튼 신뢰 금지). 중복 클릭·늦은 참가자의 두 번째 세션 생성은 `waiting` 가드(409)로 차단.
 - **검증**: `startSession` 단위 5건(host 성공/broadcast/비host 403 사유/이미 시작 409 사유/미존재 방) + REST 4건(200·403·409·404). vitest 36건 통과.
 
-### 7. 대기실 2모드 분기 (프론트)
-- **행동**: `WaitingRoom.tsx` 하드코딩 제거 → snapshot 구독. `room.status`로 시작 전/진행 중 모드 렌더, host/member CTA 분기, 늦은 합류 라우팅(`currentSession`·타이머 스냅샷 동반).
-- **이유**: API가 실제 화면에서 굴러가야 완료. 늦은 입장 UX 구현 지점.
-- **위험**: `ended` 방 진입 등 예외 status 미처리.
-- **검증**: `studying` 방 3번째 입장 → 진행 중 모드(합류하기·목표 입력 가능), 기존 세션 무중단. 합류 후 목표가 스터디룸에 반영. member 화면에 시작 버튼 없음.
+### 7. 대기실 2모드 분기 (프론트) 🔶 (핵심 완료, 일부 남음)
+- **행동**: `WaitingRoom.tsx` 하드코딩 제거 → props 주도. `room.status`로 시작 전/진행 중 2모드 렌더, host/member CTA 분기, 실제 `isReady` 기반 준비 현황, 목표 입력. App: draft에 `goals`/`currentSession` 추가 + subscribe 확장, 핸들러(ready/goal/start), **host 시작 시 member는 `room:updated`(studying)로 자동 전환**, 늦은 합류는 진행 중 모드 `합류하기`.
+- **검증(완료)**: WaitingRoom 컴포넌트 테스트 5건(ready 수·host 시작·member 시작버튼 없음·진행 중 모드 합류·목표 저장) + App 테스트 갱신(member 자동 전환, ready 0/4). desktop 15건 통과.
+- **남은 것**: `ended` 방 라우팅(회고/닫힘), 스터디룸에 목표·`currentSession` 타이머 반영, 대기실 LLM 다듬기(`POST /goals/refine`) UI 연결.
 
 ### 8. 문서 sync + e2e (마무리)
 - **행동**: `docs/api.md`·README API표·`packages/shared`·`CHANGELOG.md` 동기화(AGENTS.md 규칙).
