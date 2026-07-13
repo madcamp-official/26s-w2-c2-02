@@ -3,6 +3,7 @@ export type ScreenId =
   | 'onboarding-create'
   | 'onboarding-join'
   | 'onboarding-permission'
+  | 'mediapipe-test'
   | 'create-room'
   | 'waiting'
   | 'study'

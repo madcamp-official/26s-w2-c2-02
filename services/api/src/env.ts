@@ -1,4 +1,12 @@
-import 'dotenv/config';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { config as loadEnv } from 'dotenv';
+
+const serviceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = resolve(serviceRoot, '..', '..');
+
+loadEnv({ path: resolve(repoRoot, '.env') });
+loadEnv({ path: resolve(serviceRoot, '.env'), override: true });
 
 const localRendererOriginPattern = /^http:\/\/(localhost|127\.0\.0\.1):51\d{2}$/;
 
@@ -7,7 +15,10 @@ export function isAllowedClientOrigin(origin: string | undefined) {
     return true;
   }
 
-  return env.clientOrigins.includes(origin) || localRendererOriginPattern.test(origin);
+  return (
+    localRendererOriginPattern.test(origin) ||
+    env.clientOrigins.some((allowedOrigin) => originMatchesAllowedPattern(origin, allowedOrigin))
+  );
 }
 
 function parseClientOrigins(value: string | undefined) {
@@ -15,6 +26,23 @@ function parseClientOrigins(value: string | undefined) {
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
+}
+
+function originMatchesAllowedPattern(origin: string, allowedOrigin: string) {
+  if (!allowedOrigin.includes('*')) {
+    return origin === allowedOrigin;
+  }
+
+  if (allowedOrigin === '*') {
+    return false;
+  }
+
+  const escapedPattern = allowedOrigin.split('*').map(escapeRegExp).join('.*');
+  return new RegExp(`^${escapedPattern}$`).test(origin);
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 export const env = {
