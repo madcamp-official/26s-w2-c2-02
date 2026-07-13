@@ -42,10 +42,11 @@ describe('DailyParticipantMedia', () => {
     const MediaStreamMock = vi.fn(() => stream);
     vi.stubGlobal('MediaStream', MediaStreamMock);
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    const staleVideoTrack = { id: 'stale-video-track' } as unknown as MediaStreamTrack;
     const videoTrack = { id: 'video-track-1' } as unknown as MediaStreamTrack;
     const participant = {
       tracks: {
-        video: { state: 'playable', track: videoTrack }
+        video: { state: 'playable', track: staleVideoTrack, persistentTrack: videoTrack }
       }
     };
 

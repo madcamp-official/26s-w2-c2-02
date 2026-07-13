@@ -12,10 +12,11 @@ import type { ScreenProps } from './types';
 interface CreateRoomProps extends ScreenProps {
   error?: string;
   inviteCode: string;
+  isCreating?: boolean;
   onCreateRoom: (settings: RoomSettings) => void;
 }
 
-export function CreateRoom({ error, inviteCode, onCreateRoom, go }: CreateRoomProps) {
+export function CreateRoom({ error, inviteCode, isCreating = false, onCreateRoom, go }: CreateRoomProps) {
   const [minutes, setMinutes] = useState(50);
   const [breakMode, setBreakMode] = useState<'room' | 'individual'>('room');
   const [scorePublic, setScorePublic] = useState(true);
@@ -138,9 +139,10 @@ export function CreateRoom({ error, inviteCode, onCreateRoom, go }: CreateRoomPr
           <button
             type="button"
             className="btn btn--primary create__submit"
+            disabled={isCreating}
             onClick={createRoom}
           >
-            방 만들고 대기실로 가기
+            {isCreating ? '방 생성중' : '방 만들고 대기실로 가기'}
           </button>
         </div>
       </div>

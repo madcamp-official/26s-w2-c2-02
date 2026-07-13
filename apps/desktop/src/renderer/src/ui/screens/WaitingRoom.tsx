@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { RoomiMascot } from '../components/RoomiMascot';
 import {
   formatInviteCode,
@@ -17,8 +17,8 @@ interface WaitingRoomProps extends ScreenProps {
   isHost: boolean;
   onSubmitGoal: (rawText: string) => void;
   onRefineGoal: (rawText: string) => Promise<GoalRefinement>;
-  onStartSession: () => void;
-  onJoinSession: () => void;
+  onStartSession: () => void | Promise<void>;
+  onJoinSession: () => void | Promise<void>;
   onLeaveRoom: () => void;
 }
 
@@ -42,6 +42,10 @@ export function WaitingRoom({
   const [refinement, setRefinement] = useState<GoalRefinement | null>(null);
   const [refineError, setRefineError] = useState<string | null>(null);
   const [isRefining, setIsRefining] = useState(false);
+  const [isStartingSession, setIsStartingSession] = useState(false);
+  const [isJoiningSession, setIsJoiningSession] = useState(false);
+  const sessionActionLockRef = useRef(false);
+  const [sessionActionError, setSessionActionError] = useState<string | null>(null);
 
   const submitGoal = () => {
     const trimmed = goalText.trim();
@@ -74,6 +78,34 @@ export function WaitingRoom({
     setGoalText(refinement.refinedText);
     onSubmitGoal(refinement.refinedText);
     setRefinement(null);
+  };
+
+  const startSession = async () => {
+    if (sessionActionLockRef.current) return;
+    sessionActionLockRef.current = true;
+    setIsStartingSession(true);
+    setSessionActionError(null);
+    try {
+      await onStartSession();
+    } catch {
+      sessionActionLockRef.current = false;
+      setIsStartingSession(false);
+      setSessionActionError('방을 생성하지 못했어요. 잠시 후 다시 시도해 주세요.');
+    }
+  };
+
+  const joinSession = async () => {
+    if (sessionActionLockRef.current) return;
+    sessionActionLockRef.current = true;
+    setIsJoiningSession(true);
+    setSessionActionError(null);
+    try {
+      await onJoinSession();
+    } catch {
+      sessionActionLockRef.current = false;
+      setIsJoiningSession(false);
+      setSessionActionError('스터디룸에 입장하지 못했어요. 잠시 후 다시 시도해 주세요.');
+    }
   };
 
   const people = [
@@ -118,6 +150,11 @@ export function WaitingRoom({
                 각자 목표를 적으면 루미가 세션 안에 끝낼 수 있는 크기로 다듬어줘요.
               </p>
             </>
+          )}
+          {sessionActionError && (
+            <p className="onb-hint onb-hint--error" role="alert">
+              {sessionActionError}
+            </p>
           )}
 
           <label className="waiting__label" htmlFor="goal">
@@ -189,21 +226,31 @@ export function WaitingRoom({
             ))}
           </div>
 
-          {inProgress ? (
+          {isHost && isStartingSession ? (
             <button
               type="button"
               className="btn btn--primary waiting__start"
-              onClick={onJoinSession}
+              disabled
             >
-              스터디룸 참여하기
+              방 생성중
+            </button>
+          ) : inProgress ? (
+            <button
+              type="button"
+              className="btn btn--primary waiting__start"
+              disabled={isJoiningSession}
+              onClick={joinSession}
+            >
+              {isJoiningSession ? '입장 중' : '스터디룸 참여하기'}
             </button>
           ) : isHost ? (
             <button
               type="button"
               className="btn btn--primary waiting__start"
-              onClick={onStartSession}
+              disabled={isStartingSession}
+              onClick={startSession}
             >
-              세션 시작하기
+              {isStartingSession ? '방 생성중' : '세션 시작하기'}
             </button>
           ) : (
             <div className="waiting__wait-note" role="status">

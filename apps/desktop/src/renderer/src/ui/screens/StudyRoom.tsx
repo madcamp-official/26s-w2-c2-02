@@ -465,8 +465,8 @@ export function DailyParticipantMedia({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const videoTrack = participant?.tracks?.video?.track ?? participant?.tracks?.video?.persistentTrack;
-  const audioTrack = participant?.tracks?.audio?.track ?? participant?.tracks?.audio?.persistentTrack;
+  const videoTrack = participant?.tracks?.video?.persistentTrack ?? participant?.tracks?.video?.track;
+  const audioTrack = participant?.tracks?.audio?.persistentTrack ?? participant?.tracks?.audio?.track;
   const isVideoPlayable = participant?.tracks?.video?.state === 'playable';
   const shouldShowVideo = Boolean(isVideoPlayable && (isCameraOn || !isMe));
 

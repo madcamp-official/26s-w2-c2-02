@@ -11,26 +11,58 @@ function baseProps() {
   };
 }
 
+function roomCodeInput() {
+  return screen.getByRole('textbox');
+}
+
 describe('OnboardingJoin', () => {
   it('normalizes room code input to supported uppercase characters', () => {
     const props = baseProps();
     render(<OnboardingJoin {...props} />);
 
-    fireEvent.change(screen.getByLabelText('방 코드'), {
+    fireEvent.change(roomCodeInput(), {
       target: { value: '한abc-0l2' }
     });
 
-    expect(props.onCodeChange).toHaveBeenCalledWith('ABC2');
+    expect(props.onCodeChange).toHaveBeenCalledWith('GKSABC');
+  });
+
+  it('accepts Korean keyboard input as the matching English room code', () => {
+    const props = baseProps();
+    render(<OnboardingJoin {...props} />);
+
+    fireEvent.change(roomCodeInput(), {
+      target: { value: 'ㅁㅠㅊㅇㄷㄹ' }
+    });
+
+    expect(props.onCodeChange).toHaveBeenCalledWith('ABCDEF');
+  });
+
+  it('waits for Korean IME composition to finish before committing the code', () => {
+    const props = baseProps();
+    render(<OnboardingJoin {...props} />);
+    const input = roomCodeInput();
+
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: 'ㅁ' } });
+    fireEvent.change(input, { target: { value: '마' } });
+
+    expect(props.onCodeChange).not.toHaveBeenCalled();
+    expect(input).toHaveValue('마');
+
+    fireEvent.compositionEnd(input, { data: '마' });
+
+    expect(props.onCodeChange).toHaveBeenCalledTimes(1);
+    expect(props.onCodeChange).toHaveBeenCalledWith('AK');
+    expect(input).toHaveValue('AK');
   });
 
   it('marks the active code slot while focused', () => {
     render(<OnboardingJoin {...baseProps()} code="AB" />);
 
-    fireEvent.focus(screen.getByLabelText('방 코드'));
+    fireEvent.focus(roomCodeInput());
 
-    const slots = screen.getByLabelText('방 코드').nextElementSibling?.querySelectorAll(
-      '.code-entry__slot'
-    );
+    const slots = roomCodeInput().nextElementSibling?.querySelectorAll('.code-entry__slot');
     expect(slots?.[2]).toHaveClass('code-entry__slot--active');
   });
 });

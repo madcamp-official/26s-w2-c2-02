@@ -38,10 +38,18 @@ export class RoomService {
     const snapshot = this.createRoom(input);
     const currentParticipant = snapshot.participants[0];
 
+    let videoJoin: VideoJoinInfo | undefined;
+    try {
+      videoJoin = await this.createVideoJoin(snapshot, currentParticipant);
+    } catch (error) {
+      this.leaveRoom(snapshot.room.id, currentParticipant.id);
+      throw error;
+    }
+
     return {
       snapshot: this.snapshotForParticipant(snapshot.room.id, currentParticipant.id),
       currentParticipantId: currentParticipant.id,
-      videoJoin: await this.tryCreateVideoJoin(snapshot, currentParticipant)
+      videoJoin
     };
   }
 
@@ -85,10 +93,18 @@ export class RoomService {
       throw new Error('Participant was not created');
     }
 
+    let videoJoin: VideoJoinInfo | undefined;
+    try {
+      videoJoin = await this.createVideoJoin(snapshot, currentParticipant);
+    } catch (error) {
+      this.leaveRoom(snapshot.room.id, currentParticipant.id);
+      throw error;
+    }
+
     return {
       snapshot: this.snapshotForParticipant(snapshot.room.id, currentParticipant.id),
       currentParticipantId: currentParticipant.id,
-      videoJoin: await this.tryCreateVideoJoin(snapshot, currentParticipant)
+      videoJoin
     };
   }
 
@@ -404,18 +420,6 @@ export class RoomService {
       roomUrl: joinInfo.roomUrl,
       token: joinInfo.token
     };
-  }
-
-  private async tryCreateVideoJoin(
-    snapshot: RoomSnapshot,
-    participant: Participant
-  ): Promise<VideoJoinInfo | undefined> {
-    try {
-      return await this.createVideoJoin(snapshot, participant);
-    } catch (error) {
-      console.warn(error instanceof Error ? error.message : 'Daily video join creation failed');
-      return undefined;
-    }
   }
 
   private deleteDailyRoom(roomId: string) {

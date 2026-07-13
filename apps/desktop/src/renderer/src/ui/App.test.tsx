@@ -68,7 +68,7 @@ describe('App screen router', () => {
     expect(screen.getByRole('dialog', { name: 'Rule-Based 기준 조정' })).toBeInTheDocument();
   });
 
-  it('creates a local room after nickname, room settings, and media permission', async () => {
+  it('creates a server room after nickname, room settings, and media permission', async () => {
     const audioTrack = { stop: vi.fn() };
     const videoTrack = { stop: vi.fn() };
     const stream = {
@@ -81,7 +81,7 @@ describe('App screen router', () => {
         getUserMedia: vi.fn().mockResolvedValue(stream)
       }
     });
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('API offline')));
+    stubHostApi();
     vi.spyOn(Math, 'random').mockReturnValue(0.2345);
 
     render(<App />);
@@ -125,7 +125,7 @@ describe('App screen router', () => {
         getUserMedia: vi.fn().mockResolvedValue(stream)
       }
     });
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('API offline')));
+    stubHostApi();
     vi.spyOn(Math, 'random').mockReturnValue(0.2345);
 
     render(<App />);
@@ -337,4 +337,58 @@ function defaultTestRoomSettings() {
     videoProvider: 'daily',
     videoRequired: true
   };
+}
+
+function stubHostApi() {
+  const timestamp = new Date().toISOString();
+  const room = {
+    id: 'room-host',
+    inviteCode: 'HHHHHH',
+    hostUserId: 'user-host',
+    settings: defaultTestRoomSettings(),
+    status: 'waiting' as const,
+    createdAt: timestamp
+  };
+  const participant = {
+    id: 'participant-host',
+    roomId: room.id,
+    userId: room.hostUserId,
+    nickname: '소요',
+    role: 'host' as const,
+    status: 'online' as const,
+    isReady: false,
+    scoreVisible: true,
+    joinedAt: timestamp,
+    lastSeenAt: timestamp
+  };
+
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      const snapshot = url.endsWith('/sessions')
+        ? {
+            room: { ...room, status: 'studying' as const },
+            participants: [participant],
+            goals: [],
+            roomiMessages: [],
+            currentSession: {
+              id: 'session-host',
+              roomId: room.id,
+              startedAt: timestamp,
+              plannedMinutes: room.settings.sessionMinutes,
+              mode: 'study' as const
+            }
+          }
+        : { room, participants: [participant], goals: [], roomiMessages: [] };
+
+      return {
+        ok: true,
+        json: async () =>
+          url.endsWith('/rooms')
+            ? { currentParticipantId: participant.id, snapshot }
+            : snapshot
+      };
+    })
+  );
 }

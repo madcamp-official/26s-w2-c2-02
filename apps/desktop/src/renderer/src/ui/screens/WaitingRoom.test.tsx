@@ -84,6 +84,29 @@ describe('WaitingRoom', () => {
     expect(screen.queryByRole('button', { name: /준비/ })).not.toBeInTheDocument();
   });
 
+  it('locks the start action synchronously to prevent duplicate requests', () => {
+    const props = baseProps();
+    render(<WaitingRoom {...props} />);
+    const startButton = screen.getByRole('button', { name: '세션 시작하기' });
+
+    fireEvent.click(startButton);
+    fireEvent.click(startButton);
+
+    expect(props.onStartSession).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: '방 생성중' })).toBeDisabled();
+  });
+
+  it('keeps the creating state when the studying snapshot arrives before navigation', () => {
+    const props = baseProps();
+    const { rerender } = render(<WaitingRoom {...props} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '세션 시작하기' }));
+    rerender(<WaitingRoom {...props} room={room('studying')} />);
+
+    expect(screen.getByRole('button', { name: '방 생성중' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '스터디룸 참여하기' })).not.toBeInTheDocument();
+  });
+
   it('provides a separate control for leaving the room', () => {
     const props = baseProps();
     render(<WaitingRoom {...props} />);
@@ -113,6 +136,18 @@ describe('WaitingRoom', () => {
     fireEvent.click(joinButton);
     expect(props.onJoinSession).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('button', { name: '세션 시작하기' })).not.toBeInTheDocument();
+  });
+
+  it('locks the study-room join action synchronously to prevent duplicate entry', () => {
+    const props = { ...baseProps(), isHost: false, currentParticipantId: 'p-3', room: room('studying') };
+    render(<WaitingRoom {...props} />);
+    const joinButton = screen.getByRole('button', { name: '스터디룸 참여하기' });
+
+    fireEvent.click(joinButton);
+    fireEvent.click(joinButton);
+
+    expect(props.onJoinSession).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: '입장 중' })).toBeDisabled();
   });
 
   it('submits the typed goal', () => {

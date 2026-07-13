@@ -222,6 +222,10 @@ export function App() {
   const [createError, setCreateError] = useState<string | undefined>();
   const [mediaPermission, setMediaPermission] = useState<MediaPermissionState>('idle');
   const [roomDraft, setRoomDraft] = useState<RoomDraft | null>(null);
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
+  const [isJoiningRoom, setIsJoiningRoom] = useState(false);
+  const createRoomLockRef = useRef(false);
+  const joinRoomLockRef = useRef(false);
   const socketRef = useRef<Socket<ServerToClientEvents, ClientToServerEvents> | null>(null);
   const go = (id: ScreenId) => setScreen(id);
   const activeRoom = roomDraft ?? fallbackRoom;
@@ -279,7 +283,27 @@ export function App() {
     }
   }, [screen, activeRoom.room.status]);
 
+  useEffect(() => {
+    if (createError) setIsCreatingRoom(false);
+  }, [createError]);
+
+  useEffect(() => {
+    if (joinError) setIsJoiningRoom(false);
+  }, [joinError]);
+
+  useEffect(() => {
+    if (screen === 'onboarding-permission') {
+      createRoomLockRef.current = false;
+      joinRoomLockRef.current = false;
+      setIsCreatingRoom(false);
+      setIsJoiningRoom(false);
+    }
+  }, [screen]);
+
   const createRoom = async (settings: RoomSettings) => {
+    if (createRoomLockRef.current) return;
+    createRoomLockRef.current = true;
+    setIsCreatingRoom(true);
     const input = { nickname: nickname || '나', settings };
     setCreateError(undefined);
 
@@ -288,17 +312,23 @@ export function App() {
       setRoomDraft(roomSessionToDraft(session));
     } catch (error) {
       if (error instanceof RoomApiError) {
+        createRoomLockRef.current = false;
         setCreateError('방을 만들지 못했어요. API 서버와 Daily 설정을 확인해주세요.');
         return;
       }
 
-      setRoomDraft(createRoomDraft(input.nickname, settings));
+      createRoomLockRef.current = false;
+      setCreateError('서버에 연결하지 못했어요. API 서버가 실행 중인지 확인해 주세요.');
+      return;
     }
 
     go('onboarding-permission');
   };
 
   const joinRoom = async () => {
+    if (joinRoomLockRef.current) return;
+    joinRoomLockRef.current = true;
+    setIsJoiningRoom(true);
     const input = { nickname: nickname || '나', inviteCode: normalizeInviteCode(joinCode) };
     setJoinError(undefined);
 
@@ -307,7 +337,9 @@ export function App() {
       setRoomDraft(roomSessionToDraft(session));
     } catch (error) {
       if (error instanceof RoomApiError) {
-        setJoinError(
+        joinRoomLockRef.current = false;
+      joinRoomLockRef.current = false;
+      setJoinError(
           error.status === 409
             ? '방이 가득 찼어요. 방장에게 새 방을 요청해주세요.'
             : error.status === 503
@@ -394,8 +426,8 @@ export function App() {
         );
         go('study');
         return;
-      } catch {
-        // Fall back to a local transition so the host is never blocked by the API.
+      } catch (error) {
+        throw error;
       }
     }
 
@@ -430,6 +462,7 @@ export function App() {
           <OnboardingJoin
             code={joinCode}
             error={joinError}
+            isJoining={isJoiningRoom}
             onCodeChange={(code) => {
               setJoinCode(code);
               setJoinError(undefined);
@@ -457,6 +490,7 @@ export function App() {
           <CreateRoom
             inviteCode={activeRoom.room.inviteCode}
             error={createError}
+            isCreating={isCreatingRoom}
             onCreateRoom={createRoom}
             go={go}
           />

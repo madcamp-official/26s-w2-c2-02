@@ -8,14 +8,16 @@ function createService() {
 }
 
 function createVideoProvider(): VideoProvider & {
+  createRoom: ReturnType<typeof vi.fn<VideoProvider['createRoom']>>;
+  createJoinInfo: ReturnType<typeof vi.fn<VideoProvider['createJoinInfo']>>;
   deleteRoom: ReturnType<typeof vi.fn<(dailyRoomName: string) => Promise<void>>>;
 } {
   return {
-    createRoom: vi.fn(async (roomId: string) => ({
+    createRoom: vi.fn(async (roomId: string, _maxParticipants: number) => ({
       name: `daily-${roomId}`,
       roomUrl: `https://daily.example/${roomId}`
     })),
-    createJoinInfo: vi.fn(async (input) => ({
+    createJoinInfo: vi.fn(async (input: Parameters<VideoProvider['createJoinInfo']>[0]) => ({
       name: input.dailyRoomName,
       roomUrl: input.roomUrl,
       token: `token-${input.userId}`
@@ -300,6 +302,33 @@ describe('RoomService.leaveRoom host delegation', () => {
     await vi.waitFor(() => expect(videoProvider.deleteRoom).toHaveBeenCalledTimes(1));
 
     expect(videoProvider.deleteRoom).toHaveBeenCalledWith(`daily-${session.snapshot.room.id}`);
+  });
+});
+
+describe('RoomService Daily session rollback', () => {
+  it('does not return a local-only room when Daily room creation fails', async () => {
+    const videoProvider = createVideoProvider();
+    videoProvider.createRoom.mockRejectedValueOnce(new Error('Daily room creation failed: 500'));
+    const service = new RoomService(new InMemoryRoomStore(), videoProvider);
+
+    await expect(service.createRoomSession({ nickname: 'host' })).rejects.toThrow(
+      'Daily room creation failed'
+    );
+  });
+
+  it('removes a joining participant when Daily token creation fails', async () => {
+    const videoProvider = createVideoProvider();
+    const service = new RoomService(new InMemoryRoomStore(), videoProvider);
+    const hostSession = await service.createRoomSession({ nickname: 'host' });
+    videoProvider.createJoinInfo.mockRejectedValueOnce(new Error('Daily token creation failed: 500'));
+
+    await expect(
+      service.joinRoomSession({
+        nickname: 'member',
+        inviteCode: hostSession.snapshot.room.inviteCode
+      })
+    ).rejects.toThrow('Daily token creation failed');
+    expect(service.getByRoomId(hostSession.snapshot.room.id)?.participants).toHaveLength(1);
   });
 });
 

@@ -59,6 +59,8 @@ export function registerRealtimeGateway(
     options.focusRecoveryCooldownMs ?? FOCUS_RECOVERY_COOLDOWN_MS;
 
   io.on('connection', (socket) => {
+    const subscriptions = new Map<string, string>();
+
     socket.on(realtimeEvents.client.subscribeRoom, (input, acknowledge) => {
       const snapshot = roomService.getByRoomId(input.roomId);
 
@@ -80,6 +82,7 @@ export function registerRealtimeGateway(
 
       socket.join(snapshot.room.id);
       socket.join(participantChannel(snapshot.room.id, input.participantId));
+      subscriptions.set(input.roomId, input.participantId);
       const visibleSnapshot = roomService.snapshotForParticipant(input.roomId, input.participantId);
       acknowledge(visibleSnapshot);
       socket.emit(realtimeEvents.server.roomSnapshot, visibleSnapshot);
@@ -134,10 +137,21 @@ export function registerRealtimeGateway(
     socket.on(realtimeEvents.client.leaveRoom, (input) => {
       try {
         roomService.leaveRoom(input.roomId, input.participantId);
+        subscriptions.delete(input.roomId);
         socket.leave(input.roomId);
       } catch (error) {
         socket.emit(realtimeEvents.server.error, errorMessage(error));
       }
+    });
+
+    socket.on('disconnect', () => {
+      subscriptions.forEach((participantId, roomId) => {
+        const participantStillExists = roomService
+          .getByRoomId(roomId)
+          ?.participants.some((participant) => participant.id === participantId);
+        if (participantStillExists) roomService.leaveRoom(roomId, participantId);
+      });
+      subscriptions.clear();
     });
   });
 

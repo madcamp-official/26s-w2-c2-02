@@ -31,6 +31,7 @@ export function useDailyRoom(videoJoin: VideoJoinInfo | undefined) {
 
     let cancelled = false;
     let call: DailyCall | undefined;
+    let syncInterval: number | undefined;
 
     const syncParticipants = () => {
       if (call) {
@@ -88,6 +89,7 @@ export function useDailyRoom(videoJoin: VideoJoinInfo | undefined) {
       .then(() => {
         if (!cancelled) {
           syncParticipants();
+          syncInterval = window.setInterval(syncParticipants, 1_000);
           setStatus('joined');
         }
       })
@@ -107,6 +109,7 @@ export function useDailyRoom(videoJoin: VideoJoinInfo | undefined) {
       call?.off('track-started', syncParticipants);
       call?.off('track-stopped', syncParticipants);
       call?.off('show-local-video-changed', syncParticipants);
+      if (syncInterval) window.clearInterval(syncInterval);
       void call?.leave().finally(() => call?.destroy());
       setCallObject(undefined);
       setDailyParticipants({});

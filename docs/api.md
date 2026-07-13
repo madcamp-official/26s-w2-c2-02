@@ -29,7 +29,7 @@ Invite codes are 6-character uppercase alphanumeric strings. Roomi excludes ambi
 ```
 
 The renderer uses `currentParticipantId` to mark the local participant, drive camera/mic controls, and decide whether host-only actions should be visible.
-When Daily credentials are configured, `videoJoin` contains a Daily room URL and participant meeting token. The API creates one private Daily room per Roomi room and issues a token per participant with the Roomi participant id as Daily `user_id`.
+When Daily credentials are configured, `videoJoin` contains a Daily room URL and participant meeting token. The API creates one private Daily room per Roomi room and issues a token per participant with the Roomi participant id as Daily `user_id`. If Daily room or token creation fails, the REST request returns `503` and rolls back the participant instead of returning a local-only video session.
 
 ## Renderer session behavior
 
@@ -52,7 +52,7 @@ Client events are defined in `packages/shared/src/realtime-events.ts`.
 | Event | Direction | Purpose |
 |---|---|---|
 | `room:subscribe` | client to server | Subscribe to an existing room after REST create/join and receive snapshots. Send `{ roomId, participantId }`; the participant id also scopes private Roomi messages to that socket channel. Membership is created only via REST (`POST /rooms`, `POST /rooms/join`); sockets never add participants. |
-| `room:leave` | client to server | Remove the participant from the room and leave the realtime channel. |
+| `room:leave` | client to server | Remove the participant from the room and leave the realtime channel. A socket disconnect also removes its subscribed participant. If that participant was the host, the earliest-joined remaining participant becomes host. |
 | `participant:ready` | client to server | Set the waiting-room readiness flag (`isReady`) for a participant; broadcasts `room:updated`. |
 | `goal:submit` | client to server | Upsert the participant's goal (`rawText`); mirrors `POST /rooms/:roomId/goals` and broadcasts `room:updated`. |
 | `participant:update-status` | client to server | Publish focus/break/away status updates. |

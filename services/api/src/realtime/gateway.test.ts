@@ -115,6 +115,25 @@ describe('realtime gateway', () => {
     expect(bobSnapshot.goals[0]?.rawText).toBe('수학 3단원');
   });
 
+  it('delegates host to the earliest member when the host disconnects', async () => {
+    const created = roomService.createRoom({ nickname: 'host' });
+    const joined = roomService.joinRoom({ nickname: 'member', inviteCode: created.room.inviteCode });
+    const host = created.participants[0]!;
+    const member = joined.participants.at(-1)!;
+    const [hostClient, memberClient] = await Promise.all([connectClient(), connectClient()]);
+    await Promise.all([
+      subscribe(hostClient, created.room.id, host.id),
+      subscribe(memberClient, created.room.id, member.id)
+    ]);
+    const update = once(memberClient, realtimeEvents.server.roomUpdated);
+
+    hostClient.disconnect();
+
+    const snapshot = await update;
+    expect(snapshot.participants.find((participant) => participant.id === member.id)?.role).toBe('host');
+    expect(snapshot.room.hostUserId).toBe(member.userId);
+  });
+
   it('sends focus recovery messages only to the target participant', async () => {
     const created = roomService.createRoom({ nickname: 'host' });
     const started = roomService.startSession(created.room.id, created.participants[0].id);
