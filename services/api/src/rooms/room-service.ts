@@ -192,6 +192,7 @@ export class RoomService {
       nickname: input.nickname,
       role: input.role,
       status: 'online',
+      isReady: false,
       scoreVisible: input.scoreVisible,
       joinedAt: input.now,
       lastSeenAt: input.now

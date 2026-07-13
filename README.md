@@ -245,6 +245,7 @@ type Participant = {
   userId: string;
   role: 'host' | 'member';
   status: 'online' | 'focused' | 'distracted' | 'away' | 'break' | 'paused';
+  isReady: boolean;
   scoreVisible: boolean;
   joinedAt: string;
   lastSeenAt: string;

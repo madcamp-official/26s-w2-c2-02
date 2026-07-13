@@ -74,6 +74,7 @@ const fallbackRoom: RoomDraft = {
       nickname: '소요',
       role: 'host',
       status: 'online',
+      isReady: false,
       scoreVisible: true,
       joinedAt: now(),
       lastSeenAt: now()
@@ -85,6 +86,7 @@ const fallbackRoom: RoomDraft = {
       nickname: '채훈',
       role: 'member',
       status: 'online',
+      isReady: false,
       scoreVisible: true,
       joinedAt: now(),
       lastSeenAt: now()
@@ -96,6 +98,7 @@ const fallbackRoom: RoomDraft = {
       nickname: '민지',
       role: 'member',
       status: 'online',
+      isReady: false,
       scoreVisible: true,
       joinedAt: now(),
       lastSeenAt: now()
@@ -128,6 +131,7 @@ function createRoomDraft(nickname: string, settings: RoomSettings): RoomDraft {
         nickname,
         role: 'host',
         status: 'online',
+        isReady: false,
         scoreVisible: settings.defaultScoreVisibility === 'public',
         joinedAt: timestamp,
         lastSeenAt: timestamp
@@ -160,6 +164,7 @@ function joinRoomDraft(nickname: string, inviteCode: string): RoomDraft {
         nickname: '방장',
         role: 'host',
         status: 'online',
+        isReady: false,
         scoreVisible: true,
         joinedAt: timestamp,
         lastSeenAt: timestamp
@@ -171,6 +176,7 @@ function joinRoomDraft(nickname: string, inviteCode: string): RoomDraft {
         nickname,
         role: 'member',
         status: 'online',
+        isReady: false,
         scoreVisible: true,
         joinedAt: timestamp,
         lastSeenAt: timestamp
