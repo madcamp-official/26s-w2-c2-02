@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { RoomiMascot } from '../components/RoomiMascot';
 import type { ScreenProps } from './types';
 
@@ -8,12 +7,28 @@ import type { ScreenProps } from './types';
  * Layout reuses the confirmed Onboarding-4 card shell; inner copy is inferred
  * from the IA in AGENTS.md and should be verified against Figma.
  */
-export function OnboardingNickname({ go }: ScreenProps) {
-  const [nickname, setNickname] = useState('');
+interface OnboardingNicknameProps extends ScreenProps {
+  nickname: string;
+  onNicknameChange: (nickname: string) => void;
+}
+
+export function OnboardingNickname({ nickname, onNicknameChange, go }: OnboardingNicknameProps) {
+  const trimmedNickname = nickname.trim();
+  const submitNickname = () => {
+    if (trimmedNickname) {
+      go('onboarding-create');
+    }
+  };
 
   return (
     <div className="screen screen--onboarding">
-      <div className="onb-card">
+      <form
+        className="onb-card"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submitNickname();
+        }}
+      >
         <span className="pill pill--purple onb-card__step">STEP 1 / 4 · 닉네임</span>
         <div className="onb-card__mascot">
           <RoomiMascot size={64} />
@@ -30,7 +45,7 @@ export function OnboardingNickname({ go }: ScreenProps) {
             className="field"
             placeholder="닉네임을 입력해주세요"
             value={nickname}
-            onChange={(e) => setNickname(e.target.value)}
+            onChange={(e) => onNicknameChange(e.target.value)}
             maxLength={12}
           />
           <p className="onb-hint">언제든 바꿀 수 있어요. 최대 12자까지 가능해요.</p>
@@ -38,14 +53,14 @@ export function OnboardingNickname({ go }: ScreenProps) {
 
         <div className="onb-actions">
           <button
-            type="button"
+            type="submit"
             className="btn btn--primary btn--block"
-            onClick={() => go('onboarding-create')}
+            disabled={!trimmedNickname}
           >
             다음
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

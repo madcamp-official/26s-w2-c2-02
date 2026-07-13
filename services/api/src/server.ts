@@ -1,27 +1,81 @@
 import cors from 'cors';
 import express from 'express';
-import type { CreateRoomInput, JoinRoomInput } from '@roomi/shared';
-import { env } from './env';
+import type {
+  CreateRoomInput,
+  GoalRefineInput,
+  JoinRoomInput,
+  SessionStartInput
+} from '@roomi/shared';
+import { isAllowedClientOrigin } from './env';
 import type { RoomService } from './rooms/room-service';
+import type { RoomiOrchestrator } from './roomi/roomi-orchestrator';
 
-export function createApp(roomService: RoomService) {
+export function createApp(roomService: RoomService, roomiOrchestrator: RoomiOrchestrator) {
   const app = express();
 
-  app.use(cors({ origin: env.clientOrigin }));
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        callback(null, isAllowedClientOrigin(origin));
+      }
+    })
+  );
   app.use(express.json());
 
   app.get('/health', (_request, response) => {
     response.json({ ok: true, service: 'roomi-api' });
   });
 
-  app.post('/rooms', (request, response) => {
-    const snapshot = roomService.createRoom(request.body as CreateRoomInput);
-    response.status(201).json(snapshot);
+  app.post('/rooms', async (request, response) => {
+    try {
+      const session = await roomService.createRoomSession(request.body as CreateRoomInput);
+      response.status(201).json(session);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invalid room';
+      response.status(statusForRoomError(message, 400)).json({ message });
+    }
   });
 
-  app.post('/rooms/join', (request, response) => {
-    const snapshot = roomService.joinRoom(request.body as JoinRoomInput);
-    response.json(snapshot);
+  app.post('/rooms/join', async (request, response) => {
+    try {
+      const session = await roomService.joinRoomSession(request.body as JoinRoomInput);
+      response.json(session);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Room join failed';
+      response.status(statusForRoomError(message, 404)).json({ message });
+    }
+  });
+
+  app.post('/rooms/:roomId/goals', (request, response) => {
+    try {
+      const { participantId, rawText } = request.body as {
+        participantId: string;
+        rawText: string;
+      };
+      const snapshot = roomService.submitGoal(request.params.roomId, participantId, rawText);
+      response.json(snapshot);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Goal submission failed';
+      response.status(statusForRoomError(message, 404)).json({ message });
+    }
+  });
+
+  app.post('/sessions', (request, response) => {
+    try {
+      const { roomId, participantId } = request.body as SessionStartInput;
+      const snapshot = roomService.startSession(roomId, participantId);
+      response.json(snapshot);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Session start failed';
+      response.status(statusForRoomError(message, 404)).json({ message });
+    }
+  });
+
+  app.post('/goals/refine', async (request, response) => {
+    // The raw goal stays server-side; only the refined text and reason go back.
+    const { rawGoal, sessionMinutes } = request.body as GoalRefineInput;
+    const refinement = await roomiOrchestrator.refineGoal(rawGoal, sessionMinutes);
+    response.json(refinement);
   });
 
   app.get('/rooms/:inviteCode', (request, response) => {
@@ -36,4 +90,20 @@ export function createApp(roomService: RoomService) {
   });
 
   return app;
+}
+
+function statusForRoomError(message: string, fallback: number) {
+  if (message === 'Room is full' || message === 'Session already started') {
+    return 409;
+  }
+
+  if (message.startsWith('Only the host')) {
+    return 403;
+  }
+
+  if (message.startsWith('Daily') || message.startsWith('DAILY_')) {
+    return 503;
+  }
+
+  return fallback;
 }

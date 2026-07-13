@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Copy } from 'lucide-react';
-import { AppBar } from '../components/AppBar';
+import { ArrowLeft, Copy } from 'lucide-react';
+import { formatInviteCode, type RoomSettings } from '@roomi/shared';
 import type { ScreenProps } from './types';
 
 /**
@@ -9,18 +9,49 @@ import type { ScreenProps } from './types';
  * inferred from the AGENTS.md IA (session time, break mode, score visibility,
  * invite code). Verify against Figma.
  */
-export function CreateRoom({ go }: ScreenProps) {
+interface CreateRoomProps extends ScreenProps {
+  error?: string;
+  inviteCode: string;
+  onCreateRoom: (settings: RoomSettings) => void;
+}
+
+export function CreateRoom({ error, inviteCode, onCreateRoom, go }: CreateRoomProps) {
   const [minutes, setMinutes] = useState(50);
   const [breakMode, setBreakMode] = useState<'room' | 'individual'>('room');
   const [scorePublic, setScorePublic] = useState(true);
   const [allowHide, setAllowHide] = useState(true);
 
+  const createRoom = () => {
+    onCreateRoom({
+      sessionMinutes: minutes,
+      breakMode,
+      defaultScoreVisibility: scorePublic ? 'public' : 'private',
+      maxParticipants: 4,
+      authMode: 'nickname_code',
+      videoProvider: 'daily',
+      roomiTone: 'friendly_casual',
+      rankingMetric: 'focus_minutes',
+      videoRequired: true,
+      detectionPauseAllowed: allowHide
+    });
+  };
+
   return (
     <div className="screen screen--app">
-      <AppBar right={<span className="pill pill--purple">방 코드 4821</span>} />
-
       <div className="create__body">
         <div className="create__card">
+          <div className="screen-meta screen-meta--split">
+            <button
+              type="button"
+              className="back-link"
+              onClick={() => go('onboarding-create')}
+              aria-label="이전 화면으로"
+            >
+              <ArrowLeft size={16} />
+              <span>이전</span>
+            </button>
+            <span className="pill pill--purple">현재 코드 {formatInviteCode(inviteCode)}</span>
+          </div>
           <h1 className="create__title">방을 만들어볼까요?</h1>
           <p className="create__subtitle">세션 규칙을 정하면 초대 코드가 만들어져요.</p>
 
@@ -93,19 +124,21 @@ export function CreateRoom({ go }: ScreenProps) {
           <div className="create__section">
             <div className="create__section-label">초대 코드</div>
             <div className="invite">
-              <span className="invite__code">4821</span>
+              <span className="invite__code">생성 후 발급</span>
               <button type="button" className="btn btn--soft" style={{ height: 38, fontSize: 13 }}>
                 <Copy size={15} />
-                복사
+                대기 중
               </button>
             </div>
-            <p className="create__hint">최대 4명까지 함께할 수 있어요.</p>
+            <p className={`create__hint${error ? ' create__hint--error' : ''}`} aria-live="polite">
+              {error ?? '최대 4명까지 함께할 수 있어요.'}
+            </p>
           </div>
 
           <button
             type="button"
             className="btn btn--primary create__submit"
-            onClick={() => go('waiting')}
+            onClick={createRoom}
           >
             방 만들고 대기실로 가기
           </button>

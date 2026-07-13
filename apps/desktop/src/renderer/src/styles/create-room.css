@@ -3,11 +3,11 @@
 .create__body {
   display: flex;
   justify-content: center;
-  padding: 56px 0 64px;
+  padding: clamp(24px, 6vw, 56px) 20px 64px;
 }
 
 .create__card {
-  width: 640px;
+  width: min(640px, 100%);
   padding: 36px 40px 32px;
   background: var(--card);
   border-radius: var(--r-card);
@@ -28,7 +28,7 @@
 }
 
 .create__section {
-  margin-top: 28px;
+  margin-top: clamp(20px, 3.2vh, 28px);
 }
 
 .create__section-label {
@@ -39,6 +39,7 @@
 
 .create__chips {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: 12px;
 }
@@ -52,6 +53,20 @@
   font-size: 14px;
   font-weight: 700;
   color: var(--text);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.18s cubic-bezier(0.18, 1.8, 0.35, 1);
+  transform-origin: center center;
+}
+
+.chip:hover {
+  transform: translateY(-2px) scale(1.04);
+}
+
+.chip:active {
+  transform: translateY(1px) scale(0.92);
 }
 
 .chip--active {
@@ -73,6 +88,21 @@
   border-radius: var(--r-md);
   background: var(--card);
   text-align: left;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.18s ease,
+    transform 0.2s cubic-bezier(0.18, 1.8, 0.35, 1);
+  transform-origin: center center;
+}
+
+.create-opt:hover {
+  box-shadow: 0 12px 24px rgba(79, 70, 150, 0.1);
+  transform: translateY(-3px) scale(1.01);
+}
+
+.create-opt:active {
+  box-shadow: 0 3px 8px rgba(79, 70, 150, 0.12);
+  transform: translateY(1px) scale(0.975);
 }
 
 .create-opt--active {
@@ -123,7 +153,18 @@
   border-radius: var(--r-pill);
   background: #d5d8dd;
   flex: none;
-  transition: background 0.15s ease;
+  transition:
+    background 0.15s ease,
+    transform 0.18s cubic-bezier(0.18, 1.8, 0.35, 1);
+  transform-origin: center center;
+}
+
+.switch:hover {
+  transform: scale(1.07);
+}
+
+.switch:active {
+  transform: scale(0.88);
 }
 
 .switch--on {
@@ -157,6 +198,23 @@
   background: var(--purple-050);
 }
 
+@media (max-width: 640px) {
+  .create__card {
+    padding: 28px 22px;
+  }
+
+  .create__duo {
+    grid-template-columns: 1fr;
+  }
+
+  .toggle-row,
+  .invite {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
 .invite__code {
   font-size: 22px;
   font-weight: 800;
@@ -170,9 +228,26 @@
   color: var(--text-faint);
 }
 
+.create__hint--error {
+  color: #c2475a;
+  font-weight: 700;
+}
+
 .create__submit {
   width: 100%;
   height: 52px;
   margin-top: 28px;
   font-size: 16px;
+}
+
+@media (max-height: 760px) {
+  .create__body {
+    padding-top: 20px;
+    padding-bottom: 32px;
+  }
+
+  .create__card {
+    padding-top: 28px;
+    padding-bottom: 26px;
+  }
 }

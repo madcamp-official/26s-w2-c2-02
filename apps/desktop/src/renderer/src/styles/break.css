@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding-top: 108px;
+  padding: clamp(48px, 10vw, 108px) 20px 48px;
   text-align: center;
 }
 
@@ -23,6 +23,12 @@
   background: var(--purple-600);
 }
 
+.break__meta {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+
 .break__hint {
   margin-top: 14px;
   font-size: 14px;
@@ -31,7 +37,7 @@
 
 .break__timer {
   margin-top: 6px;
-  font-size: 64px;
+  font-size: clamp(42px, 8vw, 64px);
   font-weight: 800;
   color: var(--ink);
   letter-spacing: 1px;
@@ -79,12 +85,14 @@
 /* Option cards */
 .break__options {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 14px;
   margin-top: 30px;
 }
 
 .break-option {
-  width: 335px;
+  width: min(335px, 100%);
   padding: 18px 20px 20px;
   background: var(--card);
   border: 1px solid var(--border);
@@ -138,6 +146,8 @@
 /* Actions */
 .break__actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 12px;
   margin-top: 30px;
 }
