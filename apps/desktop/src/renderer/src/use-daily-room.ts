@@ -39,6 +39,9 @@ export function useDailyRoom(videoJoin: VideoJoinInfo | undefined) {
         }
 
         call = DailyIframe.createCallObject({
+          dailyConfig: {
+            avoidEval: true
+          },
           subscribeToTracksAutomatically: true
         });
 
@@ -48,7 +51,17 @@ export function useDailyRoom(videoJoin: VideoJoinInfo | undefined) {
         call.on('participant-left', syncParticipants);
         call.on('track-started', syncParticipants);
         call.on('track-stopped', syncParticipants);
-        call.on('error', () => setStatus('error'));
+        call.on('camera-error', (event) => {
+          console.error('Daily camera error:', event);
+          setStatus('error');
+        });
+        call.on('error', (event) => {
+          console.error('Daily fatal error:', event);
+          setStatus('error');
+        });
+        call.on('nonfatal-error', (event) => {
+          console.error('Daily nonfatal error:', event);
+        });
 
         setCallObject(call);
 
@@ -63,8 +76,9 @@ export function useDailyRoom(videoJoin: VideoJoinInfo | undefined) {
           setStatus('joined');
         }
       })
-      .catch(() => {
+      .catch((error) => {
         if (!cancelled) {
+          console.error('Daily join failed:', error);
           setStatus('error');
         }
       });
