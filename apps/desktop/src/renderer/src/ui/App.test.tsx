@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createInviteCode,
@@ -90,7 +90,8 @@ describe('App screen router', () => {
     await screen.findByRole('heading', { level: 1, name: '다 같이 목표를 정해볼까요?' });
     expect(screen.getByText('대기실 · 방 코드 HHH-HHH')).toBeInTheDocument();
     expect(screen.getAllByText('소요').length).toBeGreaterThan(0);
-    expect(screen.getByText('1 / 4명 준비완료')).toBeInTheDocument();
+    // Readiness now reflects the isReady flag, and a freshly created host is not ready yet.
+    expect(screen.getByText('0 / 4명 준비완료')).toBeInTheDocument();
     expect(audioTrack.stop).toHaveBeenCalled();
     expect(videoTrack.stop).toHaveBeenCalled();
   });
@@ -214,7 +215,37 @@ describe('App screen router', () => {
     fireEvent.click(screen.getByRole('button', { name: '입장하기' }));
     fireEvent.click(await screen.findByRole('button', { name: '권한 확인하고 입장' }));
     await screen.findByRole('heading', { level: 1, name: '다 같이 목표를 정해볼까요?' });
-    fireEvent.click(screen.getByRole('button', { name: '세션 시작하기' }));
+    // Members have no start button; they follow the host into the session when the
+    // server broadcasts the studying snapshot over room:updated.
+    expect(screen.queryByRole('button', { name: '세션 시작하기' })).not.toBeInTheDocument();
+
+    const onUpdated = socketMock.on.mock.calls.find(
+      ([event]) => event === 'room:updated'
+    )?.[1] as (snapshot: unknown) => void;
+    const studyingSnapshot = {
+      room: {
+        id: 'room-server',
+        inviteCode: '7KQ2MD',
+        hostUserId: 'user-host',
+        settings: defaultTestRoomSettings(),
+        status: 'studying',
+        createdAt: timestamp
+      },
+      participants: [
+        { id: 'participant-host', roomId: 'room-server', userId: 'user-host', nickname: '소요', role: 'host', status: 'online', isReady: true, scoreVisible: true, joinedAt: timestamp, lastSeenAt: timestamp },
+        { id: 'participant-minji', roomId: 'room-server', userId: 'user-minji', nickname: '민지', role: 'member', status: 'online', isReady: false, scoreVisible: true, joinedAt: timestamp, lastSeenAt: timestamp }
+      ],
+      goals: [],
+      roomiMessages: [],
+      currentSession: {
+        id: 'session-1',
+        roomId: 'room-server',
+        startedAt: timestamp,
+        plannedMinutes: 50,
+        mode: 'study'
+      }
+    };
+    act(() => onUpdated(studyingSnapshot));
 
     await screen.findByLabelText('내 웹캠 미리보기');
     expect(screen.getAllByText('소요').length).toBeGreaterThan(0);
@@ -222,10 +253,56 @@ describe('App screen router', () => {
     expect(screen.queryByRole('button', { name: '방장 메뉴' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '나가기' }));
+    expect(await screen.findByRole('heading', { level: 1, name: '이미 공부 중이에요' })).toBeInTheDocument();
+    expect(socketMock.emit).not.toHaveBeenCalledWith('room:leave', {
+      roomId: 'room-server',
+      participantId: 'participant-minji'
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '방 나가기' }));
     expect(socketMock.emit).toHaveBeenCalledWith('room:leave', {
       roomId: 'room-server',
       participantId: 'participant-minji'
     });
+    expect(screen.getByText(/민지님/)).toBeInTheDocument();
+  });
+
+  it('routes an ended room to the retrospective instead of the waiting room', async () => {
+    const timestamp = new Date().toISOString();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          currentParticipantId: 'participant-minji',
+          snapshot: {
+            room: {
+              id: 'room-ended',
+              inviteCode: '7KQ2MD',
+              hostUserId: 'user-host',
+              settings: defaultTestRoomSettings(),
+              status: 'ended',
+              createdAt: timestamp
+            },
+            participants: [],
+            goals: [],
+            roomiMessages: []
+          }
+        })
+      })
+    );
+
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('닉네임'), { target: { value: '민지' } });
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    fireEvent.click(screen.getByRole('button', { name: /방 코드로 입장하기/ }));
+    fireEvent.change(screen.getByLabelText('방 코드'), { target: { value: '7KQ2MD' } });
+    fireEvent.click(screen.getByRole('button', { name: '입장하기' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '오늘 세션, 잘 마쳤어요!' })
+    ).toBeInTheDocument();
+    expect(screen.queryByText('다 같이 목표를 정해볼까요?')).not.toBeInTheDocument();
   });
 });
 

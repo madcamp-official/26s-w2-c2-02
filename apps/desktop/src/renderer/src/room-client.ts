@@ -2,7 +2,10 @@ import { io, type Socket } from 'socket.io-client';
 import type {
   ClientToServerEvents,
   CreateRoomInput,
+  GoalRefineInput,
+  GoalRefinement,
   JoinRoomInput,
+  ParticipantReadyInput,
   RoomSession,
   RoomSnapshot,
   ServerToClientEvents
@@ -40,6 +43,52 @@ export function createRoomSession(input: CreateRoomInput) {
 
 export function joinRoomSession(input: JoinRoomInput) {
   return requestRoomSession('/rooms/join', input);
+}
+
+async function requestSnapshot(path: string, body: unknown): Promise<RoomSnapshot> {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    throw new RoomApiError(`Room API failed: ${response.status}`, response.status);
+  }
+
+  return (await response.json()) as RoomSnapshot;
+}
+
+export function submitGoal(input: { roomId: string; participantId: string; rawText: string }) {
+  return requestSnapshot(`/rooms/${input.roomId}/goals`, {
+    participantId: input.participantId,
+    rawText: input.rawText
+  });
+}
+
+export function startSession(input: { roomId: string; participantId: string }) {
+  return requestSnapshot('/sessions', input);
+}
+
+export async function refineGoal(input: GoalRefineInput): Promise<GoalRefinement> {
+  const response = await fetch(`${apiBaseUrl}/goals/refine`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input)
+  });
+
+  if (!response.ok) {
+    throw new RoomApiError(`Goal refinement failed: ${response.status}`, response.status);
+  }
+
+  return (await response.json()) as GoalRefinement;
+}
+
+export function setReady(
+  socket: Socket<ServerToClientEvents, ClientToServerEvents> | null,
+  input: ParticipantReadyInput
+) {
+  socket?.emit(realtimeEvents.client.participantReady, input);
 }
 
 export function createRoomSocket() {

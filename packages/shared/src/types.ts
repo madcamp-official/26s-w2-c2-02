@@ -45,6 +45,7 @@ export type Participant = {
   nickname: string;
   role: 'host' | 'member';
   status: ParticipantStatus;
+  isReady: boolean;
   scoreVisible: boolean;
   joinedAt: ISODateString;
   lastSeenAt: ISODateString;
@@ -68,11 +69,21 @@ export type RoomiMessage = {
   createdAt: ISODateString;
 };
 
+export type StudySession = {
+  id: string;
+  roomId: string;
+  startedAt: ISODateString;
+  endedAt?: ISODateString;
+  plannedMinutes: number;
+  mode: 'study' | 'break' | 'ended';
+};
+
 export type RoomSnapshot = {
   room: Room;
   participants: Participant[];
   goals: Goal[];
   roomiMessages: RoomiMessage[];
+  currentSession?: StudySession;
 };
 
 export type RoomSession = {
@@ -106,4 +117,32 @@ export type UpdateParticipantStatusInput = {
   roomId: string;
   participantId: string;
   status: ParticipantStatus;
+};
+
+export type ParticipantReadyInput = {
+  roomId: string;
+  participantId: string;
+  isReady: boolean;
+};
+
+export type GoalSubmitInput = {
+  roomId: string;
+  participantId: string;
+  rawText: string;
+};
+
+export type GoalRefineInput = {
+  rawGoal: string;
+  sessionMinutes: number;
+};
+
+export type SessionStartInput = {
+  roomId: string;
+  participantId: string;
+};
+
+export type GoalRefinement = {
+  refinedText: string;
+  reason: string;
+  source: 'gemini' | 'template';
 };

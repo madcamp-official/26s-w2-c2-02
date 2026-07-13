@@ -1,10 +1,16 @@
 import cors from 'cors';
 import express from 'express';
-import type { CreateRoomInput, JoinRoomInput } from '@roomi/shared';
+import type {
+  CreateRoomInput,
+  GoalRefineInput,
+  JoinRoomInput,
+  SessionStartInput
+} from '@roomi/shared';
 import { isAllowedClientOrigin } from './env';
 import type { RoomService } from './rooms/room-service';
+import type { RoomiOrchestrator } from './roomi/roomi-orchestrator';
 
-export function createApp(roomService: RoomService) {
+export function createApp(roomService: RoomService, roomiOrchestrator: RoomiOrchestrator) {
   const app = express();
 
   app.use(
@@ -40,6 +46,38 @@ export function createApp(roomService: RoomService) {
     }
   });
 
+  app.post('/rooms/:roomId/goals', (request, response) => {
+    try {
+      const { participantId, rawText } = request.body as {
+        participantId: string;
+        rawText: string;
+      };
+      const snapshot = roomService.submitGoal(request.params.roomId, participantId, rawText);
+      response.json(snapshot);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Goal submission failed';
+      response.status(statusForRoomError(message, 404)).json({ message });
+    }
+  });
+
+  app.post('/sessions', (request, response) => {
+    try {
+      const { roomId, participantId } = request.body as SessionStartInput;
+      const snapshot = roomService.startSession(roomId, participantId);
+      response.json(snapshot);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Session start failed';
+      response.status(statusForRoomError(message, 404)).json({ message });
+    }
+  });
+
+  app.post('/goals/refine', async (request, response) => {
+    // The raw goal stays server-side; only the refined text and reason go back.
+    const { rawGoal, sessionMinutes } = request.body as GoalRefineInput;
+    const refinement = await roomiOrchestrator.refineGoal(rawGoal, sessionMinutes);
+    response.json(refinement);
+  });
+
   app.get('/rooms/:inviteCode', (request, response) => {
     const snapshot = roomService.getByInviteCode(request.params.inviteCode);
 
@@ -55,8 +93,12 @@ export function createApp(roomService: RoomService) {
 }
 
 function statusForRoomError(message: string, fallback: number) {
-  if (message === 'Room is full') {
+  if (message === 'Room is full' || message === 'Session already started') {
     return 409;
+  }
+
+  if (message.startsWith('Only the host')) {
+    return 403;
   }
 
   if (message.startsWith('Daily') || message.startsWith('DAILY_')) {

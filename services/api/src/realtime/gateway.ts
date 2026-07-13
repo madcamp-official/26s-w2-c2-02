@@ -25,16 +25,6 @@ export function registerRealtimeGateway(
   });
 
   io.on('connection', (socket) => {
-    socket.on(realtimeEvents.client.joinRoom, (input, acknowledge) => {
-      try {
-        const snapshot = roomService.joinRoom(input);
-        socket.join(snapshot.room.id);
-        acknowledge(snapshot);
-      } catch (error) {
-        socket.emit(realtimeEvents.server.error, errorMessage(error));
-      }
-    });
-
     socket.on(realtimeEvents.client.subscribeRoom, (roomId, acknowledge) => {
       const snapshot = roomService.getByRoomId(roomId);
 
@@ -47,6 +37,22 @@ export function registerRealtimeGateway(
       socket.join(snapshot.room.id);
       acknowledge(snapshot);
       socket.emit(realtimeEvents.server.roomSnapshot, snapshot);
+    });
+
+    socket.on(realtimeEvents.client.participantReady, (input) => {
+      try {
+        roomService.setReady(input.roomId, input.participantId, input.isReady);
+      } catch (error) {
+        socket.emit(realtimeEvents.server.error, errorMessage(error));
+      }
+    });
+
+    socket.on(realtimeEvents.client.submitGoal, (input) => {
+      try {
+        roomService.submitGoal(input.roomId, input.participantId, input.rawText);
+      } catch (error) {
+        socket.emit(realtimeEvents.server.error, errorMessage(error));
+      }
     });
 
     socket.on(realtimeEvents.client.updateStatus, (input) => {

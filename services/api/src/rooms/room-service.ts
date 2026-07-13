@@ -1,5 +1,6 @@
 import type {
   CreateRoomInput,
+  Goal,
   JoinRoomInput,
   Participant,
   ParticipantStatus,
@@ -7,6 +8,7 @@ import type {
   RoomSession,
   RoomSettings,
   RoomSnapshot,
+  StudySession,
   VideoJoinInfo
 } from '@roomi/shared';
 import {
@@ -134,6 +136,98 @@ export class RoomService {
     return snapshot;
   }
 
+  setReady(roomId: string, participantId: string, isReady: boolean): RoomSnapshot {
+    const snapshot = this.store.findByRoomId(roomId);
+
+    if (!snapshot) {
+      throw new Error('Room not found');
+    }
+
+    snapshot.participants = snapshot.participants.map((participant) =>
+      participant.id === participantId
+        ? { ...participant, isReady, lastSeenAt: new Date().toISOString() }
+        : participant
+    );
+    this.store.update(snapshot);
+    this.emitRoomUpdated(snapshot);
+    return snapshot;
+  }
+
+  submitGoal(roomId: string, participantId: string, rawText: string): RoomSnapshot {
+    const snapshot = this.store.findByRoomId(roomId);
+
+    if (!snapshot) {
+      throw new Error('Room not found');
+    }
+
+    const participantExists = snapshot.participants.some(
+      (participant) => participant.id === participantId
+    );
+
+    if (!participantExists) {
+      throw new Error('Participant not found');
+    }
+
+    const existing = snapshot.goals.find((goal) => goal.participantId === participantId);
+
+    if (existing) {
+      // Re-submitting replaces the raw text and invalidates any prior refinement.
+      snapshot.goals = snapshot.goals.map((goal) =>
+        goal.participantId === participantId
+          ? { ...goal, rawText, refinedText: undefined }
+          : goal
+      );
+    } else {
+      const goal: Goal = {
+        id: crypto.randomUUID(),
+        roomId,
+        participantId,
+        rawText,
+        createdAt: new Date().toISOString()
+      };
+      snapshot.goals = [...snapshot.goals, goal];
+    }
+
+    this.store.update(snapshot);
+    this.emitRoomUpdated(snapshot);
+    return snapshot;
+  }
+
+  startSession(roomId: string, participantId: string): RoomSnapshot {
+    const snapshot = this.store.findByRoomId(roomId);
+
+    if (!snapshot) {
+      throw new Error('Room not found');
+    }
+
+    const host = snapshot.participants.find(
+      (participant) => participant.id === participantId
+    );
+
+    if (!host || host.role !== 'host') {
+      throw new Error('Only the host can start the session');
+    }
+
+    if (snapshot.room.status !== 'waiting') {
+      throw new Error('Session already started');
+    }
+
+    const now = new Date().toISOString();
+    const session: StudySession = {
+      id: crypto.randomUUID(),
+      roomId,
+      startedAt: now,
+      plannedMinutes: snapshot.room.settings.sessionMinutes,
+      mode: 'study'
+    };
+
+    snapshot.room = { ...snapshot.room, status: 'studying' };
+    snapshot.currentSession = session;
+    this.store.update(snapshot);
+    this.emitRoomUpdated(snapshot);
+    return snapshot;
+  }
+
   leaveRoom(roomId: string, participantId: string): RoomSnapshot {
     const snapshot = this.store.findByRoomId(roomId);
 
@@ -192,6 +286,7 @@ export class RoomService {
       nickname: input.nickname,
       role: input.role,
       status: 'online',
+      isReady: false,
       scoreVisible: input.scoreVisible,
       joinedAt: input.now,
       lastSeenAt: input.now

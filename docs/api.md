@@ -7,6 +7,9 @@
 | `GET` | `/health` | Check API availability. |
 | `POST` | `/rooms` | Create a room with a host participant and return the caller participant id. |
 | `POST` | `/rooms/join` | Join an existing room by invite code and return the caller participant id. |
+| `POST` | `/rooms/:roomId/goals` | Upsert the calling participant's goal (`participantId`, `rawText`) and return the room snapshot. Allowed regardless of room status (late joiners can set goals). |
+| `POST` | `/goals/refine` | Refine a raw goal (`rawGoal`, `sessionMinutes`) via Gemini and return `{ refinedText, reason, source }`. Always `200`; `source` is `template` when the LLM is unavailable. The raw goal is not persisted. |
+| `POST` | `/sessions` | Host starts the study session (`roomId`, `participantId`) regardless of participants' `isReady` state. Sets `room.status = 'studying'` and `currentSession`, returns the snapshot. `403` for non-host, `409` if not `waiting`, `404` for unknown room. Transition reaches everyone via `room:updated`. |
 | `GET` | `/rooms/:inviteCode` | Read a room snapshot by invite code. |
 
 Invite codes are 6-character uppercase alphanumeric strings. Roomi excludes ambiguous characters (`0`, `O`, `1`, `I`, `L`) and normalizes user input before lookup.
@@ -28,6 +31,12 @@ Invite codes are 6-character uppercase alphanumeric strings. Roomi excludes ambi
 The renderer uses `currentParticipantId` to mark the local participant, drive camera/mic controls, and decide whether host-only actions should be visible.
 When Daily credentials are configured, `videoJoin` contains a Daily room URL and participant meeting token. The API creates one private Daily room per Roomi room and issues a token per participant with the Roomi participant id as Daily `user_id`.
 
+## Renderer session behavior
+
+- The waiting room uses `room.status` as its route contract: `waiting` shows readiness and the host-only start action; `studying`/`break` lets a late participant submit a goal and join without interrupting the active session; the study-room `나가기` control returns there without removing the participant, while the waiting-room `방 나가기` control sends `room:leave` and returns to onboarding; `ended` opens the retrospective screen instead of a joinable waiting room.
+- The study-room timer is calculated on each client from `currentSession.startedAt` and `currentSession.plannedMinutes`, so it keeps the server session's remaining time when a participant joins late.
+- The waiting room calls `POST /goals/refine` only after the participant enters a goal. Choosing **이 목표로 저장** submits the suggested text through the normal goal-upsert API. Gemini is optional: a `template` response is displayed and can be accepted in the same way.
+
 Join failures return JSON error messages:
 
 | Status | Meaning |
@@ -42,9 +51,10 @@ Client events are defined in `packages/shared/src/realtime-events.ts`.
 
 | Event | Direction | Purpose |
 |---|---|---|
-| `room:subscribe` | client to server | Subscribe to an existing room after REST create/join and receive snapshots. |
-| `room:join` | client to server | Join a realtime room and create a participant without REST. |
+| `room:subscribe` | client to server | Subscribe to an existing room after REST create/join and receive snapshots. Membership is created only via REST (`POST /rooms`, `POST /rooms/join`); sockets never add participants. |
 | `room:leave` | client to server | Remove the participant from the room and leave the realtime channel. |
+| `participant:ready` | client to server | Set the waiting-room readiness flag (`isReady`) for a participant; broadcasts `room:updated`. |
+| `goal:submit` | client to server | Upsert the participant's goal (`rawText`); mirrors `POST /rooms/:roomId/goals` and broadcasts `room:updated`. |
 | `participant:update-status` | client to server | Publish focus/break/away status updates. |
 | `room:snapshot` | server to client | Send the current room snapshot to a newly subscribed client. |
 | `room:updated` | server to client | Broadcast the latest room snapshot. |
@@ -60,7 +70,7 @@ Keep server secrets only on the machine that runs the central API server.
 
 ### API Server Environment
 
-Copy the root `.env.example` to the repository root `.env` on the API server machine.
+Copy `services/api/.env.example` to `services/api/.env` on the API server machine. The API loads env from its own working directory (`pnpm dev:api` runs in `services/api`), so a repo-root `.env` is not read.
 
 | Variable | Purpose |
 |---|---|
@@ -69,7 +79,7 @@ Copy the root `.env.example` to the repository root `.env` on the API server mac
 | `CLIENT_ORIGIN` | Comma-separated allowlist of renderer/browser origins allowed by REST CORS and Socket.IO CORS. |
 | `DAILY_API_KEY` | Daily API key for room/token creation. |
 | `DAILY_DOMAIN` | Daily domain used by the video provider. |
-| `OPENAI_API_KEY` | LLM provider API key, kept server-side only. |
+| `GEMINI_API_KEY` | Google Gemini API key for goal refinement, kept server-side only. When unset, `POST /goals/refine` returns a deterministic template instead of calling the LLM. |
 
 During local development, the API also accepts renderer origins on `localhost` and `127.0.0.1` in the `5100-5199` port range. This lets Electron and a browser guest join the same local API during one-machine testing.
 
@@ -101,7 +111,7 @@ API_HOST=0.0.0.0
 CLIENT_ORIGIN=http://localhost:5175,http://127.0.0.1:5175,http://192.168.0.23:5175
 DAILY_API_KEY=...
 DAILY_DOMAIN=...
-OPENAI_API_KEY=
+GEMINI_API_KEY=
 ```
 
 Start the API:
@@ -142,7 +152,7 @@ API_HOST=127.0.0.1
 CLIENT_ORIGIN=http://localhost:5175,http://127.0.0.1:5175
 DAILY_API_KEY=...
 DAILY_DOMAIN=...
-OPENAI_API_KEY=
+GEMINI_API_KEY=
 ```
 
 Run Roomi API locally on the internal server:
