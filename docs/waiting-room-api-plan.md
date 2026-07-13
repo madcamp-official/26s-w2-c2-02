@@ -60,11 +60,11 @@
 - **위험**: `maxParticipants: 4` 등 리터럴 타입과 기존 default-settings 충돌.
 - **검증**: `pnpm --filter @roomi/shared build` 통과.
 
-### 3. 준비 상태 API
-- **행동**: socket `participant:ready`(토글) → `RoomService.setReady()` → `room:updated` broadcast.
+### 3. 준비 상태 API ✅ (완료)
+- **행동**: socket `participant:ready`(명시적 `isReady` 목표 상태 — 토글 대신 멱등) → `RoomService.setReady()` → `onRoomUpdated`가 `room:updated` broadcast.
 - **이유**: 대기실 핵심 인터랙션이자 "모두 준비되면 시작" 기준.
-- **위험**: 집중용 `status`와 대기용 `isReady` 혼용 시 스터디룸 단계 의미 충돌.
-- **검증**: 2개 소켓에서 ready 토글 시 양쪽 스냅샷 동기화.
+- **위험**: 집중용 `status`와 대기용 `isReady` 혼용 시 스터디룸 단계 의미 충돌 → 별도 필드로 분리(2단계).
+- **검증**: `RoomService.setReady` 단위 테스트(set/clear/broadcast/미존재 방) + gateway 통합 테스트로 **2개 소켓 구독 상태에서 ready 변경이 양쪽에 broadcast** 되는 것 확인. vitest 8건 통과.
 
 ### 4. 목표 등록/수정 API
 - **행동**: `POST /rooms/:roomId/goals`(participant 기준 upsert, `rawText`) → snapshot broadcast. socket `goal:submit`도 동일 서비스 호출. **`room.status`가 `waiting`이 아니어도 허용**(진행 중 목표 입력).

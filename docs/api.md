@@ -44,6 +44,7 @@ Client events are defined in `packages/shared/src/realtime-events.ts`.
 |---|---|---|
 | `room:subscribe` | client to server | Subscribe to an existing room after REST create/join and receive snapshots. Membership is created only via REST (`POST /rooms`, `POST /rooms/join`); sockets never add participants. |
 | `room:leave` | client to server | Remove the participant from the room and leave the realtime channel. |
+| `participant:ready` | client to server | Set the waiting-room readiness flag (`isReady`) for a participant; broadcasts `room:updated`. |
 | `participant:update-status` | client to server | Publish focus/break/away status updates. |
 | `room:snapshot` | server to client | Send the current room snapshot to a newly subscribed client. |
 | `room:updated` | server to client | Broadcast the latest room snapshot. |

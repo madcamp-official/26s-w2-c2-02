@@ -118,3 +118,9 @@ export type UpdateParticipantStatusInput = {
   participantId: string;
   status: ParticipantStatus;
 };
+
+export type ParticipantReadyInput = {
+  roomId: string;
+  participantId: string;
+  isReady: boolean;
+};

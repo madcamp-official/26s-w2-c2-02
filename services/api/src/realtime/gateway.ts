@@ -39,6 +39,14 @@ export function registerRealtimeGateway(
       socket.emit(realtimeEvents.server.roomSnapshot, snapshot);
     });
 
+    socket.on(realtimeEvents.client.participantReady, (input) => {
+      try {
+        roomService.setReady(input.roomId, input.participantId, input.isReady);
+      } catch (error) {
+        socket.emit(realtimeEvents.server.error, errorMessage(error));
+      }
+    });
+
     socket.on(realtimeEvents.client.updateStatus, (input) => {
       try {
         const snapshot = roomService.updateParticipantStatus(

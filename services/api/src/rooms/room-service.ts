@@ -134,6 +134,23 @@ export class RoomService {
     return snapshot;
   }
 
+  setReady(roomId: string, participantId: string, isReady: boolean): RoomSnapshot {
+    const snapshot = this.store.findByRoomId(roomId);
+
+    if (!snapshot) {
+      throw new Error('Room not found');
+    }
+
+    snapshot.participants = snapshot.participants.map((participant) =>
+      participant.id === participantId
+        ? { ...participant, isReady, lastSeenAt: new Date().toISOString() }
+        : participant
+    );
+    this.store.update(snapshot);
+    this.emitRoomUpdated(snapshot);
+    return snapshot;
+  }
+
   leaveRoom(roomId: string, participantId: string): RoomSnapshot {
     const snapshot = this.store.findByRoomId(roomId);
 

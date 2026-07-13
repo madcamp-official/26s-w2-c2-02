@@ -1,6 +1,7 @@
 import type {
   RoomSnapshot,
   LeaveRoomInput,
+  ParticipantReadyInput,
   UpdateParticipantStatusInput
 } from './types';
 
@@ -8,6 +9,7 @@ export const realtimeEvents = {
   client: {
     leaveRoom: 'room:leave',
     subscribeRoom: 'room:subscribe',
+    participantReady: 'participant:ready',
     updateStatus: 'participant:update-status'
   },
   server: {
@@ -24,6 +26,7 @@ export type ClientToServerEvents = {
     roomId: string,
     acknowledge: (snapshot: RoomSnapshot | undefined) => void
   ) => void;
+  [realtimeEvents.client.participantReady]: (input: ParticipantReadyInput) => void;
   [realtimeEvents.client.updateStatus]: (
     input: UpdateParticipantStatusInput
   ) => void;
