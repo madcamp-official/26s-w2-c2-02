@@ -43,7 +43,10 @@ export type PredictResponse = {
 const focusLabels: MlFocusLabel[] = ['focused', 'distracted', 'away', 'break_or_paused'];
 
 export class MlFocusClientError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly cause?: unknown
+  ) {
     super(message);
     this.name = 'MlFocusClientError';
   }
@@ -74,7 +77,7 @@ export async function predictFocusWindow(
     });
 
     if (!response.ok) {
-      throw new MlFocusClientError(`ML focus predict failed with ${response.status}`);
+      throw new MlFocusClientError(`ML focus predict failed with ${response.status} from ${baseUrl}`);
     }
 
     return parsePredictResponse(await response.json());
@@ -82,7 +85,11 @@ export async function predictFocusWindow(
     if (reason instanceof MlFocusClientError) {
       throw reason;
     }
-    throw new MlFocusClientError(reason instanceof Error ? reason.message : 'ML focus predict failed');
+    const detail = reason instanceof Error ? reason.message : 'ML focus predict failed';
+    throw new MlFocusClientError(
+      `ML 서버에 연결할 수 없습니다. VITE_ROOMI_ML_API_URL=${baseUrl} 라우팅, CORS, 서버 실행 상태를 확인해주세요. (${detail})`,
+      reason
+    );
   } finally {
     clearTimeout(timeout);
   }

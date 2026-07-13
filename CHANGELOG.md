@@ -36,6 +36,7 @@
 - 개발 중 화면을 빠르게 오갈 수 있는 상단 dev 화면 전환 nav 를 추가했습니다(디자인에는 포함되지 않는 개발용 UI).
 - MediaPipe 테스트 화면에서 웹캠 얼굴 landmark 기반 Rule-Based 집중도 label, 점수, feature 지속 시간을 확인할 수 있게 추가했습니다.
 - MediaPipe 테스트 화면에서 Rule-Based 판정과 ML 서버 판정을 토글해 비교할 수 있게 했습니다. ML 서버 모드는 20초 feature window를 `/v1/focus/predict`로 보내고, 실패 시 로컬 Rule-Based 판정을 계속 표시합니다.
+- Desktop renderer 환경 예시에 `VITE_ROOMI_ML_API_URL`을 추가하고, ML 서버 fetch 실패 시 호출 중인 base URL과 CORS/라우팅 확인 힌트를 표시하도록 했습니다.
 
 ### Changed
 
