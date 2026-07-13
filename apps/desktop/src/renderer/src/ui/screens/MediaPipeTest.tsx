@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Camera, CircleStop, Play, RotateCcw, Settings } from 'lucide-react';
+import { ArrowLeft, Bot, Camera, CircleStop, Play, RotateCcw, Settings, SlidersHorizontal } from 'lucide-react';
 import { FaceLandmarker } from '@mediapipe/tasks-vision';
+import {
+  type FeatureWindowV1,
+  type MlFocusLabel,
+  type PredictResponse,
+  predictFocusWindow
+} from '../../focus-ml-client';
 import faceLandmarkerModel from '../../assets/mediapipe/face_landmarker.task?url';
 import wasmBinaryPath from '../../assets/mediapipe/vision_wasm_internal.wasm?url';
 import wasmLoaderPath from '../../assets/mediapipe/vision_wasm_internal.js?url';
@@ -12,6 +18,8 @@ const wasmFileset = {
 };
 
 type TestStatus = 'idle' | 'loading' | 'running' | 'stopped' | 'error';
+type FocusDecisionMode = 'rule' | 'ml';
+type MlPredictionStatus = 'idle' | 'collecting' | 'predicting' | 'ready' | 'fallback';
 type FocusLabel = 'focused' | 'distracted' | 'away' | 'sleepy' | 'uncertain' | 'paused';
 type FocusSignalName = 'face_missing' | 'eyes_closed' | 'head_turned' | 'head_down';
 
@@ -53,6 +61,12 @@ type FocusSnapshot = {
   activeSignals: FocusSignalName[];
   durations: Record<FocusSignalName, number>;
   current: Omit<FrameSignals, 'timestamp'>;
+};
+
+type MlPredictionSnapshot = {
+  response: PredictResponse;
+  windowId: string;
+  windowEnd: string;
 };
 
 type DetectionSnapshot = {
@@ -106,6 +120,8 @@ const emptyFocusSnapshot: FocusSnapshot = {
   }
 };
 
+const mlWindowSeconds = 20;
+
 const focusLabelText: Record<FocusLabel, string> = {
   focused: '집중중',
   distracted: '주의 필요',
@@ -122,6 +138,14 @@ const focusLabelDescription: Record<FocusLabel, string> = {
   sleepy: '눈 감김 신호가 설정 기준 이상 지속됐어요.',
   uncertain: '신호가 약하거나 짧아서 아직 확정하지 않았어요.',
   paused: 'MediaPipe 분석을 시작하면 label이 갱신돼요.'
+};
+
+const mlStatusText: Record<MlPredictionStatus, string> = {
+  idle: 'ML 대기',
+  collecting: '20초 window 수집 중',
+  predicting: 'ML 예측 중',
+  ready: 'ML 예측 표시',
+  fallback: '로컬 판정 유지'
 };
 
 const settingGroups: Array<{
@@ -200,6 +224,9 @@ export function MediaPipeTest({ go }: ScreenProps) {
   const signalWindowRef = useRef<FrameSignals[]>([]);
   const previousNoseRef = useRef<LandmarkPoint | null>(null);
   const settingsRef = useRef<RuleSettings>(defaultRuleSettings);
+  const modeRef = useRef<FocusDecisionMode>('rule');
+  const mlWindowStartRef = useRef<number | null>(null);
+  const mlPredictionRequestRef = useRef(0);
 
   const [status, setStatus] = useState<TestStatus>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -208,10 +235,21 @@ export function MediaPipeTest({ go }: ScreenProps) {
   const [focusSnapshot, setFocusSnapshot] = useState<FocusSnapshot>(emptyFocusSnapshot);
   const [ruleSettings, setRuleSettings] = useState<RuleSettings>(defaultRuleSettings);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [decisionMode, setDecisionMode] = useState<FocusDecisionMode>('rule');
+  const [mlPredictionStatus, setMlPredictionStatus] = useState<MlPredictionStatus>('idle');
+  const [mlPrediction, setMlPrediction] = useState<MlPredictionSnapshot | null>(null);
+  const [mlError, setMlError] = useState<string | null>(null);
 
   useEffect(() => {
     settingsRef.current = ruleSettings;
   }, [ruleSettings]);
+
+  useEffect(() => {
+    modeRef.current = decisionMode;
+    if (decisionMode === 'ml' && status === 'running') {
+      setMlPredictionStatus((current) => (current === 'predicting' ? current : 'collecting'));
+    }
+  }, [decisionMode, status]);
 
   const stop = (updateStatus = true) => {
     if (frameRef.current !== null) {
@@ -224,6 +262,7 @@ export function MediaPipeTest({ go }: ScreenProps) {
     lastFrameAtRef.current = null;
     signalWindowRef.current = [];
     previousNoseRef.current = null;
+    mlWindowStartRef.current = null;
 
     if (videoRef.current) {
       videoRef.current.srcObject = null;
@@ -238,6 +277,9 @@ export function MediaPipeTest({ go }: ScreenProps) {
     if (updateStatus) {
       setDetectionSnapshot(emptyDetectionSnapshot);
       setFocusSnapshot(emptyFocusSnapshot);
+      setMlPrediction(null);
+      setMlPredictionStatus('idle');
+      setMlError(null);
       setStatus((current) => (current === 'error' ? current : 'stopped'));
     }
   };
@@ -315,9 +357,59 @@ export function MediaPipeTest({ go }: ScreenProps) {
       fps,
       lastUpdatedAt: new Date().toLocaleTimeString()
     });
-    setFocusSnapshot(classifyFocus(signalWindowRef.current, settings));
+    const ruleSnapshot = classifyFocus(signalWindowRef.current, settings);
+    setFocusSnapshot(ruleSnapshot);
+    void maybePredictWithMl(signalWindowRef.current, ruleSnapshot, now);
 
     frameRef.current = requestAnimationFrame(detectFrame);
+  };
+
+  const maybePredictWithMl = async (
+    windowFrames: FrameSignals[],
+    ruleSnapshot: FocusSnapshot,
+    now: number
+  ) => {
+    if (modeRef.current !== 'ml' || windowFrames.length === 0) {
+      return;
+    }
+
+    mlWindowStartRef.current ??= now;
+
+    if (now - mlWindowStartRef.current < mlWindowSeconds * 1000) {
+      setMlPredictionStatus((current) => (current === 'predicting' ? current : 'collecting'));
+      return;
+    }
+
+    const frameWindow = windowFrames.filter((frame) => frame.timestamp >= mlWindowStartRef.current!);
+    const windowStart = mlWindowStartRef.current;
+    mlWindowStartRef.current = now;
+    const requestId = mlPredictionRequestRef.current + 1;
+    mlPredictionRequestRef.current = requestId;
+    setMlPredictionStatus('predicting');
+    setMlError(null);
+
+    try {
+      const featureWindow = buildFeatureWindow(frameWindow, ruleSnapshot, windowStart, now);
+      const response = await predictFocusWindow(featureWindow);
+
+      if (mlPredictionRequestRef.current !== requestId) {
+        return;
+      }
+
+      setMlPrediction({
+        response,
+        windowId: featureWindow.windowId,
+        windowEnd: new Date().toLocaleTimeString()
+      });
+      setMlPredictionStatus('ready');
+    } catch (reason) {
+      if (mlPredictionRequestRef.current !== requestId) {
+        return;
+      }
+
+      setMlPredictionStatus('fallback');
+      setMlError(reason instanceof Error ? reason.message : 'ML 서버 예측을 사용할 수 없습니다.');
+    }
   };
 
   const createFaceLandmarker = async () => {
@@ -401,10 +493,14 @@ export function MediaPipeTest({ go }: ScreenProps) {
 
   const isBusy = status === 'loading';
   const isRunning = status === 'running';
-  const labelClassName = `focus-label focus-label--${focusSnapshot.label}`;
+  const visibleFocusSnapshot =
+    decisionMode === 'ml' && mlPrediction
+      ? focusSnapshotFromMl(mlPrediction.response, focusSnapshot)
+      : focusSnapshot;
+  const labelClassName = `focus-label focus-label--${visibleFocusSnapshot.label}`;
   const focusScoreWidth = useMemo(
-    () => `${Math.max(0, Math.min(100, focusSnapshot.score))}%`,
-    [focusSnapshot.score]
+    () => `${Math.max(0, Math.min(100, visibleFocusSnapshot.score))}%`,
+    [visibleFocusSnapshot.score]
   );
 
   return (
@@ -423,7 +519,7 @@ export function MediaPipeTest({ go }: ScreenProps) {
         </button>
         <div>
           <p className="screen-kicker">MediaPipe 테스트</p>
-          <h1 className="mediapipe-test__title">Rule-Based 집중도 label</h1>
+          <h1 className="mediapipe-test__title">집중도 판정 모드 테스트</h1>
         </div>
         <span className={`badge ${isRunning ? 'badge--green' : 'badge--wait'}`}>
           {isRunning ? '실행 중' : isBusy ? '초기화 중' : '대기'}
@@ -472,21 +568,47 @@ export function MediaPipeTest({ go }: ScreenProps) {
             </button>
           </div>
 
+          <div className="decision-mode" aria-label="집중도 판정 모드">
+            <button
+              type="button"
+              className={`decision-mode__option${decisionMode === 'rule' ? ' decision-mode__option--active' : ''}`}
+              onClick={() => setDecisionMode('rule')}
+            >
+              <SlidersHorizontal size={15} />
+              Rule-Based
+            </button>
+            <button
+              type="button"
+              className={`decision-mode__option${decisionMode === 'ml' ? ' decision-mode__option--active' : ''}`}
+              onClick={() => setDecisionMode('ml')}
+            >
+              <Bot size={15} />
+              ML 서버
+            </button>
+          </div>
+
           {error ? <p className="mediapipe-test__error">{error}</p> : null}
+          {mlError && decisionMode === 'ml' ? <p className="mediapipe-test__error">{mlError}</p> : null}
 
           <section className="focus-card" aria-label="현재 집중도 판정">
             <div className="focus-card__head">
               <div>
-                <div className="focus-card__eyebrow">현재 label</div>
-                <div className={labelClassName}>{focusLabelText[focusSnapshot.label]}</div>
+                <div className="focus-card__eyebrow">
+                  {decisionMode === 'ml' && mlPrediction ? 'ML 서버 label' : '현재 label'}
+                </div>
+                <div className={labelClassName}>{focusLabelText[visibleFocusSnapshot.label]}</div>
               </div>
               <div className="focus-score">
-                <span>{focusSnapshot.score}</span>
+                <span>{visibleFocusSnapshot.score}</span>
                 <small>/100</small>
               </div>
             </div>
-            <p className="focus-card__text">{focusLabelDescription[focusSnapshot.label]}</p>
-            <div className="focus-scorebar" aria-label={`집중도 ${focusSnapshot.score}점`}>
+            <p className="focus-card__text">
+              {decisionMode === 'ml'
+                ? getMlCardDescription(mlPredictionStatus, mlPrediction)
+                : focusLabelDescription[visibleFocusSnapshot.label]}
+            </p>
+            <div className="focus-scorebar" aria-label={`집중도 ${visibleFocusSnapshot.score}점`}>
               <div className="focus-scorebar__fill" style={{ width: focusScoreWidth }} />
             </div>
           </section>
@@ -508,6 +630,16 @@ export function MediaPipeTest({ go }: ScreenProps) {
               <dt>최근 갱신</dt>
               <dd>{detectionSnapshot.lastUpdatedAt}</dd>
             </div>
+            <div>
+              <dt>판정 모드</dt>
+              <dd>{decisionMode === 'ml' ? mlStatusText[mlPredictionStatus] : 'Rule-Based'}</dd>
+            </div>
+            {decisionMode === 'ml' && mlPrediction ? (
+              <div>
+                <dt>모델</dt>
+                <dd>{mlPrediction.response.modelVersion}</dd>
+              </div>
+            ) : null}
           </dl>
 
           <div className="focus-feature-grid" aria-label="Rule-Based feature 값">
@@ -533,8 +665,9 @@ export function MediaPipeTest({ go }: ScreenProps) {
           </div>
 
           <p className="mediapipe-test__note">
-            MVP 초안은 MediaPipe landmark에서 얼굴 없음, 눈 감김, 고개 돌림, 고개 숙임을 계산한 뒤
-            설정한 지속 시간과 감점 기준으로 label을 정합니다.
+            Rule-Based는 매 프레임 로컬 기준으로 판정하고, ML 서버 모드는 같은 로컬 feature를 20초
+            window로 묶어 feature schema v1 예측을 요청합니다. 서버가 늦거나 실패하면 로컬 판정을
+            계속 사용합니다.
           </p>
         </aside>
       </section>
@@ -762,6 +895,152 @@ function classifyFocus(windowFrames: FrameSignals[], settings: RuleSettings): Fo
       headDown: latest.headDown
     }
   };
+}
+
+function buildFeatureWindow(
+  windowFrames: FrameSignals[],
+  ruleSnapshot: FocusSnapshot,
+  windowStart: number,
+  windowEnd: number
+): FeatureWindowV1 {
+  const durationSec = clamp(round((windowEnd - windowStart) / 1000, 1), 5, 60);
+  const frames = windowFrames.length > 0 ? windowFrames : [];
+  const detectedFrames = frames.filter((frame) => frame.facePresent);
+  const facePresenceRatio = ratio(detectedFrames.length, frames.length);
+  const eyeClosedRatio = ratio(
+    detectedFrames.filter((frame) => frame.eyesClosed).length,
+    detectedFrames.length
+  );
+  const headDownRatio = ratio(
+    detectedFrames.filter((frame) => frame.headDown).length,
+    detectedFrames.length
+  );
+  const headTurnedRatio = ratio(
+    detectedFrames.filter((frame) => frame.headTurned).length,
+    detectedFrames.length
+  );
+  const headYawDegrees = detectedFrames.map((frame) => frame.headYawRatio * 90);
+  const headPitchDegrees = detectedFrames.map((frame) => frame.headPitchRatio * 90);
+  const motionAmount = getMotionAmount(detectedFrames);
+  const ruleScore = clamp(ruleSnapshot.score / 100, 0, 1);
+  const windowEndDate = new Date();
+  const windowStartDate = new Date(windowEndDate.getTime() - durationSec * 1000);
+
+  return {
+    windowId: cryptoRandomId(),
+    userId: 'mediapipe-test-user',
+    sessionId: 'mediapipe-test-session',
+    windowStart: windowStartDate.toISOString(),
+    windowEnd: windowEndDate.toISOString(),
+    durationSec,
+    features: {
+      facePresenceRatio,
+      avgFaceDetectionConfidence: facePresenceRatio,
+      eyeClosedRatio,
+      headYawMean: round(mean(headYawDegrees), 3),
+      headYawStd: round(populationStd(headYawDegrees), 3),
+      headPitchMean: round(mean(headPitchDegrees), 3),
+      headPitchStd: round(populationStd(headPitchDegrees), 3),
+      headDownRatio,
+      headTurnedRatio,
+      lowConfidenceRatio: round(1 - facePresenceRatio, 3),
+      motionAmount,
+      ruleBasedScoreMean: ruleScore,
+      ruleBasedScoreMin: ruleScore
+    },
+    ruleBasedLabel: toMlFocusLabel(ruleSnapshot.label)
+  };
+}
+
+function focusSnapshotFromMl(response: PredictResponse, fallback: FocusSnapshot): FocusSnapshot {
+  return {
+    ...fallback,
+    label: fromMlFocusLabel(response.label),
+    score: Math.round(clamp(response.score, 0, 1) * 100)
+  };
+}
+
+function getMlCardDescription(
+  status: MlPredictionStatus,
+  prediction: MlPredictionSnapshot | null
+): string {
+  if (!prediction) {
+    return status === 'predicting'
+      ? 'ML 서버에 feature window 예측을 요청하고 있어요.'
+      : 'ML 서버 모드는 20초 단위 feature window가 쌓인 뒤 예측 label을 표시해요.';
+  }
+
+  const promptText = prediction.response.shouldPrompt
+    ? prediction.response.promptKind === 'exploration'
+      ? 'exploration 확인 대상'
+      : 'correction 확인 대상'
+    : 'prompt 없음';
+
+  return `${prediction.windowEnd} window 예측입니다. confidence ${round(
+    prediction.response.confidence,
+    2
+  )}, ${promptText}.`;
+}
+
+function toMlFocusLabel(label: FocusLabel): MlFocusLabel {
+  if (label === 'away') {
+    return 'away';
+  }
+
+  if (label === 'sleepy' || label === 'paused') {
+    return 'break_or_paused';
+  }
+
+  if (label === 'distracted' || label === 'uncertain') {
+    return 'distracted';
+  }
+
+  return 'focused';
+}
+
+function fromMlFocusLabel(label: MlFocusLabel): FocusLabel {
+  if (label === 'break_or_paused') {
+    return 'sleepy';
+  }
+
+  return label;
+}
+
+function getMotionAmount(frames: FrameSignals[]) {
+  if (frames.length < 2) {
+    return 0;
+  }
+
+  const deltas = frames.slice(1).map((frame, index) => {
+    const previous = frames[index];
+    return Math.hypot(
+      frame.headYawRatio - previous.headYawRatio,
+      frame.headPitchRatio - previous.headPitchRatio
+    );
+  });
+
+  return round(mean(deltas) * 100, 3);
+}
+
+function mean(values: number[]) {
+  return values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function populationStd(values: number[]) {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  const average = mean(values);
+  return Math.sqrt(mean(values.map((value) => (value - average) ** 2)));
+}
+
+function ratio(numerator: number, denominator: number) {
+  return denominator > 0 ? round(clamp(numerator / denominator, 0, 1), 3) : 0;
+}
+
+function cryptoRandomId() {
+  return globalThis.crypto?.randomUUID?.() ?? `window-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function getFocusLabel(
