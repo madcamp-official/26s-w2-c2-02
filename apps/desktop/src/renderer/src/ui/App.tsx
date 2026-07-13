@@ -25,6 +25,7 @@ import {
   createRoomSession,
   createRoomSocket,
   joinRoomSession,
+  leaveRoom,
   RoomApiError,
   subscribeToRoom
 } from '../room-client';
@@ -193,6 +194,7 @@ export function App() {
   const [nickname, setNickname] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [joinError, setJoinError] = useState<string | undefined>();
+  const [createError, setCreateError] = useState<string | undefined>();
   const [mediaPermission, setMediaPermission] = useState<MediaPermissionState>('idle');
   const [roomDraft, setRoomDraft] = useState<RoomDraft | null>(null);
   const socketRef = useRef<Socket<ServerToClientEvents, ClientToServerEvents> | null>(null);
@@ -233,11 +235,17 @@ export function App() {
 
   const createRoom = async (settings: RoomSettings) => {
     const input = { nickname: nickname || '나', settings };
+    setCreateError(undefined);
 
     try {
       const session = await createRoomSession(input);
       setRoomDraft(roomSessionToDraft(session));
-    } catch {
+    } catch (error) {
+      if (error instanceof RoomApiError) {
+        setCreateError('방을 만들지 못했어요. API 서버와 Daily 설정을 확인해주세요.');
+        return;
+      }
+
       setRoomDraft(createRoomDraft(input.nickname, settings));
     }
 
@@ -268,6 +276,19 @@ export function App() {
     }
 
     go('onboarding-permission');
+  };
+
+  const leaveCurrentRoom = () => {
+    if (roomDraft?.realtime === 'server') {
+      leaveRoom(socketRef.current, {
+        roomId: roomDraft.room.id,
+        participantId: roomDraft.currentParticipantId
+      });
+    }
+
+    setRoomDraft(null);
+    setMediaPermission('idle');
+    go('onboarding-create');
   };
 
   return (
@@ -307,6 +328,7 @@ export function App() {
         {screen === 'create-room' && (
           <CreateRoom
             inviteCode={activeRoom.room.inviteCode}
+            error={createError}
             onCreateRoom={createRoom}
             go={go}
           />
@@ -319,6 +341,7 @@ export function App() {
             currentParticipantId={activeRoom.currentParticipantId}
             isHost={isHost}
             onEndSession={() => go('retrospective')}
+            onLeaveRoom={leaveCurrentRoom}
             participants={activeRoom.participants}
             room={activeRoom.room}
             videoJoin={activeRoom.videoJoin}

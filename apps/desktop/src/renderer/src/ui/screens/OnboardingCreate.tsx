@@ -30,7 +30,7 @@ export function OnboardingCreate({ nickname, go }: OnboardingCreateProps) {
             <span className="choice__icon">
               <Plus size={20} />
             </span>
-            <span>
+            <span className="choice__body">
               <span className="choice__title">새로운 방 만들기</span>
               <span className="choice__desc">세션 규칙을 정하고 친구를 초대해요</span>
             </span>
@@ -41,7 +41,7 @@ export function OnboardingCreate({ nickname, go }: OnboardingCreateProps) {
             <span className="choice__icon">
               <KeyRound size={20} />
             </span>
-            <span>
+            <span className="choice__body">
               <span className="choice__title">방 코드로 입장하기</span>
               <span className="choice__desc">친구에게 받은 코드로 바로 들어가요</span>
             </span>

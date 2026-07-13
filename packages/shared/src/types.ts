@@ -97,6 +97,11 @@ export type JoinRoomInput = {
   inviteCode: string;
 };
 
+export type LeaveRoomInput = {
+  roomId: string;
+  participantId: string;
+};
+
 export type UpdateParticipantStatusInput = {
   roomId: string;
   participantId: string;

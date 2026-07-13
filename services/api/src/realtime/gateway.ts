@@ -61,8 +61,13 @@ export function registerRealtimeGateway(
       }
     });
 
-    socket.on(realtimeEvents.client.leaveRoom, (roomId) => {
-      socket.leave(roomId);
+    socket.on(realtimeEvents.client.leaveRoom, (input) => {
+      try {
+        roomService.leaveRoom(input.roomId, input.participantId);
+        socket.leave(input.roomId);
+      } catch (error) {
+        socket.emit(realtimeEvents.server.error, errorMessage(error));
+      }
     });
   });
 }

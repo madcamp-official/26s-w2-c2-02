@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { RoomiMascot } from '../components/RoomiMascot';
-import { formatInviteCode, isInviteCodeComplete, normalizeInviteCode } from '@roomi/shared';
+import { inviteCodeLength, isInviteCodeComplete, normalizeInviteCode } from '@roomi/shared';
 import type { ScreenProps } from './types';
 
 /**
@@ -17,6 +18,8 @@ interface OnboardingJoinProps extends ScreenProps {
 
 export function OnboardingJoin({ code, error, onCodeChange, onJoin }: OnboardingJoinProps) {
   const isCodeComplete = isInviteCodeComplete(code);
+  const [hasUnsupportedCodeCharacter, setHasUnsupportedCodeCharacter] = useState(false);
+  const codeCharacters = normalizeInviteCode(code).padEnd(inviteCodeLength, ' ').split('');
 
   return (
     <div className="screen screen--onboarding">
@@ -32,16 +35,40 @@ export function OnboardingJoin({ code, error, onCodeChange, onJoin }: Onboarding
           <label className="onb-fieldgroup__label" htmlFor="room-code">
             방 코드
           </label>
-          <input
-            id="room-code"
-            className="field field--code"
-            placeholder="ABC-234"
-            value={formatInviteCode(code)}
-            onChange={(e) => onCodeChange(normalizeInviteCode(e.target.value))}
-            inputMode="text"
-          />
+          <div className="code-entry">
+            <input
+              id="room-code"
+              className="code-entry__input"
+              value={code}
+              onChange={(e) => {
+                setHasUnsupportedCodeCharacter(/[0O1IL]/i.test(e.target.value));
+                onCodeChange(normalizeInviteCode(e.target.value));
+              }}
+              inputMode="text"
+              autoCapitalize="characters"
+              autoComplete="off"
+              spellCheck={false}
+              maxLength={inviteCodeLength + 1}
+            />
+            <div className="code-entry__slots" aria-hidden="true">
+              {codeCharacters.slice(0, 3).map((character, index) => (
+                <span key={`prefix-${index}-${character}`} className="code-entry__slot">
+                  {character.trim() ? character : ''}
+                </span>
+              ))}
+              <span className="code-entry__dash" />
+              {codeCharacters.slice(3).map((character, index) => (
+                <span key={`suffix-${index}-${character}`} className="code-entry__slot">
+                  {character.trim() ? character : ''}
+                </span>
+              ))}
+            </div>
+          </div>
           <p className={`onb-hint${error ? ' onb-hint--error' : ''}`} aria-live="polite">
-            {error ?? '코드는 방장이 알려줘요.'}
+            {error ??
+              (hasUnsupportedCodeCharacter
+                ? 'L, I, O, 0, 1은 방 코드에 사용되지 않아요.'
+                : '코드는 방장이 알려줘요.')}
           </p>
         </div>
 

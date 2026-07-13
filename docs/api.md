@@ -44,7 +44,7 @@ Client events are defined in `packages/shared/src/realtime-events.ts`.
 |---|---|---|
 | `room:subscribe` | client to server | Subscribe to an existing room after REST create/join and receive snapshots. |
 | `room:join` | client to server | Join a realtime room and create a participant without REST. |
-| `room:leave` | client to server | Leave the realtime room channel. |
+| `room:leave` | client to server | Remove the participant from the room and leave the realtime channel. |
 | `participant:update-status` | client to server | Publish focus/break/away status updates. |
 | `room:snapshot` | server to client | Send the current room snapshot to a newly subscribed client. |
 | `room:updated` | server to client | Broadcast the latest room snapshot. |

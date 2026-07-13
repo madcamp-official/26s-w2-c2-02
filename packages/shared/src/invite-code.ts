@@ -1,4 +1,4 @@
-export const inviteCodeAlphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+export const inviteCodeAlphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const inviteCodeLength = 6;
 
 export function normalizeInviteCode(value: string) {

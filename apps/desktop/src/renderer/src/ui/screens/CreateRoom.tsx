@@ -10,11 +10,12 @@ import type { ScreenProps } from './types';
  * invite code). Verify against Figma.
  */
 interface CreateRoomProps extends ScreenProps {
+  error?: string;
   inviteCode: string;
   onCreateRoom: (settings: RoomSettings) => void;
 }
 
-export function CreateRoom({ inviteCode, onCreateRoom }: CreateRoomProps) {
+export function CreateRoom({ error, inviteCode, onCreateRoom }: CreateRoomProps) {
   const [minutes, setMinutes] = useState(50);
   const [breakMode, setBreakMode] = useState<'room' | 'individual'>('room');
   const [scorePublic, setScorePublic] = useState(true);
@@ -120,7 +121,9 @@ export function CreateRoom({ inviteCode, onCreateRoom }: CreateRoomProps) {
                 대기 중
               </button>
             </div>
-            <p className="create__hint">최대 4명까지 함께할 수 있어요.</p>
+            <p className={`create__hint${error ? ' create__hint--error' : ''}`} aria-live="polite">
+              {error ?? '최대 4명까지 함께할 수 있어요.'}
+            </p>
           </div>
 
           <button

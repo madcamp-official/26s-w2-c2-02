@@ -24,6 +24,7 @@ interface StudyRoomProps extends ScreenProps {
   currentParticipantId: string;
   isHost: boolean;
   onEndSession: () => void;
+  onLeaveRoom: () => void;
   participants: Participant[];
   room: Room;
   videoJoin?: VideoJoinInfo;
@@ -50,6 +51,7 @@ export function StudyRoom({
   currentParticipantId,
   isHost,
   onEndSession,
+  onLeaveRoom,
   participants,
   room,
   videoJoin,
@@ -292,7 +294,7 @@ export function StudyRoom({
             )}
           </div>
         )}
-        <button type="button" className="ctrl ctrl--leave" aria-label="나가기" onClick={() => go('waiting')}>
+        <button type="button" className="ctrl ctrl--leave" aria-label="나가기" onClick={onLeaveRoom}>
           <LogOut size={20} />
         </button>
       </div>

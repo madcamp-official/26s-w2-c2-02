@@ -1,23 +1,43 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  createInviteCode,
+  formatInviteCode,
+  inviteCodeAlphabet,
+  normalizeInviteCode
+} from '@roomi/shared';
 import { App } from './App';
 
+const socketMock = {
+  connect: vi.fn(),
+  disconnect: vi.fn(),
+  emit: vi.fn(),
+  off: vi.fn(),
+  on: vi.fn()
+};
+
 vi.mock('socket.io-client', () => ({
-  io: vi.fn(() => ({
-    connect: vi.fn(),
-    disconnect: vi.fn(),
-    emit: vi.fn(),
-    off: vi.fn(),
-    on: vi.fn()
-  }))
+  io: vi.fn(() => socketMock)
 }));
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  Object.values(socketMock).forEach((mock) => mock.mockClear());
 });
 
 describe('App screen router', () => {
+  it('keeps generated invite codes complete after normalization and formatting', () => {
+    const code = createInviteCode(() => 11 / 31);
+
+    expect(code).toHaveLength(6);
+    expect(normalizeInviteCode(code)).toHaveLength(6);
+    expect(formatInviteCode(code)).toMatch(/^[A-Z2-9]{3}-[A-Z2-9]{3}$/);
+    inviteCodeAlphabet.split('').forEach((character) => {
+      expect(normalizeInviteCode(character)).toBe(character);
+    });
+  });
+
   it('starts on the nickname onboarding screen', () => {
     render(<App />);
     expect(
@@ -47,6 +67,7 @@ describe('App screen router', () => {
         getUserMedia: vi.fn().mockResolvedValue(stream)
       }
     });
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('API offline')));
     vi.spyOn(Math, 'random').mockReturnValue(0.2345);
 
     render(<App />);
@@ -89,6 +110,7 @@ describe('App screen router', () => {
         getUserMedia: vi.fn().mockResolvedValue(stream)
       }
     });
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('API offline')));
     vi.spyOn(Math, 'random').mockReturnValue(0.2345);
 
     render(<App />);
@@ -198,6 +220,12 @@ describe('App screen router', () => {
     expect(screen.getAllByText('소요').length).toBeGreaterThan(0);
     expect(screen.getByText('민지 (나)')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '방장 메뉴' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '나가기' }));
+    expect(socketMock.emit).toHaveBeenCalledWith('room:leave', {
+      roomId: 'room-server',
+      participantId: 'participant-minji'
+    });
   });
 });
 

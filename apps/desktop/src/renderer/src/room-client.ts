@@ -66,10 +66,16 @@ export function subscribeToRoom(
   socket.on(realtimeEvents.server.error, onError);
 
   return () => {
-    socket.emit(realtimeEvents.client.leaveRoom, roomId);
     socket.off(realtimeEvents.server.roomSnapshot, onSnapshot);
     socket.off(realtimeEvents.server.roomUpdated, onSnapshot);
     socket.off(realtimeEvents.server.error, onError);
     socket.disconnect();
   };
+}
+
+export function leaveRoom(
+  socket: Socket<ServerToClientEvents, ClientToServerEvents> | null,
+  input: { roomId: string; participantId: string }
+) {
+  socket?.emit(realtimeEvents.client.leaveRoom, input);
 }
