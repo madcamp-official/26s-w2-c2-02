@@ -5,11 +5,11 @@ import {
   Mic,
   MicOff,
   MoreHorizontal,
-  PauseCircle,
   Video,
   VideoOff
 } from 'lucide-react';
 import { RoomiMascot } from '../components/RoomiMascot';
+import { InviteCodeCard } from '../components/InviteCodeCard';
 import {
   type Goal,
   type Participant,
@@ -25,7 +25,7 @@ import { useDailyRoom } from '../../use-daily-room';
  * Study Room · Live Session (Figma 47:2).
  * NOTE: No screenshot was available (Figma read quota exhausted). Layout is
  * inferred from the AGENTS.md IA (video grid, timer, goals, Lumi panel,
- * personal confirm message, detection pause, controls). Verify against Figma.
+ * personal confirm message, controls). Verify against Figma.
  */
 interface StudyRoomProps extends ScreenProps {
   currentParticipantId: string;
@@ -81,6 +81,15 @@ export function formatSessionTime(seconds: number) {
   return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
 }
 
+export function reconcilePendingCameraState(
+  reported: boolean,
+  pending: boolean | undefined
+): { cameraOn: boolean; pending: boolean | undefined } {
+  return pending !== undefined && pending !== reported
+    ? { cameraOn: pending, pending }
+    : { cameraOn: reported, pending: undefined };
+}
+
 export function StudyRoom({
   currentParticipantId,
   isHost,
@@ -96,6 +105,7 @@ export function StudyRoom({
 }: StudyRoomProps) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const pendingCameraStateRef = useRef<boolean | undefined>(undefined);
   const {
     callObject,
     localMedia,
@@ -142,7 +152,12 @@ export function StudyRoom({
     }
 
     setIsMicOn(localMedia.audio);
-    setIsCameraOn(localMedia.video);
+    const cameraState = reconcilePendingCameraState(
+      localMedia.video,
+      pendingCameraStateRef.current
+    );
+    pendingCameraStateRef.current = cameraState.pending;
+    setIsCameraOn(cameraState.cameraOn);
   }, [callObject, localMedia.audio, localMedia.video]);
 
   useEffect(() => {
@@ -197,6 +212,7 @@ export function StudyRoom({
   const toggleVideo = () => {
     const next = !isCameraOn;
     if (callObject) {
+      pendingCameraStateRef.current = next;
       callObject.setLocalVideo(next);
     } else {
       localStreamRef.current?.getVideoTracks().forEach((track) => {
@@ -280,6 +296,7 @@ export function StudyRoom({
         </section>
 
         <aside className="study__panel">
+          <InviteCodeCard inviteCode={room.inviteCode} />
           <section className="study-card study-lumi" aria-label="루미의 실시간 안내">
             <div className="study-lumi__head">
               <RoomiMascot size={30} />
@@ -367,9 +384,6 @@ export function StudyRoom({
           onClick={toggleVideo}
         >
           {isCameraOn ? <Video size={20} /> : <VideoOff size={20} />}
-        </button>
-        <button type="button" className="ctrl" aria-label="감지 일시정지">
-          <PauseCircle size={20} />
         </button>
         <button type="button" className="ctrl" aria-label="휴식" onClick={() => go('break')}>
           <Coffee size={20} />
@@ -465,8 +479,8 @@ export function DailyParticipantMedia({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const videoTrack = participant?.tracks?.video?.persistentTrack ?? participant?.tracks?.video?.track;
-  const audioTrack = participant?.tracks?.audio?.persistentTrack ?? participant?.tracks?.audio?.track;
+  const videoTrack = participant?.tracks?.video?.track ?? participant?.tracks?.video?.persistentTrack;
+  const audioTrack = participant?.tracks?.audio?.track ?? participant?.tracks?.audio?.persistentTrack;
   const isVideoPlayable = participant?.tracks?.video?.state === 'playable';
   const shouldShowVideo = Boolean(isVideoPlayable && (isCameraOn || !isMe));
 

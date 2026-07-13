@@ -144,6 +144,22 @@
   gap: 16px;
 }
 
+.study__panel .invite-card {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.study__panel .invite-card__code {
+  grid-column: 1;
+  font-size: clamp(24px, 2.4vw, 32px);
+  letter-spacing: 0.08em;
+}
+
+.study__panel .invite-card__copy {
+  grid-column: 1;
+  grid-row: auto;
+  width: 100%;
+}
+
 .study-card {
   padding: 20px;
   background: var(--card);

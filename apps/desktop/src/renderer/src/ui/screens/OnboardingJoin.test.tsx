@@ -65,4 +65,13 @@ describe('OnboardingJoin', () => {
     const slots = roomCodeInput().nextElementSibling?.querySelectorAll('.code-entry__slot');
     expect(slots?.[2]).toHaveClass('code-entry__slot--active');
   });
+
+  it('joins a complete code with Enter', () => {
+    const props = baseProps();
+    render(<OnboardingJoin {...props} code="ABCDEF" />);
+
+    fireEvent.keyDown(roomCodeInput(), { key: 'Enter' });
+
+    expect(props.onJoin).toHaveBeenCalledTimes(1);
+  });
 });

@@ -1,8 +1,11 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { contextBridge, ipcRenderer } from 'electron';
+import { clipboard, contextBridge, ipcRenderer } from 'electron';
 
 vi.mock('electron', () => ({
+  clipboard: {
+    writeText: vi.fn()
+  },
   contextBridge: {
     exposeInMainWorld: vi.fn()
   },
@@ -28,6 +31,9 @@ describe('preload bridge', () => {
           minimize: expect.any(Function),
           toggleMaximize: expect.any(Function),
           close: expect.any(Function)
+        },
+        clipboard: {
+          writeText: expect.any(Function)
         }
       })
     );
@@ -36,9 +42,11 @@ describe('preload bridge', () => {
     await exposedApi.windowControls.minimize();
     await exposedApi.windowControls.toggleMaximize();
     await exposedApi.windowControls.close();
+    exposedApi.clipboard.writeText('ABCDEF');
 
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('window:minimize');
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('window:toggle-maximize');
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('window:close');
+    expect(clipboard.writeText).toHaveBeenCalledWith('ABCDEF');
   });
 });

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { RoomiMascot } from '../components/RoomiMascot';
+import { InviteCodeCard } from '../components/InviteCodeCard';
 import {
-  formatInviteCode,
   type Goal,
   type GoalRefinement,
   type Participant,
@@ -134,7 +134,8 @@ export function WaitingRoom({
     <div className="screen screen--app">
       <div className="waiting__body">
         <main className="waiting__main">
-          <p className="waiting__eyebrow">대기실 · 방 코드 {formatInviteCode(room.inviteCode)}</p>
+          <p className="waiting__eyebrow">대기실</p>
+          <InviteCodeCard inviteCode={room.inviteCode} />
           {inProgress ? (
             <>
               <span className="badge badge--blue">진행 중</span>

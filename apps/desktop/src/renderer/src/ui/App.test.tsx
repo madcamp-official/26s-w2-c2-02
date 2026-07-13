@@ -93,6 +93,9 @@ describe('App screen router', () => {
     expect(screen.getByText(/소요님/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /새로운 방 만들기/ }));
 
+    expect(screen.queryByText('생성 후 발급')).not.toBeInTheDocument();
+    expect(screen.queryByText('초대 코드')).not.toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('button', { name: '25분' }));
     fireEvent.click(screen.getByRole('button', { name: '방 만들고 대기실로 가기' }));
 
@@ -102,7 +105,7 @@ describe('App screen router', () => {
     fireEvent.click(screen.getByRole('button', { name: '권한 확인하고 입장' }));
 
     await screen.findByRole('heading', { level: 1, name: '다 같이 목표를 정해볼까요?' });
-    expect(screen.getByText('대기실 · 방 코드 HHH-HHH')).toBeInTheDocument();
+    expect(screen.getByText('HHH-HHH')).toBeInTheDocument();
     expect(screen.getAllByText('소요').length).toBeGreaterThan(0);
     // Readiness now reflects the isReady flag, and a freshly created host is not ready yet.
     expect(screen.getByText('0명이 준비를 마쳤어요.')).toBeInTheDocument();

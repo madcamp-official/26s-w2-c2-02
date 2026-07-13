@@ -90,6 +90,12 @@ export function OnboardingJoin({
               }}
               onFocus={() => setIsCodeFocused(true)}
               onBlur={() => setIsCodeFocused(false)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && isCodeComplete && !isJoining) {
+                  event.preventDefault();
+                  onJoin();
+                }
+              }}
               inputMode="text"
               pattern="[A-Za-z0-9]*"
               autoCapitalize="characters"

@@ -12,5 +12,8 @@ interface Window {
       ensureAccess: () => Promise<{ camera: boolean; microphone: boolean }>;
       openPrivacySettings: () => Promise<void>;
     };
+    clipboard: {
+      writeText: (text: string) => void;
+    };
   };
 }

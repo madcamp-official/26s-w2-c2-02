@@ -1,6 +1,11 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DailyParticipantMedia, formatSessionTime, remainingSessionSeconds } from './StudyRoom';
+import {
+  DailyParticipantMedia,
+  formatSessionTime,
+  reconcilePendingCameraState,
+  remainingSessionSeconds
+} from './StudyRoom';
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -37,6 +42,11 @@ describe('StudyRoom session clock', () => {
 });
 
 describe('DailyParticipantMedia', () => {
+  it('keeps the requested camera state until Daily reports the change', () => {
+    expect(reconcilePendingCameraState(false, true)).toEqual({ cameraOn: true, pending: true });
+    expect(reconcilePendingCameraState(true, true)).toEqual({ cameraOn: true, pending: undefined });
+  });
+
   it('reattaches the same Daily video track when local camera is toggled back on', async () => {
     const stream = { id: 'stream-1' };
     const MediaStreamMock = vi.fn(() => stream);
@@ -46,7 +56,7 @@ describe('DailyParticipantMedia', () => {
     const videoTrack = { id: 'video-track-1' } as unknown as MediaStreamTrack;
     const participant = {
       tracks: {
-        video: { state: 'playable', track: staleVideoTrack, persistentTrack: videoTrack }
+        video: { state: 'playable', track: videoTrack, persistentTrack: staleVideoTrack }
       }
     };
 

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { ArrowLeft, Copy } from 'lucide-react';
-import { formatInviteCode, type RoomSettings } from '@roomi/shared';
+import { ArrowLeft } from 'lucide-react';
+import { type RoomSettings } from '@roomi/shared';
 import type { ScreenProps } from './types';
 
 /**
@@ -11,12 +11,11 @@ import type { ScreenProps } from './types';
  */
 interface CreateRoomProps extends ScreenProps {
   error?: string;
-  inviteCode: string;
   isCreating?: boolean;
   onCreateRoom: (settings: RoomSettings) => void;
 }
 
-export function CreateRoom({ error, inviteCode, isCreating = false, onCreateRoom, go }: CreateRoomProps) {
+export function CreateRoom({ error, isCreating = false, onCreateRoom, go }: CreateRoomProps) {
   const [minutes, setMinutes] = useState(50);
   const [breakMode, setBreakMode] = useState<'room' | 'individual'>('room');
   const [scorePublic, setScorePublic] = useState(true);
@@ -41,7 +40,7 @@ export function CreateRoom({ error, inviteCode, isCreating = false, onCreateRoom
     <div className="screen screen--app">
       <div className="create__body">
         <div className="create__card">
-          <div className="screen-meta screen-meta--split">
+          <div className="screen-meta">
             <button
               type="button"
               className="back-link"
@@ -51,10 +50,9 @@ export function CreateRoom({ error, inviteCode, isCreating = false, onCreateRoom
               <ArrowLeft size={16} />
               <span>이전</span>
             </button>
-            <span className="pill pill--purple">현재 코드 {formatInviteCode(inviteCode)}</span>
           </div>
           <h1 className="create__title">방을 만들어볼까요?</h1>
-          <p className="create__subtitle">세션 규칙을 정하면 초대 코드가 만들어져요.</p>
+          <p className="create__subtitle">함께 집중할 세션 규칙을 정해주세요.</p>
 
           <div className="create__section">
             <div className="create__section-label">세션 시간</div>
@@ -122,19 +120,9 @@ export function CreateRoom({ error, inviteCode, isCreating = false, onCreateRoom
             </div>
           </div>
 
-          <div className="create__section">
-            <div className="create__section-label">초대 코드</div>
-            <div className="invite">
-              <span className="invite__code">생성 후 발급</span>
-              <button type="button" className="btn btn--soft" style={{ height: 38, fontSize: 13 }}>
-                <Copy size={15} />
-                대기 중
-              </button>
-            </div>
-            <p className={`create__hint${error ? ' create__hint--error' : ''}`} aria-live="polite">
-              {error ?? '최대 4명까지 함께할 수 있어요.'}
-            </p>
-          </div>
+          <p className={`create__hint${error ? ' create__hint--error' : ''}`} aria-live="polite">
+            {error ?? '최대 4명까지 함께할 수 있어요.'}
+          </p>
 
           <button
             type="button"

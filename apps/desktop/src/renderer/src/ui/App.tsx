@@ -488,7 +488,6 @@ export function App() {
         {screen === 'mediapipe-test' && <MediaPipeTest go={go} />}
         {screen === 'create-room' && (
           <CreateRoom
-            inviteCode={activeRoom.room.inviteCode}
             error={createError}
             isCreating={isCreatingRoom}
             onCreateRoom={createRoom}

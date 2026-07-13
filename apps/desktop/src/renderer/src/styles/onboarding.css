@@ -191,6 +191,16 @@
   transform: translateY(-3px) scale(1.012);
 }
 
+.choice:focus {
+  outline: none;
+}
+
+.choice:focus-visible {
+  border-color: var(--purple-600);
+  background: var(--purple-050);
+  box-shadow: 0 0 0 3px rgba(79, 70, 150, 0.24), 0 12px 24px rgba(79, 70, 150, 0.1);
+}
+
 .choice:active {
   box-shadow: 0 3px 8px rgba(79, 70, 150, 0.12);
   transform: translateY(1px) scale(0.975);
