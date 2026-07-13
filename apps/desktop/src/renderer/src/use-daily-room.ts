@@ -4,6 +4,10 @@ import type { VideoJoinInfo } from '@roomi/shared';
 
 export type DailyRoomState = {
   callObject?: DailyCall;
+  localMedia: {
+    audio: boolean;
+    video: boolean;
+  };
   participantsByRoomiId: Map<string, DailyParticipant>;
   status: 'idle' | 'joining' | 'joined' | 'error';
 };
@@ -11,6 +15,10 @@ export type DailyRoomState = {
 export function useDailyRoom(videoJoin: VideoJoinInfo | undefined) {
   const [callObject, setCallObject] = useState<DailyCall>();
   const [dailyParticipants, setDailyParticipants] = useState<Record<string, DailyParticipant>>({});
+  const [localMedia, setLocalMedia] = useState<DailyRoomState['localMedia']>({
+    audio: true,
+    video: true
+  });
   const [status, setStatus] = useState<DailyRoomState['status']>('idle');
 
   useEffect(() => {
@@ -27,6 +35,10 @@ export function useDailyRoom(videoJoin: VideoJoinInfo | undefined) {
     const syncParticipants = () => {
       if (call) {
         setDailyParticipants(call.participants());
+        setLocalMedia({
+          audio: call.localAudio(),
+          video: call.localVideo()
+        });
       }
     };
 
@@ -51,6 +63,7 @@ export function useDailyRoom(videoJoin: VideoJoinInfo | undefined) {
         call.on('participant-left', syncParticipants);
         call.on('track-started', syncParticipants);
         call.on('track-stopped', syncParticipants);
+        call.on('show-local-video-changed', syncParticipants);
         call.on('camera-error', (event) => {
           console.error('Daily camera error:', event);
           setStatus('error');
@@ -66,6 +79,8 @@ export function useDailyRoom(videoJoin: VideoJoinInfo | undefined) {
         setCallObject(call);
 
         return call.join({
+          startAudioOff: false,
+          startVideoOff: false,
           url: videoJoin.roomUrl,
           token: videoJoin.token
         });
@@ -91,9 +106,11 @@ export function useDailyRoom(videoJoin: VideoJoinInfo | undefined) {
       call?.off('participant-left', syncParticipants);
       call?.off('track-started', syncParticipants);
       call?.off('track-stopped', syncParticipants);
+      call?.off('show-local-video-changed', syncParticipants);
       void call?.leave().finally(() => call?.destroy());
       setCallObject(undefined);
       setDailyParticipants({});
+      setLocalMedia({ audio: true, video: true });
     };
   }, [videoJoin?.roomUrl, videoJoin?.token]);
 
@@ -111,6 +128,7 @@ export function useDailyRoom(videoJoin: VideoJoinInfo | undefined) {
 
   return {
     callObject,
+    localMedia,
     participantsByRoomiId,
     status
   };
