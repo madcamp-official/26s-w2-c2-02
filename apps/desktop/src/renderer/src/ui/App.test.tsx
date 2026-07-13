@@ -54,6 +54,20 @@ describe('App screen router', () => {
     expect(screen.getByText(/소요님/)).toBeInTheDocument();
   });
 
+  it('opens the MediaPipe rule-based focus test screen from onboarding', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('닉네임'), { target: { value: '소요' } });
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    fireEvent.click(screen.getByRole('button', { name: /MediaPipe 집중도 테스트/ }));
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Rule-Based 집중도 label' })).toBeInTheDocument();
+    expect(screen.getByLabelText('현재 집중도 판정')).toHaveTextContent('대기');
+
+    fireEvent.click(screen.getByRole('button', { name: '기준 조정' }));
+    expect(screen.getByRole('dialog', { name: 'Rule-Based 기준 조정' })).toBeInTheDocument();
+  });
+
   it('creates a local room after nickname, room settings, and media permission', async () => {
     const audioTrack = { stop: vi.fn() };
     const videoTrack = { stop: vi.fn() };

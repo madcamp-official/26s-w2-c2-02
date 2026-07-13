@@ -17,6 +17,7 @@ import { OnboardingNickname } from './screens/OnboardingNickname';
 import { OnboardingCreate } from './screens/OnboardingCreate';
 import { OnboardingJoin } from './screens/OnboardingJoin';
 import { OnboardingPermission } from './screens/OnboardingPermission';
+import { MediaPipeTest } from './screens/MediaPipeTest';
 import { CreateRoom } from './screens/CreateRoom';
 import { WaitingRoom } from './screens/WaitingRoom';
 import { StudyRoom } from './screens/StudyRoom';
@@ -452,6 +453,7 @@ export function App() {
             go={go}
           />
         )}
+        {screen === 'mediapipe-test' && <MediaPipeTest go={go} />}
         {screen === 'create-room' && (
           <CreateRoom
             inviteCode={activeRoom.room.inviteCode}
