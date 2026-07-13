@@ -25,16 +25,6 @@ export function registerRealtimeGateway(
   });
 
   io.on('connection', (socket) => {
-    socket.on(realtimeEvents.client.joinRoom, (input, acknowledge) => {
-      try {
-        const snapshot = roomService.joinRoom(input);
-        socket.join(snapshot.room.id);
-        acknowledge(snapshot);
-      } catch (error) {
-        socket.emit(realtimeEvents.server.error, errorMessage(error));
-      }
-    });
-
     socket.on(realtimeEvents.client.subscribeRoom, (roomId, acknowledge) => {
       const snapshot = roomService.getByRoomId(roomId);
 

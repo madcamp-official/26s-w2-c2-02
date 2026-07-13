@@ -26,7 +26,7 @@
 |---|---|
 | 준비 상태 모델 | `Participant.isReady: boolean` 별도 플래그 (집중용 `status`와 분리) |
 | 세션 시작 채널 | `POST /sessions` + `session:start` socket broadcast |
-| 이중 join 버그 | 1단계에서 함께 수정 (입장 경로를 socket join으로 단일화) |
+| 이중 join 버그 | **REST 전용 입장 + socket 구독**으로 단일화 (`page/studyroom`에서 수렴). 1단계에서 죽은 socket `room:join` 경로 제거로 마무리 ✅ |
 | 늦은 입장 라우팅 | 대기실을 **거쳐서**(목표 입력 위해) 진행 중 모드로 → 합류 |
 | 늦은 참가자 목표 | 진행 중에도 목표 입력 허용 |
 
@@ -48,11 +48,11 @@
 
 각 단계: 행동 / 이유 / 위험 / 검증.
 
-### 1. 발견 + join 단일화
-- **행동**: 입장 경로를 socket join으로 단일화, REST `POST /rooms/join`은 호스트 최초 생성/재접속 스냅샷 역할로 정리. 대기실 IA 5요소를 `WaitingRoom.tsx` 하드코딩 값과 대조.
-- **이유**: 이중 join 버그 위에 준비상태·세션시작을 얹으면 오염. 명세(README)와 코드 불일치 선(先) 정합.
-- **위험**: 입장 경로 변경이 기존 방 생성 흐름을 깨뜨림.
-- **검증**: 2인 입장 시 참가자 중복 없음.
+### 1. 발견 + join 단일화 ✅ (완료)
+- **행동**: `page/studyroom` 머지로 입장은 이미 **REST 전용**(`POST /rooms/join` 단일 push), socket은 `room:subscribe` 구독으로 수렴. 남은 죽은 경로였던 socket `room:join` 핸들러를 제거하고 shared 계약(`ClientToServerEvents`)에서도 삭제.
+- **이유**: 이중 join 버그 위에 준비상태·세션시작을 얹으면 오염. join이 화상 토큰까지 발급하므로 REST가 더 자연스러움(계획의 "socket 단일화"에서 방향 전환).
+- **위험**: 계약 변경이 클라이언트를 깨뜨림 → 워크스페이스 typecheck로 desktop이 해당 이벤트를 안 쓰는 것 확인.
+- **검증**: socket으로 `room:join` 쏴도 참가자 중복 없음 (`services/api/src/realtime/gateway.test.ts`, vitest 통과). typecheck 전체 통과.
 
 ### 2. shared 타입·이벤트 확장
 - **행동**: `Participant.isReady: boolean`, `StudySession` 타입, `RoomSnapshot.currentSession?` 추가. realtime 이벤트 `participant:ready`·`goal:submit`·`session:start` 추가. **join 응답에 `room.status` + `currentSession` 항상 포함(모드 분기 계약 고정)**.

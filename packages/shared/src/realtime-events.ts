@@ -1,5 +1,4 @@
 import type {
-  JoinRoomInput,
   RoomSnapshot,
   LeaveRoomInput,
   UpdateParticipantStatusInput
@@ -7,7 +6,6 @@ import type {
 
 export const realtimeEvents = {
   client: {
-    joinRoom: 'room:join',
     leaveRoom: 'room:leave',
     subscribeRoom: 'room:subscribe',
     updateStatus: 'participant:update-status'
@@ -21,10 +19,6 @@ export const realtimeEvents = {
 } as const;
 
 export type ClientToServerEvents = {
-  [realtimeEvents.client.joinRoom]: (
-    input: JoinRoomInput,
-    acknowledge: (snapshot: RoomSnapshot) => void
-  ) => void;
   [realtimeEvents.client.leaveRoom]: (input: LeaveRoomInput) => void;
   [realtimeEvents.client.subscribeRoom]: (
     roomId: string,

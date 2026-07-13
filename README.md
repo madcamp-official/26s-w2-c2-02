@@ -335,7 +335,7 @@ type SessionSummary = {
 | POST | `/api/focus-events/:id/feedback` | 사용자 확인 응답 저장 | `answer` | `updatedStatus` | 오탐 보정 데이터 |
 | POST | `/api/roomi/messages` | 루미 메시지 생성 | `eventType`, `roomId`, `sessionId`, `targetUserId` | `message` | LLM API 서버 호출 |
 | GET | `/api/sessions/:sessionId/summary` | 개인/방 전체 요약 조회 | `sessionId` | `personalSummary`, `roomSummary` | 종료 화면에서 사용 |
-| Socket.IO | `room:join` | 실시간 방 참가 | `roomId`, `participantId` | `roomState` | 참가자별 socket room 연결 |
+| Socket.IO | `room:subscribe` | 실시간 방 구독 | `roomId` | `roomSnapshot` | 입장(멤버십)은 REST 전용, socket은 구독만 |
 | Socket.IO | `participant:status` | 참가자 상태 변경 | `participantId`, `status` | `broadcast participant:update` | 집중/휴식/자리비움 동기화 |
 | Socket.IO | `timer:sync` | 세션 타이머 동기화 | `sessionId`, `startedAt`, `mode` | `broadcast timer:update` | 서버 시간을 기준으로 계산 |
 | 외부 API | LLM API | 운영자 문구 생성 | event context, tone, user/room state | message text | 키는 서버 환경변수로 관리 |
