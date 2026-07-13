@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import { RoomiMascot } from '../components/RoomiMascot';
 import { inviteCodeLength, isInviteCodeComplete, normalizeInviteCode } from '@roomi/shared';
 import type { ScreenProps } from './types';
@@ -16,7 +17,7 @@ interface OnboardingJoinProps extends ScreenProps {
   onJoin: () => void;
 }
 
-export function OnboardingJoin({ code, error, onCodeChange, onJoin }: OnboardingJoinProps) {
+export function OnboardingJoin({ code, error, onCodeChange, onJoin, go }: OnboardingJoinProps) {
   const isCodeComplete = isInviteCodeComplete(code);
   const [hasUnsupportedCodeCharacter, setHasUnsupportedCodeCharacter] = useState(false);
   const codeCharacters = normalizeInviteCode(code).padEnd(inviteCodeLength, ' ').split('');
@@ -24,6 +25,15 @@ export function OnboardingJoin({ code, error, onCodeChange, onJoin }: Onboarding
   return (
     <div className="screen screen--onboarding">
       <div className="onb-card">
+        <button
+          type="button"
+          className="onb-card__back"
+          onClick={() => go('onboarding-create')}
+          aria-label="이전 화면으로"
+        >
+          <ArrowLeft size={16} />
+          <span>이전</span>
+        </button>
         <span className="pill pill--purple onb-card__step">STEP 3 / 4 · 입장</span>
         <div className="onb-card__mascot">
           <RoomiMascot size={64} />

@@ -1,4 +1,4 @@
-import { ChevronRight, KeyRound, Plus } from 'lucide-react';
+import { ArrowLeft, ChevronRight, KeyRound, Plus } from 'lucide-react';
 import { RoomiMascot } from '../components/RoomiMascot';
 import type { ScreenProps } from './types';
 
@@ -16,6 +16,15 @@ export function OnboardingCreate({ nickname, go }: OnboardingCreateProps) {
   return (
     <div className="screen screen--onboarding">
       <div className="onb-card">
+        <button
+          type="button"
+          className="onb-card__back"
+          onClick={() => go('onboarding-nickname')}
+          aria-label="이전 화면으로"
+        >
+          <ArrowLeft size={16} />
+          <span>이전</span>
+        </button>
         <span className="pill pill--purple onb-card__step">STEP 2 / 4 · 방</span>
         <div className="onb-card__mascot">
           <RoomiMascot size={64} />
