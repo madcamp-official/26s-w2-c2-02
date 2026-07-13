@@ -28,8 +28,8 @@ import {
   createRoomSocket,
   joinRoomSession,
   leaveRoom,
+  refineGoal,
   RoomApiError,
-  setReady,
   startSession,
   submitGoal,
   subscribeToRoom
@@ -272,6 +272,14 @@ export function App() {
     }
   }, [screen, isHost, activeRoom.room.status]);
 
+  // An ended room is never joinable. This also covers a participant who receives
+  // the terminal snapshot while they are already in the waiting or study screen.
+  useEffect(() => {
+    if (activeRoom.room.status === 'ended' && screen !== 'retrospective') {
+      go('retrospective');
+    }
+  }, [screen, activeRoom.room.status]);
+
   const createRoom = async (settings: RoomSettings) => {
     const input = { nickname: nickname || '나', settings };
     setCreateError(undefined);
@@ -330,26 +338,6 @@ export function App() {
     go('onboarding-create');
   };
 
-  const toggleReady = (isReady: boolean) => {
-    if (!roomDraft) return;
-    const participantId = roomDraft.currentParticipantId;
-
-    if (roomDraft.realtime === 'server') {
-      setReady(socketRef.current, { roomId: roomDraft.room.id, participantId, isReady });
-    }
-
-    setRoomDraft((current) =>
-      current
-        ? {
-            ...current,
-            participants: current.participants.map((participant) =>
-              participant.id === participantId ? { ...participant, isReady } : participant
-            )
-          }
-        : current
-    );
-  };
-
   const submitCurrentGoal = (rawText: string) => {
     if (!roomDraft) return;
     const participantId = roomDraft.currentParticipantId;
@@ -381,6 +369,9 @@ export function App() {
     });
   };
 
+  const refineCurrentGoal = (rawGoal: string) =>
+    refineGoal({ rawGoal, sessionMinutes: activeRoom.room.settings.sessionMinutes });
+
   const startCurrentSession = async () => {
     if (!roomDraft) return;
 
@@ -409,7 +400,19 @@ export function App() {
     }
 
     setRoomDraft((current) =>
-      current ? { ...current, room: { ...current.room, status: 'studying' } } : current
+      current
+        ? {
+            ...current,
+            room: { ...current.room, status: 'studying' },
+            currentSession: {
+              id: `session-${Date.now()}`,
+              roomId: current.room.id,
+              startedAt: now(),
+              plannedMinutes: current.room.settings.sessionMinutes,
+              mode: 'study'
+            }
+          }
+        : current
     );
     go('study');
   };
@@ -464,10 +467,11 @@ export function App() {
             goals={activeRoom.goals}
             currentParticipantId={activeRoom.currentParticipantId}
             isHost={isHost}
-            onToggleReady={toggleReady}
             onSubmitGoal={submitCurrentGoal}
+            onRefineGoal={refineCurrentGoal}
             onStartSession={startCurrentSession}
             onJoinSession={() => go('study')}
+            onLeaveRoom={leaveCurrentRoom}
             go={go}
           />
         )}
@@ -476,9 +480,11 @@ export function App() {
             currentParticipantId={activeRoom.currentParticipantId}
             isHost={isHost}
             onEndSession={() => go('retrospective')}
-            onLeaveRoom={leaveCurrentRoom}
+            onLeaveRoom={() => go('waiting')}
             participants={activeRoom.participants}
+            goals={activeRoom.goals}
             room={activeRoom.room}
+            currentSession={activeRoom.currentSession}
             videoJoin={activeRoom.videoJoin}
             go={go}
           />

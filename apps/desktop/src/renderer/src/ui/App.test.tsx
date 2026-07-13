@@ -253,10 +253,56 @@ describe('App screen router', () => {
     expect(screen.queryByRole('button', { name: '방장 메뉴' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '나가기' }));
+    expect(await screen.findByRole('heading', { level: 1, name: '이미 공부 중이에요' })).toBeInTheDocument();
+    expect(socketMock.emit).not.toHaveBeenCalledWith('room:leave', {
+      roomId: 'room-server',
+      participantId: 'participant-minji'
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '방 나가기' }));
     expect(socketMock.emit).toHaveBeenCalledWith('room:leave', {
       roomId: 'room-server',
       participantId: 'participant-minji'
     });
+    expect(screen.getByText(/민지님/)).toBeInTheDocument();
+  });
+
+  it('routes an ended room to the retrospective instead of the waiting room', async () => {
+    const timestamp = new Date().toISOString();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          currentParticipantId: 'participant-minji',
+          snapshot: {
+            room: {
+              id: 'room-ended',
+              inviteCode: '7KQ2MD',
+              hostUserId: 'user-host',
+              settings: defaultTestRoomSettings(),
+              status: 'ended',
+              createdAt: timestamp
+            },
+            participants: [],
+            goals: [],
+            roomiMessages: []
+          }
+        })
+      })
+    );
+
+    render(<App />);
+    fireEvent.change(screen.getByLabelText('닉네임'), { target: { value: '민지' } });
+    fireEvent.click(screen.getByRole('button', { name: '다음' }));
+    fireEvent.click(screen.getByRole('button', { name: /방 코드로 입장하기/ }));
+    fireEvent.change(screen.getByLabelText('방 코드'), { target: { value: '7KQ2MD' } });
+    fireEvent.click(screen.getByRole('button', { name: '입장하기' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '오늘 세션, 잘 마쳤어요!' })
+    ).toBeInTheDocument();
+    expect(screen.queryByText('다 같이 목표를 정해볼까요?')).not.toBeInTheDocument();
   });
 });
 

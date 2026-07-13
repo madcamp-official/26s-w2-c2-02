@@ -9,7 +9,7 @@
 | `POST` | `/rooms/join` | Join an existing room by invite code and return the caller participant id. |
 | `POST` | `/rooms/:roomId/goals` | Upsert the calling participant's goal (`participantId`, `rawText`) and return the room snapshot. Allowed regardless of room status (late joiners can set goals). |
 | `POST` | `/goals/refine` | Refine a raw goal (`rawGoal`, `sessionMinutes`) via Gemini and return `{ refinedText, reason, source }`. Always `200`; `source` is `template` when the LLM is unavailable. The raw goal is not persisted. |
-| `POST` | `/sessions` | Host starts the study session (`roomId`, `participantId`). Sets `room.status = 'studying'` and `currentSession`, returns the snapshot. `403` for non-host, `409` if not `waiting`, `404` for unknown room. Transition reaches everyone via `room:updated`. |
+| `POST` | `/sessions` | Host starts the study session (`roomId`, `participantId`) regardless of participants' `isReady` state. Sets `room.status = 'studying'` and `currentSession`, returns the snapshot. `403` for non-host, `409` if not `waiting`, `404` for unknown room. Transition reaches everyone via `room:updated`. |
 | `GET` | `/rooms/:inviteCode` | Read a room snapshot by invite code. |
 
 Invite codes are 6-character uppercase alphanumeric strings. Roomi excludes ambiguous characters (`0`, `O`, `1`, `I`, `L`) and normalizes user input before lookup.
@@ -30,6 +30,12 @@ Invite codes are 6-character uppercase alphanumeric strings. Roomi excludes ambi
 
 The renderer uses `currentParticipantId` to mark the local participant, drive camera/mic controls, and decide whether host-only actions should be visible.
 When Daily credentials are configured, `videoJoin` contains a Daily room URL and participant meeting token. The API creates one private Daily room per Roomi room and issues a token per participant with the Roomi participant id as Daily `user_id`.
+
+## Renderer session behavior
+
+- The waiting room uses `room.status` as its route contract: `waiting` shows readiness and the host-only start action; `studying`/`break` lets a late participant submit a goal and join without interrupting the active session; the study-room `나가기` control returns there without removing the participant, while the waiting-room `방 나가기` control sends `room:leave` and returns to onboarding; `ended` opens the retrospective screen instead of a joinable waiting room.
+- The study-room timer is calculated on each client from `currentSession.startedAt` and `currentSession.plannedMinutes`, so it keeps the server session's remaining time when a participant joins late.
+- The waiting room calls `POST /goals/refine` only after the participant enters a goal. Choosing **이 목표로 저장** submits the suggested text through the normal goal-upsert API. Gemini is optional: a `template` response is displayed and can be accepted in the same way.
 
 Join failures return JSON error messages:
 

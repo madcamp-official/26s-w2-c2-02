@@ -52,10 +52,15 @@ function baseProps() {
     goals: [] as Goal[],
     currentParticipantId: 'p-host',
     isHost: true,
-    onToggleReady: vi.fn(),
     onSubmitGoal: vi.fn(),
+    onRefineGoal: vi.fn().mockResolvedValue({
+      refinedText: '미적분 3단원 핵심 문제 10개 풀기',
+      reason: '50분 안에 확인 가능한 목표예요.',
+      source: 'template'
+    }),
     onStartSession: vi.fn(),
-    onJoinSession: vi.fn()
+    onJoinSession: vi.fn(),
+    onLeaveRoom: vi.fn()
   };
 }
 
@@ -74,6 +79,16 @@ describe('WaitingRoom', () => {
     fireEvent.click(startButton);
 
     expect(props.onStartSession).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: /준비/ })).not.toBeInTheDocument();
+  });
+
+  it('provides a separate control for leaving the room', () => {
+    const props = baseProps();
+    render(<WaitingRoom {...props} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '방 나가기' }));
+
+    expect(props.onLeaveRoom).toHaveBeenCalledTimes(1);
   });
 
   it('hides the start button from members and shows a waiting message', () => {
@@ -106,5 +121,21 @@ describe('WaitingRoom', () => {
     fireEvent.click(screen.getByRole('button', { name: '목표 저장' }));
 
     expect(props.onSubmitGoal).toHaveBeenCalledWith('미적분 3단원');
+  });
+
+  it('requests a Roomi refinement and saves the accepted suggestion', async () => {
+    const props = baseProps();
+    render(<WaitingRoom {...props} />);
+
+    fireEvent.change(screen.getByLabelText('내 목표'), {
+      target: { value: '미적분 3단원' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: '루미에게 다듬기' }));
+
+    expect(await screen.findByText('미적분 3단원 핵심 문제 10개 풀기')).toBeInTheDocument();
+    expect(props.onRefineGoal).toHaveBeenCalledWith('미적분 3단원');
+    fireEvent.click(screen.getByRole('button', { name: '이 목표로 저장' }));
+
+    expect(props.onSubmitGoal).toHaveBeenCalledWith('미적분 3단원 핵심 문제 10개 풀기');
   });
 });

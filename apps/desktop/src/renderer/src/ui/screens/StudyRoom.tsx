@@ -10,7 +10,14 @@ import {
   VideoOff
 } from 'lucide-react';
 import { RoomiMascot } from '../components/RoomiMascot';
-import { formatInviteCode, type Participant, type Room, type VideoJoinInfo } from '@roomi/shared';
+import {
+  formatInviteCode,
+  type Goal,
+  type Participant,
+  type Room,
+  type StudySession,
+  type VideoJoinInfo
+} from '@roomi/shared';
 import type { ScreenProps } from './types';
 import { useDailyRoom } from '../../use-daily-room';
 
@@ -26,7 +33,9 @@ interface StudyRoomProps extends ScreenProps {
   onEndSession: () => void;
   onLeaveRoom: () => void;
   participants: Participant[];
+  goals: Goal[];
   room: Room;
+  currentSession?: StudySession;
   videoJoin?: VideoJoinInfo;
 }
 
@@ -43,8 +52,15 @@ function participantInitial(nickname: string) {
   return nickname.trim().slice(0, 1) || '?';
 }
 
-function defaultGoalFor(participant: Participant) {
-  return participant.role === 'host' ? '세션 흐름 정리하기' : '이번 세션 목표 집중하기';
+export function remainingSessionSeconds(session: StudySession, timestamp = Date.now()) {
+  const endsAt = Date.parse(session.startedAt) + session.plannedMinutes * 60_000;
+  return Math.max(0, Math.ceil((endsAt - timestamp) / 1_000));
+}
+
+export function formatSessionTime(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
 }
 
 export function StudyRoom({
@@ -53,7 +69,9 @@ export function StudyRoom({
   onEndSession,
   onLeaveRoom,
   participants,
+  goals,
   room,
+  currentSession,
   videoJoin,
   go
 }: StudyRoomProps) {
@@ -64,8 +82,19 @@ export function StudyRoom({
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [isHostMenuOpen, setIsHostMenuOpen] = useState(false);
   const [isEndConfirmOpen, setIsEndConfirmOpen] = useState(false);
+  const [timestamp, setTimestamp] = useState(() => Date.now());
   const currentParticipant =
     participants.find((participant) => participant.id === currentParticipantId) ?? participants[0];
+  const plannedSeconds = (currentSession?.plannedMinutes ?? room.settings.sessionMinutes) * 60;
+  const remainingSeconds = currentSession
+    ? remainingSessionSeconds(currentSession, timestamp)
+    : plannedSeconds;
+  const elapsedPercent = plannedSeconds === 0 ? 0 : ((plannedSeconds - remainingSeconds) / plannedSeconds) * 100;
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setTimestamp(Date.now()), 1_000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (videoJoin) {
@@ -196,9 +225,11 @@ export function StudyRoom({
         <aside className="study__panel">
           <div className="study-card">
             <div className="study-timer__label">집중 중</div>
-            <div className="study-timer__value">42:18</div>
+            <time className="study-timer__value" aria-label="남은 집중 시간">
+              {formatSessionTime(remainingSeconds)}
+            </time>
             <div className="study-timer__bar">
-              <div className="study-timer__fill" style={{ width: '58%' }} />
+              <div className="study-timer__fill" style={{ width: `${elapsedPercent}%` }} />
             </div>
           </div>
 
@@ -207,7 +238,10 @@ export function StudyRoom({
             {participants.map((participant) => (
               <div className="goal" key={participant.id}>
                 <span className="goal__who">{participant.nickname}</span>
-                <span className="goal__text">{defaultGoalFor(participant)}</span>
+                <span className="goal__text">
+                  {goals.find((goal) => goal.participantId === participant.id)?.rawText ??
+                    '아직 목표를 입력하지 않았어요.'}
+                </span>
               </div>
             ))}
           </div>

@@ -2,6 +2,8 @@ import { io, type Socket } from 'socket.io-client';
 import type {
   ClientToServerEvents,
   CreateRoomInput,
+  GoalRefineInput,
+  GoalRefinement,
   JoinRoomInput,
   ParticipantReadyInput,
   RoomSession,
@@ -66,6 +68,20 @@ export function submitGoal(input: { roomId: string; participantId: string; rawTe
 
 export function startSession(input: { roomId: string; participantId: string }) {
   return requestSnapshot('/sessions', input);
+}
+
+export async function refineGoal(input: GoalRefineInput): Promise<GoalRefinement> {
+  const response = await fetch(`${apiBaseUrl}/goals/refine`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input)
+  });
+
+  if (!response.ok) {
+    throw new RoomApiError(`Goal refinement failed: ${response.status}`, response.status);
+  }
+
+  return (await response.json()) as GoalRefinement;
 }
 
 export function setReady(

@@ -7,6 +7,9 @@
 
 ### Added
 
+- 대기실에서 루미에게 목표를 다듬어 달라고 요청하고, 제안을 확인한 뒤 바로 내 목표로 저장할 수 있게 했습니다. Gemini 키가 없을 때의 템플릿 제안도 같은 흐름으로 사용할 수 있습니다.
+- 진행 중인 세션에 합류한 참가자도 스터디룸에서 각 참가자의 실제 저장 목표와 서버 세션 기준 남은 시간을 확인할 수 있게 했습니다.
+- 이미 종료된 방에 입장하면 대기실에 남지 않고 회고 화면으로 이동하도록 했습니다.
 - 협업형 실전 산출물 제작 과제용 `README.md` 템플릿을 추가했습니다.
 - 루미(Roomi) 프로젝트 기획안, 구현 명세, IA 구조도, 데이터 구조, API 초안을 루트 `README.md` 에 정리했습니다.
 - AI 협업을 위한 공통 문서 체계를 추가했습니다: `AGENTS.md`, `CLAUDE.md`, `docs/ai_workflows.md`, `KPT.md`.
@@ -32,6 +35,10 @@
 
 ### Changed
 
+- 대기실에 실제 퇴장을 위한 `방 나가기`를 추가했습니다. 스터디룸의 `나가기`는 대기실 이동만 하고, 이 버튼을 눌러야 참가자 목록에서 제거됩니다.
+- 스터디룸의 `나가기`는 방에서 즉시 퇴장시키지 않고 먼저 진행 중 대기실로 돌아가도록 변경했습니다. 참가자는 `합류하기`로 같은 세션에 다시 들어갈 수 있습니다.
+- 대기실 오른쪽 패널에서 원래 화면 흐름에 없던 개인 `준비완료` 토글을 제거했습니다. 준비 상태와 관계없이 방장만 세션 시작 버튼을 사용합니다.
+- 대기실의 준비 상태를 세션 시작 조건에서 분리했습니다. 이제 다른 참가자가 준비하지 않아도 방장은 언제든 세션을 시작할 수 있습니다.
 - 중앙 Roomi API 서버를 LAN/배포 환경에서 띄울 수 있도록 `API_HOST` listen 설정과 comma-separated `CLIENT_ORIGIN` allowlist 를 추가했습니다. REST CORS 와 Socket.IO CORS 는 같은 origin 정책을 공유합니다.
 - 다른 PC의 renderer 가 같은 중앙 API 를 바라보도록 `VITE_ROOMI_API_URL` 설정 예시, `/health` 확인 방법, in-memory room store 한계를 `docs/api.md` 와 `docs/architecture.md` 에 정리했습니다.
 - KAIST 내부망 같은 restricted network 에서 Cloudflare Tunnel 로 Roomi API 를 외부 공개하는 설정 예시와 client URL 설정을 `docs/api.md` 에 추가했습니다.

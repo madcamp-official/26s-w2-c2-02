@@ -1,6 +1,6 @@
 # 대기실(Waiting Room) API 범위 계획
 
-> 상태: 계획(미착수) · 브랜치: `page/waitingroom`
+> 상태: 7단계 완료 · 8단계 문서 동기화 완료, 실제 Electron E2E는 실행 환경 제약으로 보류 · 브랜치: `page/waitingroom`
 > 관련 문서: [`api.md`](./api.md) (구현 후 동기화), README 「API / 외부 서비스 연동」 표
 
 대기실 IA 5요소(참가자 목록 / 준비 상태 / 개인 목표 입력 / 루미 다듬기 / 세션 시작)에
@@ -62,7 +62,7 @@
 
 ### 3. 준비 상태 API ✅ (완료)
 - **행동**: socket `participant:ready`(명시적 `isReady` 목표 상태 — 토글 대신 멱등) → `RoomService.setReady()` → `onRoomUpdated`가 `room:updated` broadcast.
-- **이유**: 대기실 핵심 인터랙션이자 "모두 준비되면 시작" 기준.
+- **이유**: 대기실의 참가자 준비 표시용 신호. 현재 desktop UI에서는 원래 화면 흐름에 없는 별도 준비 토글을 노출하지 않으며, 세션 시작 권한·조건과도 분리한다. 방장은 다른 참가자의 준비 여부와 관계없이 시작할 수 있다.
 - **위험**: 집중용 `status`와 대기용 `isReady` 혼용 시 스터디룸 단계 의미 충돌 → 별도 필드로 분리(2단계).
 - **검증**: `RoomService.setReady` 단위 테스트(set/clear/broadcast/미존재 방) + gateway 통합 테스트로 **2개 소켓 구독 상태에서 ready 변경이 양쪽에 broadcast** 되는 것 확인. vitest 8건 통과.
 
@@ -81,19 +81,21 @@
 ### 6. 세션 시작 API ✅ (완료)
 - **행동**: `POST /sessions`(host 권한 검증, `room.status === 'waiting'`일 때만 허용, 아니면 409, `StudySession` 생성) → `room.status='studying'`+`currentSession` 세팅 → **기존 `room:updated`로 전원 전환**.
 - **설계 결정**: 별도 `session:start` 이벤트를 만들지 않고 `room:updated` 재사용(스냅샷에 `currentSession`+`studying`이 실려 나가 단일 소스). 클라(7단계)는 status 변화로 스터디룸 전환.
-- **위험**: host 아닌 참가자 시작 / 준비 미완료 시작 → 서버에서 강제(클라 버튼 신뢰 금지). 중복 클릭·늦은 참가자의 두 번째 세션 생성은 `waiting` 가드(409)로 차단.
+- **위험**: host 아닌 참가자 시작 → 서버에서 강제(클라 버튼 신뢰 금지). 준비 상태는 시작 조건이 아니며, 중복 클릭·늦은 참가자의 두 번째 세션 생성은 `waiting` 가드(409)로 차단.
 - **검증**: `startSession` 단위 5건(host 성공/broadcast/비host 403 사유/이미 시작 409 사유/미존재 방) + REST 4건(200·403·409·404). vitest 36건 통과.
 
-### 7. 대기실 2모드 분기 (프론트) 🔶 (핵심 완료, 일부 남음)
-- **행동**: `WaitingRoom.tsx` 하드코딩 제거 → props 주도. `room.status`로 시작 전/진행 중 2모드 렌더, host/member CTA 분기, 실제 `isReady` 기반 준비 현황, 목표 입력. App: draft에 `goals`/`currentSession` 추가 + subscribe 확장, 핸들러(ready/goal/start), **host 시작 시 member는 `room:updated`(studying)로 자동 전환**, 늦은 합류는 진행 중 모드 `합류하기`.
+### 7. 대기실 2모드 분기 (프론트) ✅
+- **행동**: `WaitingRoom.tsx` 하드코딩 제거 → props 주도. `room.status`로 시작 전/진행 중 2모드 렌더, host/member CTA 분기, 실제 `isReady` 기반 준비 현황, 목표 입력. 원래 화면 흐름에 없는 desktop 준비완료 토글은 노출하지 않고, **host 시작 시 member는 `room:updated`(studying)로 자동 전환**, 늦은 합류는 진행 중 모드 `합류하기`.
 - **검증(완료)**: WaitingRoom 컴포넌트 테스트 5건(ready 수·host 시작·member 시작버튼 없음·진행 중 모드 합류·목표 저장) + App 테스트 갱신(member 자동 전환, ready 0/4). desktop 15건 통과.
-- **남은 것**: `ended` 방 라우팅(회고/닫힘), 스터디룸에 목표·`currentSession` 타이머 반영, 대기실 LLM 다듬기(`POST /goals/refine`) UI 연결.
+- **마무리**: `ended` 스냅샷은 대기실 진입 대신 회고 화면으로 라우팅한다. 스터디룸은 participant별 저장 목표와 `currentSession.startedAt`·`plannedMinutes` 기반 남은 시간을 표시한다. 대기실은 `POST /goals/refine` 제안을 표시하고, 수락 시 기존 goal upsert 경로로 저장한다.
+- **검증(추가)**: 종료 방 라우팅 App 테스트, 목표 다듬기 요청·수락 컴포넌트 테스트, 서버 시작 시각 기반 타이머 단위 테스트를 추가한다.
 
-### 8. 문서 sync + e2e (마무리)
+### 8. 문서 sync + e2e (마무리) 🔶
 - **행동**: `docs/api.md`·README API표·`packages/shared`·`CHANGELOG.md` 동기화(AGENTS.md 규칙).
 - **이유**: 문서-코드 drift 방지는 저장소 필수 규칙.
 - **위험**: 문서만/코드만 갱신 → 명세 drift 재발.
-- **검증**: `pnpm -r typecheck` + 정상 시작 시나리오와 늦은 입장 시나리오 각 1회 e2e 완주.
+- **문서 sync(완료)**: `docs/api.md` renderer 동작 계약과 `CHANGELOG.md` 사용자 영향 항목을 갱신했다. 루트 README는 저장소 규칙에 따라 이번 UI/API 연결 변경으로 수정하지 않았다.
+- **검증**: `pnpm -r typecheck` 및 desktop Vitest 19건 통과. `pnpm --filter @roomi/desktop test:e2e:local`은 production build 완료 뒤 현재 환경에서 Electron이 `SIGABRT`로 종료되어 창 검증 전 실패했다. GUI가 가능한 로컬 환경에서 정상 시작·늦은 입장 시나리오를 각각 완주해야 한다.
 
 ## 착수 순서 근거
 

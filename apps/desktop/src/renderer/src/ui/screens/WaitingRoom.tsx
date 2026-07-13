@@ -1,6 +1,12 @@
 import { useState } from 'react';
 import { RoomiMascot } from '../components/RoomiMascot';
-import { formatInviteCode, type Goal, type Participant, type Room } from '@roomi/shared';
+import {
+  formatInviteCode,
+  type Goal,
+  type GoalRefinement,
+  type Participant,
+  type Room
+} from '@roomi/shared';
 import type { ScreenProps } from './types';
 
 interface WaitingRoomProps extends ScreenProps {
@@ -9,10 +15,11 @@ interface WaitingRoomProps extends ScreenProps {
   goals: Goal[];
   currentParticipantId: string;
   isHost: boolean;
-  onToggleReady: (isReady: boolean) => void;
   onSubmitGoal: (rawText: string) => void;
+  onRefineGoal: (rawText: string) => Promise<GoalRefinement>;
   onStartSession: () => void;
   onJoinSession: () => void;
+  onLeaveRoom: () => void;
 }
 
 /** Waiting Room · 대기실 (Figma 70:41). Renders two modes by room.status. */
@@ -22,22 +29,51 @@ export function WaitingRoom({
   goals,
   currentParticipantId,
   isHost,
-  onToggleReady,
   onSubmitGoal,
+  onRefineGoal,
   onStartSession,
-  onJoinSession
+  onJoinSession,
+  onLeaveRoom
 }: WaitingRoomProps) {
   const inProgress = room.status === 'studying' || room.status === 'break';
   const readyCount = participants.filter((participant) => participant.isReady).length;
-  const me = participants.find((participant) => participant.id === currentParticipantId);
   const myGoal = goals.find((goal) => goal.participantId === currentParticipantId);
   const [goalText, setGoalText] = useState(myGoal?.rawText ?? '');
+  const [refinement, setRefinement] = useState<GoalRefinement | null>(null);
+  const [refineError, setRefineError] = useState<string | null>(null);
+  const [isRefining, setIsRefining] = useState(false);
 
   const submitGoal = () => {
     const trimmed = goalText.trim();
     if (trimmed) {
       onSubmitGoal(trimmed);
     }
+  };
+
+  const refineGoal = async () => {
+    const trimmed = goalText.trim();
+    if (!trimmed) {
+      setRefineError('먼저 다듬을 목표를 적어주세요.');
+      return;
+    }
+
+    setIsRefining(true);
+    setRefineError(null);
+    try {
+      setRefinement(await onRefineGoal(trimmed));
+    } catch {
+      setRefinement(null);
+      setRefineError('루미가 목표를 다듬지 못했어요. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsRefining(false);
+    }
+  };
+
+  const applyRefinement = () => {
+    if (!refinement) return;
+    setGoalText(refinement.refinedText);
+    onSubmitGoal(refinement.refinedText);
+    setRefinement(null);
   };
 
   const people = [
@@ -92,18 +128,41 @@ export function WaitingRoom({
             className="field waiting__goal-input"
             placeholder="이번 세션에 집중할 한 가지를 적어주세요"
             value={goalText}
-            onChange={(event) => setGoalText(event.target.value)}
+            onChange={(event) => {
+              setGoalText(event.target.value);
+              setRefinement(null);
+              setRefineError(null);
+            }}
           />
-          <button type="button" className="btn btn--ghost" onClick={submitGoal}>
-            목표 저장
-          </button>
+          <div className="waiting__goal-actions">
+            <button type="button" className="btn btn--ghost" onClick={submitGoal}>
+              목표 저장
+            </button>
+            <button type="button" className="btn btn--primary" onClick={refineGoal} disabled={isRefining}>
+              {isRefining ? '루미가 다듬는 중...' : '루미에게 다듬기'}
+            </button>
+          </div>
 
           <section className="lumi-suggest">
             <div className="lumi-suggest__head">
               <RoomiMascot size={22} />
               루미의 제안
             </div>
-            <p className="lumi-suggest__lead">목표를 적으면 세션에 맞는 크기로 다듬어줄게요.</p>
+            {refinement ? (
+              <>
+                <p className="lumi-suggest__quote">{refinement.refinedText}</p>
+                <p className="lumi-suggest__note">{refinement.reason}</p>
+                <div className="lumi-suggest__actions">
+                  <button type="button" className="btn btn--primary" onClick={applyRefinement}>
+                    이 목표로 저장
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className="lumi-suggest__lead">
+                {refineError ?? '목표를 적으면 세션에 맞는 크기로 다듬어줄게요.'}
+              </p>
+            )}
           </section>
         </main>
 
@@ -136,19 +195,11 @@ export function WaitingRoom({
               {readyCount} / {room.settings.maxParticipants}명 준비완료
             </div>
             <div className="status-card__note">
-              {inProgress ? '진행 중인 세션에 합류할 수 있어요.' : '모두 준비되면 바로 시작할 수 있어요.'}
+              {inProgress
+                ? '진행 중인 세션에 합류할 수 있어요.'
+                : '방장은 준비 상태와 관계없이 언제든 시작할 수 있어요.'}
             </div>
           </div>
-
-          {!inProgress && (
-            <button
-              type="button"
-              className={`btn ${me?.isReady ? 'btn--ghost' : 'btn--primary'}`}
-              onClick={() => onToggleReady(!me?.isReady)}
-            >
-              {me?.isReady ? '준비 취소' : '준비완료'}
-            </button>
-          )}
 
           {inProgress ? (
             <button
@@ -169,6 +220,10 @@ export function WaitingRoom({
           ) : (
             <p className="waiting__wait-note">방장이 시작하기를 기다리고 있어요.</p>
           )}
+
+          <button type="button" className="btn btn--ghost waiting__leave" onClick={onLeaveRoom}>
+            방 나가기
+          </button>
         </aside>
       </div>
     </div>

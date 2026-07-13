@@ -170,6 +170,22 @@ describe('RoomService.startSession', () => {
     expect(snapshot.currentSession?.startedAt).toBeTruthy();
   });
 
+  it('lets the host start even when other participants are not ready', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    const joined = service.joinRoom({
+      nickname: 'not-ready-member',
+      inviteCode: created.room.inviteCode
+    });
+
+    expect(joined.participants.at(-1)?.isReady).toBe(false);
+
+    const snapshot = service.startSession(created.room.id, host.id);
+
+    expect(snapshot.room.status).toBe('studying');
+  });
+
   it('broadcasts a room update when the session starts', () => {
     const service = createService();
     const created = service.createRoom({ nickname: 'host' });
