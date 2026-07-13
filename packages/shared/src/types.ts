@@ -75,6 +75,18 @@ export type RoomSnapshot = {
   roomiMessages: RoomiMessage[];
 };
 
+export type RoomSession = {
+  snapshot: RoomSnapshot;
+  currentParticipantId: string;
+  videoJoin?: VideoJoinInfo;
+};
+
+export type VideoJoinInfo = {
+  provider: 'daily';
+  roomUrl: string;
+  token: string;
+};
+
 export type CreateRoomInput = {
   nickname: string;
   settings?: Partial<RoomSettings>;
@@ -83,6 +95,11 @@ export type CreateRoomInput = {
 export type JoinRoomInput = {
   nickname: string;
   inviteCode: string;
+};
+
+export type LeaveRoomInput = {
+  roomId: string;
+  participantId: string;
 };
 
 export type UpdateParticipantStatusInput = {

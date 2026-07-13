@@ -1,7 +1,7 @@
 .waiting__body {
   display: flex;
   gap: 24px;
-  padding: 48px 48px 48px 32px;
+  padding: clamp(24px, 5vw, 48px) clamp(18px, 5vw, 48px);
 }
 
 .waiting__main {
@@ -92,13 +92,29 @@
 
 /* Right panel */
 .waiting__panel {
-  width: 360px;
+  width: min(360px, 34vw);
+  min-width: 280px;
   flex: none;
   align-self: flex-start;
   padding: 24px;
   background: var(--card);
   border-radius: var(--r-card);
   box-shadow: var(--shadow-soft);
+}
+
+@media (max-width: 880px) {
+  .waiting__body {
+    flex-direction: column;
+  }
+
+  .waiting__panel {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .lumi-suggest__actions {
+    flex-wrap: wrap;
+  }
 }
 
 .waiting__panel-title {

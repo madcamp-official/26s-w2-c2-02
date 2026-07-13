@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BrowserWindow, shell } from 'electron';
+import { BrowserWindow, Menu, shell } from 'electron';
 import { createMainWindow } from './create-window';
 
 const mocks = vi.hoisted(() => {
@@ -21,6 +21,9 @@ vi.mock('@electron-toolkit/utils', () => ({
 
 vi.mock('electron', () => ({
   BrowserWindow: vi.fn(() => mocks.window),
+  Menu: {
+    setApplicationMenu: vi.fn()
+  },
   shell: {
     openExternal: vi.fn()
   }
@@ -33,6 +36,7 @@ describe('createMainWindow', () => {
 
   it('creates the Roomi desktop window with the preload bridge enabled', () => {
     createMainWindow({
+      iconPath: '/tmp/roomi-icon.png',
       isDev: false,
       preloadPath: '/tmp/roomi-preload.js',
       rendererIndexPath: '/tmp/renderer/index.html'
@@ -42,15 +46,19 @@ describe('createMainWindow', () => {
       expect.objectContaining({
         width: 1180,
         height: 760,
-        minWidth: 960,
-        minHeight: 640,
+        minWidth: 900,
+        minHeight: 680,
         title: 'Roomi',
+        frame: false,
+        backgroundColor: '#f4f5f7',
+        icon: '/tmp/roomi-icon.png',
         webPreferences: {
           preload: '/tmp/roomi-preload.js',
           sandbox: false
         }
       })
     );
+    expect(Menu.setApplicationMenu).toHaveBeenCalledWith(null);
     expect(mocks.window.loadFile).toHaveBeenCalledWith('/tmp/renderer/index.html');
   });
 

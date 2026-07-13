@@ -1,19 +1,10 @@
 import { RoomiMascot } from '../components/RoomiMascot';
-import { AppBar } from '../components/AppBar';
 import type { ScreenProps } from './types';
 
 /** Retrospective · 세션 회고 (Figma 72:41). Built from exact node metadata. */
 export function Retrospective({ go }: ScreenProps) {
   return (
     <div className="screen screen--app">
-      <AppBar
-        right={
-          <button type="button" className="btn btn--ghost" style={{ height: 32, fontSize: 13 }}>
-            세션 종료
-          </button>
-        }
-      />
-
       <div className="retro__body">
         <div className="retro__doc">
           {/* Header */}

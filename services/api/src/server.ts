@@ -1,27 +1,43 @@
 import cors from 'cors';
 import express from 'express';
 import type { CreateRoomInput, JoinRoomInput } from '@roomi/shared';
-import { env } from './env';
+import { isAllowedClientOrigin } from './env';
 import type { RoomService } from './rooms/room-service';
 
 export function createApp(roomService: RoomService) {
   const app = express();
 
-  app.use(cors({ origin: env.clientOrigin }));
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        callback(null, isAllowedClientOrigin(origin));
+      }
+    })
+  );
   app.use(express.json());
 
   app.get('/health', (_request, response) => {
     response.json({ ok: true, service: 'roomi-api' });
   });
 
-  app.post('/rooms', (request, response) => {
-    const snapshot = roomService.createRoom(request.body as CreateRoomInput);
-    response.status(201).json(snapshot);
+  app.post('/rooms', async (request, response) => {
+    try {
+      const session = await roomService.createRoomSession(request.body as CreateRoomInput);
+      response.status(201).json(session);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invalid room';
+      response.status(statusForRoomError(message, 400)).json({ message });
+    }
   });
 
-  app.post('/rooms/join', (request, response) => {
-    const snapshot = roomService.joinRoom(request.body as JoinRoomInput);
-    response.json(snapshot);
+  app.post('/rooms/join', async (request, response) => {
+    try {
+      const session = await roomService.joinRoomSession(request.body as JoinRoomInput);
+      response.json(session);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Room join failed';
+      response.status(statusForRoomError(message, 404)).json({ message });
+    }
   });
 
   app.get('/rooms/:inviteCode', (request, response) => {
@@ -36,4 +52,16 @@ export function createApp(roomService: RoomService) {
   });
 
   return app;
+}
+
+function statusForRoomError(message: string, fallback: number) {
+  if (message === 'Room is full') {
+    return 409;
+  }
+
+  if (message.startsWith('Daily') || message.startsWith('DAILY_')) {
+    return 503;
+  }
+
+  return fallback;
 }

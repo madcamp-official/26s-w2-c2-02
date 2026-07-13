@@ -24,14 +24,37 @@
 - Electron renderer, main/preload 단위 테스트와 E2E 테스트 실행법을 `docs/testing.md` 에 정리했습니다.
 - macOS 같은 로컬 GUI 환경에서도 Electron E2E 를 실행할 수 있도록 `test:e2e:local` script 와 문서 안내를 추가했습니다.
 - Figma(Roomi) 디자인 기반으로 온보딩 4단계, 방 만들기, 대기실, 스터디룸, 휴식/복귀, 세션 회고까지 9개 화면과 화면 전환 router 를 renderer 에 추가했습니다.
+- 스터디룸에서 로컬 웹캠 미리보기와 마이크/카메라 켜기·끄기 컨트롤을 사용할 수 있도록 추가했습니다.
+- Electron 기본 메뉴/창 테두리 대신 Roomi 디자인에 맞춘 macOS/Windows 커스텀 title bar 와 창 제어 버튼을 추가했습니다.
+- 온보딩 닉네임/방 코드 입력, 카메라·마이크 권한 확인, 로컬 방 생성 설정이 대기실 상태로 이어지도록 연결했습니다.
 - Figma 픽셀에서 직접 추출한 색상/타이포/간격을 `styles/tokens.css` 에 design token 으로 정리하고, 공통 `AppBar`·루미 mascot·badge/pill/button 컴포넌트를 추가했습니다.
 - 개발 중 화면을 빠르게 오갈 수 있는 상단 dev 화면 전환 nav 를 추가했습니다(디자인에는 포함되지 않는 개발용 UI).
 
 ### Changed
 
+- 중앙 Roomi API 서버를 LAN/배포 환경에서 띄울 수 있도록 `API_HOST` listen 설정과 comma-separated `CLIENT_ORIGIN` allowlist 를 추가했습니다. REST CORS 와 Socket.IO CORS 는 같은 origin 정책을 공유합니다.
+- 다른 PC의 renderer 가 같은 중앙 API 를 바라보도록 `VITE_ROOMI_API_URL` 설정 예시, `/health` 확인 방법, in-memory room store 한계를 `docs/api.md` 와 `docs/architecture.md` 에 정리했습니다.
+- KAIST 내부망 같은 restricted network 에서 Cloudflare Tunnel 로 Roomi API 를 외부 공개하는 설정 예시와 client URL 설정을 `docs/api.md` 에 추가했습니다.
 - Windows 환경에서도 `test:e2e:local` 을 같은 명령으로 실행할 수 있도록 Electron E2E local runner 를 Unix `env -u` 기반 shell command 에서 cross-platform Node runner 로 변경했습니다.
 - Windows 환경에서도 `@roomi/desktop` dev script 가 로컬 Electron GUI 를 띄울 수 있도록 Unix `env -u` 기반 실행을 cross-platform Node runner 로 변경했습니다.
+- renderer 화면의 1440x900 고정 폭/높이 기준을 제거하고, 창 크기 변경에 따라 주요 페이지가 줄바꿈·재정렬되도록 반응형 레이아웃으로 조정했습니다.
+- 앱 최소 창 크기를 사용 가능한 하한선으로 올리고, 세로 공간이 부족한 화면은 콘텐츠 영역 스크롤로 접근하도록 조정했습니다.
+- 콘텐츠 스크롤바, 스터디룸 하단 컨트롤 정렬, 회고 화면 상하 여백을 Roomi 화면 톤에 맞게 다듬었습니다.
+- 스터디룸의 세션 종료 버튼을 아이콘형 나가기 컨트롤로 바꾸고, 회고 화면 묶음과 스크롤바 형태를 다듬었습니다.
+- Electron 창과 renderer favicon 이 기본 React 아이콘 대신 루미 아이콘을 사용하도록 변경했습니다.
+- 루미 앱 아이콘 배경을 투명화하고, 개발용 화면 전환 nav 제거, 방장 전용 세션 종료 메뉴/확인 모달, 전역 버튼 press 애니메이션을 추가했습니다.
+- 화면 전환 enter animation, 카드 pop, 선택/컨트롤 버튼 press 모션, 메뉴와 모달 pop animation 을 추가했습니다.
+- 스터디룸 참가자 타일과 목표/확인 메시지가 입력한 닉네임과 현재 방 참가자 상태를 반영하도록 변경했습니다.
+- 방 생성/입장 REST 응답에 현재 클라이언트의 participant id 를 포함하고, renderer 가 서버 room session 과 realtime snapshot 을 구독하도록 연결했습니다.
+- 방 생성/입장 API 변경에 맞춰 `docs/api.md` 에 `RoomSession` 응답과 `room:subscribe` realtime 이벤트를 문서화했습니다.
+- Daily Client SDK 기반 화상 세션 연결을 추가해 서버가 private Daily room 과 participant token 을 발급하고, renderer 가 기존 스터디룸 타일에 Daily media track 을 렌더링하도록 변경했습니다.
+- 방 코드 생성 규칙을 혼동 문자 제외 6자리 영문/숫자로 맞추고, REST 입장 성공 시 기존 구독자에게도 `room:updated` 를 broadcast 하도록 수정했습니다.
+- 방 코드 생성 alphabet 에 혼동 문자 `L` 이 남아 있어 표시/입력 normalize 후 5자리로 줄어들 수 있던 문제를 수정했습니다.
+- Daily room/token 준비 실패가 Roomi 방 생성 자체를 실패시키지 않도록 조정해, 서버에 없는 로컬 fallback 방 코드가 표시되는 문제를 줄였습니다.
+- 스터디룸 나가기 버튼이 Socket.IO `room:leave` 로 현재 participant 를 서버 방 목록에서 제거하고, 남은 참가자에게 `room:updated` 가 broadcast 되도록 수정했습니다.
+- 한 컴퓨터에서 Electron 과 브라우저 게스트를 함께 테스트할 수 있도록 로컬 API CORS 허용 origin 을 `localhost`/`127.0.0.1` dev 포트로 확장했습니다.
 - Electron dev runner 가 기존 `ELECTRON_RENDERER_URL` 을 제거하고 사용 가능한 renderer 포트를 직접 선택해 로컬 GUI 창이 다른 5175 포트 점유 프로세스에 붙지 않도록 조정했습니다.
+- Roomi 중앙 API 서버용 루트 `.env` 와 desktop renderer 용 `apps/desktop/.env` 를 분리해, 클라이언트 PC 에 Daily API key 같은 서버 secret 을 두지 않도록 정리했습니다.
 - 앱과 문서, workspace package scope, preload API, realtime message event 의 영문 표기를 `Roomi` / `roomi` 로 통일했습니다.
 - 루트 `README.md` 를 과제 템플릿과 AI 협업 안내 중심에서 루미 프로젝트 고정 개요/기획 문서 중심으로 재구성했습니다.
 - AI 협업 설정 안내는 루트 `README.md` 에 중복하지 않고 `docs/ai_workflows.md` 에서 관리하도록 문서 동기화 정책을 조정했습니다.

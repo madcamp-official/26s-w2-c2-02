@@ -1,23 +1,39 @@
 import { RoomiMascot } from '../components/RoomiMascot';
-import { AppBar } from '../components/AppBar';
+import { formatInviteCode, type Participant, type Room } from '@roomi/shared';
 import type { ScreenProps } from './types';
 
-const people = [
-  { name: '소요', sub: '방장 · 나', status: '준비완료', tone: 'green', initial: '소' },
-  { name: '채훈', sub: '', status: '준비완료', tone: 'green', initial: '채' },
-  { name: '민지', sub: '', status: '대기중', tone: 'wait', initial: '민' },
-  { name: '빈 자리', sub: '', status: '초대 대기중', tone: 'muted', initial: '' }
-] as const;
+interface WaitingRoomProps extends ScreenProps {
+  room: Room;
+  participants: Participant[];
+}
 
 /** Waiting Room · 대기실 (Figma 70:41). */
-export function WaitingRoom({ go }: ScreenProps) {
+export function WaitingRoom({ room, participants, go }: WaitingRoomProps) {
+  const readyCount = participants.length;
+  const people = [
+    ...participants.map((participant) => ({
+      id: participant.id,
+      name: participant.nickname,
+      sub: participant.role === 'host' ? '방장' : '',
+      status: '준비완료',
+      tone: 'green',
+      initial: participant.nickname.slice(0, 1)
+    })),
+    ...Array.from({ length: room.settings.maxParticipants - participants.length }, (_, index) => ({
+      id: `empty-${index}`,
+      name: '빈 자리',
+      sub: '',
+      status: '초대 대기중',
+      tone: 'muted',
+      initial: ''
+    }))
+  ];
+
   return (
     <div className="screen screen--app">
-      <AppBar right={<span className="pill pill--purple">방 코드 4821</span>} />
-
       <div className="waiting__body">
         <main className="waiting__main">
-          <p className="waiting__eyebrow">대기실 · 방 코드 4821</p>
+          <p className="waiting__eyebrow">대기실 · 방 코드 {formatInviteCode(room.inviteCode)}</p>
           <h1 className="waiting__title">다 같이 목표를 정해볼까요?</h1>
           <p className="waiting__subtitle">
             각자 목표를 적으면 루미가 세션 안에 끝낼 수 있는 크기로 다듬어줘요.
@@ -53,11 +69,13 @@ export function WaitingRoom({ go }: ScreenProps) {
 
         <aside className="waiting__panel">
           <h2 className="waiting__panel-title">함께하는 사람들</h2>
-          <p className="waiting__panel-sub">2 / 4명이 준비를 마쳤어요.</p>
+          <p className="waiting__panel-sub">
+            {readyCount} / {room.settings.maxParticipants}명이 준비를 마쳤어요.
+          </p>
 
           <div className="people">
             {people.map((p) => (
-              <div className="person" key={p.name}>
+              <div className="person" key={p.id}>
                 <span
                   className={`person__avatar${p.initial ? '' : ' person__avatar--empty'}`}
                 >
@@ -74,7 +92,9 @@ export function WaitingRoom({ go }: ScreenProps) {
 
           <div className="status-card">
             <div className="status-card__label">현재 현황</div>
-            <div className="status-card__value">2 / 4명 준비완료</div>
+            <div className="status-card__value">
+              {readyCount} / {room.settings.maxParticipants}명 준비완료
+            </div>
             <div className="status-card__note">모두 준비되면 바로 시작할 수 있어요.</div>
           </div>
 

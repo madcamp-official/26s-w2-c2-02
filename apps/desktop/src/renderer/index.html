@@ -4,9 +4,10 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://localhost:4100 ws://localhost:4100 http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:*"
+      content="default-src 'self'; script-src 'self' https://*.daily.co https://*.dailywebrtc.com https://*.dailywebrtc.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.roomi.madcamp-kaist.org wss://api.roomi.madcamp-kaist.org https://daily.co https://*.daily.co wss://*.daily.co https://*.dailywebrtc.com wss://*.dailywebrtc.com https://*.dailywebrtc.net wss://*.dailywebrtc.net http://localhost:4100 ws://localhost:4100 http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:*; media-src 'self' blob:; worker-src 'self' blob: https://*.daily.co https://*.dailywebrtc.com https://*.dailywebrtc.net"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/roomi-icon.svg" />
     <title>Roomi</title>
   </head>
   <body>

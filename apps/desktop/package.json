@@ -17,6 +17,7 @@
     "lint": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@daily-co/daily-js": "^0.91.0",
     "@roomi/shared": "workspace:*",
     "@vitejs/plugin-react": "^4.3.4",
     "lucide-react": "^0.468.0",
@@ -26,8 +27,8 @@
   },
   "devDependencies": {
     "@electron-toolkit/utils": "^3.0.0",
-    "@roomi/config": "workspace:*",
     "@playwright/test": "^1.61.1",
+    "@roomi/config": "workspace:*",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@types/node": "^22.10.5",
