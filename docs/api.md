@@ -60,9 +60,57 @@ Copy `.env.example` to `.env` before running local services.
 | Variable | Purpose |
 |---|---|
 | `API_PORT` | Backend HTTP and Socket.IO port. |
-| `CLIENT_ORIGIN` | Allowed desktop renderer dev origin. |
+| `API_HOST` | Backend listen host. Use `0.0.0.0` when the API must accept LAN or deployed traffic. |
+| `CLIENT_ORIGIN` | Comma-separated allowlist of renderer/browser origins allowed by REST CORS and Socket.IO CORS. |
 | `DAILY_API_KEY` | Daily API key for room/token creation. |
 | `DAILY_DOMAIN` | Daily domain used by the video provider. |
 | `OPENAI_API_KEY` | LLM provider API key, kept server-side only. |
 
 During local development, the API also accepts renderer origins on `localhost` and `127.0.0.1` in the `5100-5199` port range. This lets Electron and a browser guest join the same local API during one-machine testing.
+
+Daily credentials belong only in the API server `.env`. The renderer receives a Daily room URL and participant token from `POST /rooms` or `POST /rooms/join`; it must not receive `DAILY_API_KEY`.
+
+## Central Development Server
+
+To let multiple PCs join the same Roomi room during development, run one API server on the host machine and point every client at that server.
+
+Server `.env` example:
+
+```env
+API_PORT=4100
+API_HOST=0.0.0.0
+CLIENT_ORIGIN=http://localhost:5175,http://127.0.0.1:5175,http://192.168.0.23:5175
+DAILY_API_KEY=...
+DAILY_DOMAIN=...
+OPENAI_API_KEY=
+```
+
+Start the API:
+
+```sh
+pnpm dev:api
+```
+
+From another PC on the same network, verify the API is reachable:
+
+```sh
+curl http://192.168.0.23:4100/health
+```
+
+Expected response:
+
+```json
+{ "ok": true, "service": "roomi-api" }
+```
+
+Client `.env` example for the desktop renderer:
+
+```env
+VITE_ROOMI_API_URL=http://192.168.0.23:4100
+```
+
+With that setting, REST room creation/join and Socket.IO subscriptions both connect to the central API server. The host creates a room with `POST /rooms`, another participant joins with `POST /rooms/join`, and all subscribed clients receive participant changes through `room:updated`.
+
+## Storage Limit
+
+The current API uses `InMemoryRoomStore`, so rooms and participants are shared only inside one running API process and disappear when that process restarts. This is acceptable for MVP LAN testing, but production or long-running deployments need a persistent `RoomStore` implementation behind the existing `RoomStore` interface.

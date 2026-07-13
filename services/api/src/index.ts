@@ -13,6 +13,8 @@ const httpServer = createServer(app);
 
 registerRealtimeGateway(httpServer, roomService);
 
-httpServer.listen(env.port, () => {
-  console.log(`Roomi API listening on http://localhost:${env.port}`);
+httpServer.listen(env.port, env.host, () => {
+  const displayHost = env.host === '0.0.0.0' ? 'localhost' : env.host;
+  console.log(`Roomi API listening on http://${displayHost}:${env.port}`);
+  console.log(`Roomi API bind host: ${env.host}`);
 });

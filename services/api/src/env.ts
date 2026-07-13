@@ -7,12 +7,20 @@ export function isAllowedClientOrigin(origin: string | undefined) {
     return true;
   }
 
-  return origin === env.clientOrigin || localRendererOriginPattern.test(origin);
+  return env.clientOrigins.includes(origin) || localRendererOriginPattern.test(origin);
+}
+
+function parseClientOrigins(value: string | undefined) {
+  return (value ?? 'http://localhost:5175')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 }
 
 export const env = {
   port: Number(process.env.API_PORT ?? 4100),
-  clientOrigin: process.env.CLIENT_ORIGIN ?? 'http://localhost:5175',
+  host: process.env.API_HOST ?? '0.0.0.0',
+  clientOrigins: parseClientOrigins(process.env.CLIENT_ORIGIN),
   dailyApiKey: process.env.DAILY_API_KEY,
   dailyDomain: process.env.DAILY_DOMAIN,
   openaiApiKey: process.env.OPENAI_API_KEY
