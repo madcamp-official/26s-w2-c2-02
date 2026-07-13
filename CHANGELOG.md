@@ -36,6 +36,7 @@
 - 다른 PC의 renderer 가 같은 중앙 API 를 바라보도록 `VITE_ROOMI_API_URL` 설정 예시, `/health` 확인 방법, in-memory room store 한계를 `docs/api.md` 와 `docs/architecture.md` 에 정리했습니다.
 - KAIST 내부망 같은 restricted network 에서 Cloudflare Tunnel 로 Roomi API 를 외부 공개하는 설정 예시와 client URL 설정을 `docs/api.md` 에 추가했습니다.
 - `@roomi/api` 가 실행 cwd 와 무관하게 repository root `.env` 를 먼저 읽고 `services/api/.env` 로 override 할 수 있게 변경해, Daily 서버 키가 package cwd 실행에서 누락되지 않도록 했습니다.
+- `CLIENT_ORIGIN` 이 origin 내부 wildcard 를 지원하도록 변경해, `http://192.168.*:5175` 같은 LAN renderer origin 을 REST CORS 와 Socket.IO CORS 에 함께 허용할 수 있게 했습니다.
 - Windows 환경에서도 `test:e2e:local` 을 같은 명령으로 실행할 수 있도록 Electron E2E local runner 를 Unix `env -u` 기반 shell command 에서 cross-platform Node runner 로 변경했습니다.
 - Windows 환경에서도 `@roomi/desktop` dev script 가 로컬 Electron GUI 를 띄울 수 있도록 Unix `env -u` 기반 실행을 cross-platform Node runner 로 변경했습니다.
 - renderer 화면의 1440x900 고정 폭/높이 기준을 제거하고, 창 크기 변경에 따라 주요 페이지가 줄바꿈·재정렬되도록 반응형 레이아웃으로 조정했습니다.

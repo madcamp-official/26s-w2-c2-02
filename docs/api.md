@@ -67,12 +67,12 @@ The API server loads the root `.env` first, then loads `services/api/.env` if it
 |---|---|
 | `API_PORT` | Backend HTTP and Socket.IO port. |
 | `API_HOST` | Backend listen host. Use `0.0.0.0` when the API must accept LAN or deployed traffic. |
-| `CLIENT_ORIGIN` | Comma-separated allowlist of renderer/browser origins allowed by REST CORS and Socket.IO CORS. |
+| `CLIENT_ORIGIN` | Comma-separated allowlist of renderer/browser origins allowed by REST CORS and Socket.IO CORS. Supports `*` inside an origin pattern, but a bare `*` is ignored. |
 | `DAILY_API_KEY` | Daily API key for room/token creation. |
 | `DAILY_DOMAIN` | Daily domain used by the video provider. |
 | `OPENAI_API_KEY` | LLM provider API key, kept server-side only. |
 
-During local development, the API also accepts renderer origins on `localhost` and `127.0.0.1` in the `5100-5199` port range. This lets Electron and a browser guest join the same local API during one-machine testing.
+During local development, the API also accepts renderer origins on `localhost` and `127.0.0.1` in the `5100-5199` port range. This lets Electron and a browser guest join the same local API during one-machine testing. If another PC serves the renderer from a LAN address, add an exact origin or a narrow wildcard such as `http://192.168.*:5175`.
 
 Daily credentials belong only in the API server `.env`. The renderer receives a Daily room URL and participant token from `POST /rooms` or `POST /rooms/join`; it must not receive `DAILY_API_KEY`.
 
@@ -99,7 +99,7 @@ Server `.env` example:
 ```env
 API_PORT=4100
 API_HOST=0.0.0.0
-CLIENT_ORIGIN=http://localhost:5175,http://127.0.0.1:5175,http://192.168.0.23:5175
+CLIENT_ORIGIN=http://localhost:5175,http://127.0.0.1:5175,http://192.168.*:5175
 DAILY_API_KEY=...
 DAILY_DOMAIN=...
 OPENAI_API_KEY=
@@ -140,7 +140,7 @@ Roomi API server `.env` on the internal server. Put this in the repository root 
 ```env
 API_PORT=4100
 API_HOST=127.0.0.1
-CLIENT_ORIGIN=http://localhost:5175,http://127.0.0.1:5175
+CLIENT_ORIGIN=http://localhost:5175,http://127.0.0.1:5175,http://192.168.*:5175
 DAILY_API_KEY=...
 DAILY_DOMAIN=...
 OPENAI_API_KEY=
