@@ -1,9 +1,27 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { VideoProvider } from '../video/daily-video-provider';
 import { InMemoryRoomStore } from '../adapters/storage/in-memory-room-store';
 import { RoomService } from './room-service';
 
 function createService() {
   return new RoomService(new InMemoryRoomStore());
+}
+
+function createVideoProvider(): VideoProvider & {
+  deleteRoom: ReturnType<typeof vi.fn<(dailyRoomName: string) => Promise<void>>>;
+} {
+  return {
+    createRoom: vi.fn(async (roomId: string) => ({
+      name: `daily-${roomId}`,
+      roomUrl: `https://daily.example/${roomId}`
+    })),
+    createJoinInfo: vi.fn(async (input) => ({
+      name: input.dailyRoomName,
+      roomUrl: input.roomUrl,
+      token: `token-${input.userId}`
+    })),
+    deleteRoom: vi.fn(async (_dailyRoomName: string) => undefined)
+  };
 }
 
 describe('RoomService participant readiness', () => {
@@ -271,6 +289,17 @@ describe('RoomService.leaveRoom host delegation', () => {
     service.leaveRoom(created.room.id, originalHost.id);
 
     expect(delegatedHostId).toBe(member.id);
+  });
+
+  it('deletes the Daily room when the last participant leaves', async () => {
+    const videoProvider = createVideoProvider();
+    const service = new RoomService(new InMemoryRoomStore(), videoProvider);
+    const session = await service.createRoomSession({ nickname: 'host' });
+
+    service.leaveRoom(session.snapshot.room.id, session.currentParticipantId);
+    await vi.waitFor(() => expect(videoProvider.deleteRoom).toHaveBeenCalledTimes(1));
+
+    expect(videoProvider.deleteRoom).toHaveBeenCalledWith(`daily-${session.snapshot.room.id}`);
   });
 });
 

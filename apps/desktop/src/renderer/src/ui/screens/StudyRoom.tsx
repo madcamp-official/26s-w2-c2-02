@@ -447,7 +447,7 @@ export function StudyRoom({
   );
 }
 
-function DailyParticipantMedia({
+export function DailyParticipantMedia({
   fallbackInitial,
   isCameraOn,
   isMe,
@@ -468,9 +468,10 @@ function DailyParticipantMedia({
   const videoTrack = participant?.tracks?.video?.track ?? participant?.tracks?.video?.persistentTrack;
   const audioTrack = participant?.tracks?.audio?.track ?? participant?.tracks?.audio?.persistentTrack;
   const isVideoPlayable = participant?.tracks?.video?.state === 'playable';
+  const shouldShowVideo = Boolean(isVideoPlayable && (isCameraOn || !isMe));
 
   useEffect(() => {
-    if (!videoRef.current || !videoTrack || !isVideoPlayable) {
+    if (!videoRef.current || !videoTrack || !shouldShowVideo) {
       return;
     }
 
@@ -483,7 +484,7 @@ function DailyParticipantMedia({
         videoRef.current.srcObject = null;
       }
     };
-  }, [isVideoPlayable, videoTrack]);
+  }, [shouldShowVideo, videoTrack]);
 
   useEffect(() => {
     if (!audioRef.current || !audioTrack || isMe) {
@@ -498,7 +499,7 @@ function DailyParticipantMedia({
 
   return (
     <>
-      {isVideoPlayable && (isCameraOn || !isMe) ? (
+      {shouldShowVideo ? (
         <video
           ref={videoRef}
           className="tile__video"

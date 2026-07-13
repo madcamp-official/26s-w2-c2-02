@@ -18,7 +18,7 @@ import {
 } from '@roomi/shared';
 import { defaultRoomSettings } from './default-settings';
 import type { RoomStore } from './room-store';
-import type { DailyVideoProvider } from '../video/daily-video-provider';
+import type { VideoProvider } from '../video/daily-video-provider';
 
 type RoomUpdatedListener = (snapshot: RoomSnapshot) => void;
 type RoomiMessageListener = (message: RoomiMessage) => void;
@@ -31,7 +31,7 @@ export class RoomService {
 
   constructor(
     private readonly store: RoomStore,
-    private readonly videoProvider?: DailyVideoProvider
+    private readonly videoProvider?: VideoProvider
   ) {}
 
   async createRoomSession(input: CreateRoomInput): Promise<RoomSession> {
@@ -247,6 +247,10 @@ export class RoomService {
       (participant) => participant.id !== participantId
     );
 
+    if (snapshot.participants.length === 0) {
+      this.deleteDailyRoom(snapshot.room.id);
+    }
+
     if (leavingParticipant?.role === 'host' && snapshot.participants.length > 0) {
       const nextHost = [...snapshot.participants].sort(
         (left, right) => Date.parse(left.joinedAt) - Date.parse(right.joinedAt)
@@ -412,6 +416,19 @@ export class RoomService {
       console.warn(error instanceof Error ? error.message : 'Daily video join creation failed');
       return undefined;
     }
+  }
+
+  private deleteDailyRoom(roomId: string) {
+    const dailyRoom = this.dailyRooms.get(roomId);
+
+    if (!dailyRoom || !this.videoProvider) {
+      return;
+    }
+
+    this.dailyRooms.delete(roomId);
+    void this.videoProvider.deleteRoom(dailyRoom.name).catch((error) => {
+      console.warn(error instanceof Error ? error.message : 'Daily room deletion failed');
+    });
   }
 
   private emitRoomUpdated(snapshot: RoomSnapshot) {

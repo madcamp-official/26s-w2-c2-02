@@ -9,6 +9,19 @@ export type DailyJoinInfo = DailyRoomInfo & {
   token: string;
 };
 
+export type VideoProvider = {
+  createRoom(roomId: string, maxParticipants: number): Promise<DailyRoomInfo>;
+  createJoinInfo(input: {
+    dailyRoomName: string;
+    roomUrl: string;
+    userId: string;
+    userName: string;
+    isOwner: boolean;
+    sessionMinutes: number;
+  }): Promise<DailyJoinInfo>;
+  deleteRoom(dailyRoomName: string): Promise<void>;
+};
+
 export class DailyVideoProvider {
   async createRoom(roomId: string, maxParticipants: number): Promise<DailyRoomInfo> {
     if (!env.dailyApiKey) {
@@ -87,6 +100,21 @@ export class DailyVideoProvider {
       roomUrl: input.roomUrl,
       token: token.token
     };
+  }
+
+  async deleteRoom(dailyRoomName: string): Promise<void> {
+    if (!env.dailyApiKey) {
+      throw new Error('DAILY_API_KEY is required');
+    }
+
+    const response = await fetch(`https://api.daily.co/v1/rooms/${dailyRoomName}`, {
+      method: 'DELETE',
+      headers: this.headers()
+    });
+
+    if (!response.ok && response.status !== 404) {
+      throw new Error(`Daily room deletion failed: ${response.status}`);
+    }
   }
 
   private headers() {
