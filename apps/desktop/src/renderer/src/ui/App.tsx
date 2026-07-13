@@ -271,25 +271,6 @@ export function App() {
     );
   }, [roomDraft?.room.id, roomDraft?.realtime]);
 
-  // Members who are present when the host starts follow the session automatically.
-  // A late joiner arrives with the room already studying (prev !== 'waiting'), so
-  // they stay in the in-progress waiting mode and join via the "합류하기" button.
-  const prevStatusRef = useRef(activeRoom.room.status);
-  useEffect(() => {
-    const previous = prevStatusRef.current;
-    const currentStatus = activeRoom.room.status;
-    prevStatusRef.current = currentStatus;
-
-    if (
-      screen === 'waiting' &&
-      !isHost &&
-      previous === 'waiting' &&
-      (currentStatus === 'studying' || currentStatus === 'break')
-    ) {
-      go('study');
-    }
-  }, [screen, isHost, activeRoom.room.status]);
-
   // An ended room is never joinable. This also covers a participant who receives
   // the terminal snapshot while they are already in the waiting or study screen.
   useEffect(() => {

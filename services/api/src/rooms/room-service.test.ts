@@ -230,6 +230,50 @@ describe('RoomService.startSession', () => {
   });
 });
 
+describe('RoomService.leaveRoom host delegation', () => {
+  it('promotes the earliest remaining participant when the host leaves', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const originalHost = created.participants[0]!;
+    const firstJoin = service.joinRoom({
+      nickname: 'first',
+      inviteCode: created.room.inviteCode
+    });
+    const firstMember = firstJoin.participants.at(-1)!;
+    service.joinRoom({
+      nickname: 'second',
+      inviteCode: created.room.inviteCode
+    });
+
+    const snapshot = service.leaveRoom(created.room.id, originalHost.id);
+
+    expect(snapshot.room.hostUserId).toBe(firstMember.userId);
+    expect(snapshot.participants.find((participant) => participant.id === firstMember.id)?.role).toBe(
+      'host'
+    );
+    expect(snapshot.participants.filter((participant) => participant.role === 'host')).toHaveLength(1);
+  });
+
+  it('broadcasts the delegated host after the host leaves', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const originalHost = created.participants[0]!;
+    const joined = service.joinRoom({
+      nickname: 'member',
+      inviteCode: created.room.inviteCode
+    });
+    const member = joined.participants.at(-1)!;
+    let delegatedHostId: string | undefined;
+    service.onRoomUpdated((snapshot) => {
+      delegatedHostId = snapshot.participants.find((participant) => participant.role === 'host')?.id;
+    });
+
+    service.leaveRoom(created.room.id, originalHost.id);
+
+    expect(delegatedHostId).toBe(member.id);
+  });
+});
+
 describe('RoomService Roomi messages', () => {
   it('stores a personal message and emits it to realtime listeners', () => {
     const service = createService();

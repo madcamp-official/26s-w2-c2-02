@@ -149,6 +149,15 @@
   background: var(--purple-050);
 }
 
+.code-entry__slot--active {
+  border-color: var(--purple-700);
+  background: #ffffff;
+  box-shadow:
+    0 0 0 3px rgba(138, 125, 240, 0.22),
+    0 10px 24px rgba(79, 70, 150, 0.12);
+  transform: translateY(-1px);
+}
+
 /* Create (방 만들기) two big choice buttons */
 .onb-choices {
   display: flex;

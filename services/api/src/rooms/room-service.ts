@@ -239,9 +239,27 @@ export class RoomService {
       throw new Error('Room not found');
     }
 
+    const leavingParticipant = snapshot.participants.find(
+      (participant) => participant.id === participantId
+    );
+
     snapshot.participants = snapshot.participants.filter(
       (participant) => participant.id !== participantId
     );
+
+    if (leavingParticipant?.role === 'host' && snapshot.participants.length > 0) {
+      const nextHost = [...snapshot.participants].sort(
+        (left, right) => Date.parse(left.joinedAt) - Date.parse(right.joinedAt)
+      )[0]!;
+
+      snapshot.room = { ...snapshot.room, hostUserId: nextHost.userId };
+      snapshot.participants = snapshot.participants.map((participant) =>
+        participant.id === nextHost.id
+          ? { ...participant, role: 'host' }
+          : { ...participant, role: 'member' }
+      );
+    }
+
     this.store.update(snapshot);
     this.emitRoomUpdated(snapshot);
     return snapshot;

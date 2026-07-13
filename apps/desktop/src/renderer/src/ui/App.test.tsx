@@ -105,7 +105,7 @@ describe('App screen router', () => {
     expect(screen.getByText('대기실 · 방 코드 HHH-HHH')).toBeInTheDocument();
     expect(screen.getAllByText('소요').length).toBeGreaterThan(0);
     // Readiness now reflects the isReady flag, and a freshly created host is not ready yet.
-    expect(screen.getByText('0 / 4명 준비완료')).toBeInTheDocument();
+    expect(screen.getByText('0명이 준비를 마쳤어요.')).toBeInTheDocument();
     expect(audioTrack.stop).toHaveBeenCalled();
     expect(videoTrack.stop).toHaveBeenCalled();
   });
@@ -197,6 +197,7 @@ describe('App screen router', () => {
                 nickname: '소요',
                 role: 'host',
                 status: 'online',
+                isReady: false,
                 scoreVisible: true,
                 joinedAt: timestamp,
                 lastSeenAt: timestamp
@@ -208,6 +209,7 @@ describe('App screen router', () => {
                 nickname: '민지',
                 role: 'member',
                 status: 'online',
+                isReady: false,
                 scoreVisible: true,
                 joinedAt: timestamp,
                 lastSeenAt: timestamp
@@ -229,8 +231,8 @@ describe('App screen router', () => {
     fireEvent.click(screen.getByRole('button', { name: '입장하기' }));
     fireEvent.click(await screen.findByRole('button', { name: '권한 확인하고 입장' }));
     await screen.findByRole('heading', { level: 1, name: '다 같이 목표를 정해볼까요?' });
-    // Members have no start button; they follow the host into the session when the
-    // server broadcasts the studying snapshot over room:updated.
+    // Members have no start button; they stay in the lobby until they explicitly
+    // join after the server broadcasts the studying snapshot over room:updated.
     expect(screen.queryByRole('button', { name: '세션 시작하기' })).not.toBeInTheDocument();
 
     const onUpdated = socketMock.on.mock.calls.find(
@@ -261,6 +263,8 @@ describe('App screen router', () => {
     };
     act(() => onUpdated(studyingSnapshot));
 
+    expect(await screen.findByRole('heading', { level: 1, name: '이미 공부 중이에요' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '스터디룸 참여하기' }));
     await screen.findByLabelText('내 웹캠 미리보기');
     expect(screen.getAllByText('소요').length).toBeGreaterThan(0);
     expect(screen.getByText('민지 (나)')).toBeInTheDocument();

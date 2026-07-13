@@ -20,7 +20,14 @@ interface OnboardingJoinProps extends ScreenProps {
 export function OnboardingJoin({ code, error, onCodeChange, onJoin, go }: OnboardingJoinProps) {
   const isCodeComplete = isInviteCodeComplete(code);
   const [hasUnsupportedCodeCharacter, setHasUnsupportedCodeCharacter] = useState(false);
-  const codeCharacters = normalizeInviteCode(code).padEnd(inviteCodeLength, ' ').split('');
+  const [isCodeFocused, setIsCodeFocused] = useState(false);
+  const normalizedCode = normalizeInviteCode(code);
+  const activeSlotIndex = normalizedCode.length < inviteCodeLength ? normalizedCode.length : -1;
+  const codeCharacters = normalizedCode.padEnd(inviteCodeLength, ' ').split('');
+  const handleCodeChange = (value: string) => {
+    setHasUnsupportedCodeCharacter(/[0O1IL]/i.test(value));
+    onCodeChange(normalizeInviteCode(value));
+  };
 
   return (
     <div className="screen screen--onboarding">
@@ -50,11 +57,23 @@ export function OnboardingJoin({ code, error, onCodeChange, onJoin, go }: Onboar
               id="room-code"
               className="code-entry__input"
               value={code}
+              lang="en"
               onChange={(e) => {
-                setHasUnsupportedCodeCharacter(/[0O1IL]/i.test(e.target.value));
-                onCodeChange(normalizeInviteCode(e.target.value));
+                handleCodeChange(e.target.value);
               }}
+              onBeforeInput={(event) => {
+                const data = event.nativeEvent.data;
+                if (data && /[^A-Za-z0-9]/.test(data)) {
+                  event.preventDefault();
+                }
+              }}
+              onCompositionStart={(event) => {
+                event.preventDefault();
+              }}
+              onFocus={() => setIsCodeFocused(true)}
+              onBlur={() => setIsCodeFocused(false)}
               inputMode="text"
+              pattern="[A-Za-z0-9]*"
               autoCapitalize="characters"
               autoComplete="off"
               spellCheck={false}
@@ -62,13 +81,23 @@ export function OnboardingJoin({ code, error, onCodeChange, onJoin, go }: Onboar
             />
             <div className="code-entry__slots" aria-hidden="true">
               {codeCharacters.slice(0, 3).map((character, index) => (
-                <span key={`prefix-${index}-${character}`} className="code-entry__slot">
+                <span
+                  key={`prefix-${index}-${character}`}
+                  className={`code-entry__slot${
+                    isCodeFocused && activeSlotIndex === index ? ' code-entry__slot--active' : ''
+                  }`}
+                >
                   {character.trim() ? character : ''}
                 </span>
               ))}
               <span className="code-entry__dash" />
               {codeCharacters.slice(3).map((character, index) => (
-                <span key={`suffix-${index}-${character}`} className="code-entry__slot">
+                <span
+                  key={`suffix-${index}-${character}`}
+                  className={`code-entry__slot${
+                    isCodeFocused && activeSlotIndex === index + 3 ? ' code-entry__slot--active' : ''
+                  }`}
+                >
                   {character.trim() ? character : ''}
                 </span>
               ))}

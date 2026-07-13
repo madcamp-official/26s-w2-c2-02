@@ -470,7 +470,7 @@ function DailyParticipantMedia({
   const isVideoPlayable = participant?.tracks?.video?.state === 'playable';
 
   useEffect(() => {
-    if (!videoRef.current || !videoTrack) {
+    if (!videoRef.current || !videoTrack || !isVideoPlayable) {
       return;
     }
 
@@ -478,7 +478,12 @@ function DailyParticipantMedia({
     void videoRef.current.play().catch((error) => {
       console.error('Daily video playback failed:', error);
     });
-  }, [videoTrack]);
+    return () => {
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    };
+  }, [isVideoPlayable, videoTrack]);
 
   useEffect(() => {
     if (!audioRef.current || !audioTrack || isMe) {

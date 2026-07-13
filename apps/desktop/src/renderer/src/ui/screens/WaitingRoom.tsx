@@ -81,8 +81,8 @@ export function WaitingRoom({
       id: participant.id,
       name: participant.nickname,
       sub: participant.role === 'host' ? '방장' : '',
-      status: inProgress ? '공부 중' : participant.isReady ? '준비완료' : '준비 중',
-      tone: inProgress ? 'blue' : participant.isReady ? 'green' : 'muted',
+      status: participant.isReady ? '준비완료' : '준비 중',
+      tone: participant.isReady ? 'green' : 'muted',
       initial: participant.nickname.slice(0, 1)
     })),
     ...Array.from(
@@ -91,7 +91,7 @@ export function WaitingRoom({
         id: `empty-${index}`,
         name: '빈 자리',
         sub: '',
-        status: '초대 대기중',
+        status: '',
         tone: 'muted',
         initial: ''
       })
@@ -184,21 +184,9 @@ export function WaitingRoom({
                   <div className="person__name">{p.name}</div>
                   {p.sub && <div className="person__sub">{p.sub}</div>}
                 </div>
-                <span className={`badge badge--${p.tone}`}>{p.status}</span>
+                {p.status && <span className={`badge badge--${p.tone}`}>{p.status}</span>}
               </div>
             ))}
-          </div>
-
-          <div className="status-card">
-            <div className="status-card__label">현재 현황</div>
-            <div className="status-card__value">
-              {readyCount} / {room.settings.maxParticipants}명 준비완료
-            </div>
-            <div className="status-card__note">
-              {inProgress
-                ? '진행 중인 세션에 합류할 수 있어요.'
-                : '방장은 준비 상태와 관계없이 언제든 시작할 수 있어요.'}
-            </div>
           </div>
 
           {inProgress ? (
@@ -207,7 +195,7 @@ export function WaitingRoom({
               className="btn btn--primary waiting__start"
               onClick={onJoinSession}
             >
-              합류하기
+              스터디룸 참여하기
             </button>
           ) : isHost ? (
             <button
@@ -218,7 +206,10 @@ export function WaitingRoom({
               세션 시작하기
             </button>
           ) : (
-            <p className="waiting__wait-note">방장이 시작하기를 기다리고 있어요.</p>
+            <div className="waiting__wait-note" role="status">
+              <span className="waiting__wait-dot" aria-hidden="true" />
+              <span>방장이 세션을 시작하면 참여 버튼이 열려요.</span>
+            </div>
           )}
 
           <button type="button" className="btn btn--ghost waiting__leave" onClick={onLeaveRoom}>

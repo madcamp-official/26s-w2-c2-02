@@ -65,10 +65,12 @@ function baseProps() {
 }
 
 describe('WaitingRoom', () => {
-  it('shows the real ready count from isReady flags', () => {
+  it('shows participant readiness without a separate status card', () => {
     render(<WaitingRoom {...baseProps()} />);
 
-    expect(screen.getByText('2 / 4명 준비완료')).toBeInTheDocument();
+    expect(screen.getByText('2명이 준비를 마쳤어요.')).toBeInTheDocument();
+    expect(screen.queryByText('현재 현황')).not.toBeInTheDocument();
+    expect(screen.queryByText('2 / 4명 준비완료')).not.toBeInTheDocument();
   });
 
   it('lets the host start the session', () => {
@@ -96,7 +98,7 @@ describe('WaitingRoom', () => {
     render(<WaitingRoom {...props} />);
 
     expect(screen.queryByRole('button', { name: '세션 시작하기' })).not.toBeInTheDocument();
-    expect(screen.getByText('방장이 시작하기를 기다리고 있어요.')).toBeInTheDocument();
+    expect(screen.getByText('방장이 세션을 시작하면 참여 버튼이 열려요.')).toBeInTheDocument();
   });
 
   it('renders the in-progress mode for a studying room with a join CTA', () => {
@@ -105,7 +107,9 @@ describe('WaitingRoom', () => {
 
     expect(screen.getByText('진행 중')).toBeInTheDocument();
     expect(screen.getByText('이미 공부 중이에요')).toBeInTheDocument();
-    const joinButton = screen.getByRole('button', { name: '합류하기' });
+    expect(screen.getByText('준비 중')).toBeInTheDocument();
+    expect(screen.queryByText('초대 대기중')).not.toBeInTheDocument();
+    const joinButton = screen.getByRole('button', { name: '스터디룸 참여하기' });
     fireEvent.click(joinButton);
     expect(props.onJoinSession).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('button', { name: '세션 시작하기' })).not.toBeInTheDocument();
