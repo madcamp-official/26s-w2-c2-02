@@ -111,6 +111,53 @@ VITE_ROOMI_API_URL=http://192.168.0.23:4100
 
 With that setting, REST room creation/join and Socket.IO subscriptions both connect to the central API server. The host creates a room with `POST /rooms`, another participant joins with `POST /rooms/join`, and all subscribed clients receive participant changes through `room:updated`.
 
+## Cloudflare Tunnel for External Access
+
+If the central API server runs inside a restricted campus network, such as KAIST internal network, expose it through Cloudflare Tunnel instead of opening inbound firewall ports.
+
+Roomi API server `.env` on the internal server:
+
+```env
+API_PORT=4100
+API_HOST=127.0.0.1
+CLIENT_ORIGIN=http://localhost:5175,http://127.0.0.1:5175
+DAILY_API_KEY=...
+DAILY_DOMAIN=...
+OPENAI_API_KEY=
+```
+
+Run Roomi API locally on the internal server:
+
+```sh
+pnpm dev:api
+```
+
+For a named Cloudflare Tunnel, route a public hostname such as `roomi-api.example.com` to the local API service:
+
+```yaml
+tunnel: <cloudflare-tunnel-id>
+credentials-file: /home/roomi/.cloudflared/<cloudflare-tunnel-id>.json
+
+ingress:
+  - hostname: roomi-api.example.com
+    service: http://localhost:4100
+  - service: http_status:404
+```
+
+Then run the tunnel with `cloudflared tunnel run <tunnel-name>`. For short-lived demos, a quick tunnel can point directly at the local API:
+
+```sh
+cloudflared tunnel --url http://localhost:4100
+```
+
+Clients outside the campus network should use the Cloudflare HTTPS URL:
+
+```env
+VITE_ROOMI_API_URL=https://roomi-api.example.com
+```
+
+Socket.IO uses the same API base URL, so WebSocket/polling traffic follows the tunnel with the REST API. If the renderer is served from a non-local browser origin, add that browser origin to `CLIENT_ORIGIN`; do not add the API hostname unless the browser page itself is served from that hostname.
+
 ## Storage Limit
 
 The current API uses `InMemoryRoomStore`, so rooms and participants are shared only inside one running API process and disappear when that process restarts. This is acceptable for MVP LAN testing, but production or long-running deployments need a persistent `RoomStore` implementation behind the existing `RoomStore` interface.
