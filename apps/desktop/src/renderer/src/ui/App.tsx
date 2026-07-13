@@ -5,6 +5,7 @@ import {
   type Goal,
   type Participant,
   type Room,
+  type RoomiMessage,
   type RoomSettings,
   type RoomSession,
   type StudySession,
@@ -42,6 +43,7 @@ type RoomDraft = {
   room: Room;
   participants: Participant[];
   goals: Goal[];
+  roomiMessages: RoomiMessage[];
   currentSession?: StudySession;
   realtime: 'local' | 'server';
   videoJoin?: VideoJoinInfo;
@@ -111,7 +113,8 @@ const fallbackRoom: RoomDraft = {
       lastSeenAt: now()
     }
   ],
-  goals: []
+  goals: [],
+  roomiMessages: []
 };
 
 function createRoomDraft(nickname: string, settings: RoomSettings): RoomDraft {
@@ -145,7 +148,8 @@ function createRoomDraft(nickname: string, settings: RoomSettings): RoomDraft {
         lastSeenAt: timestamp
       }
     ],
-    goals: []
+    goals: [],
+    roomiMessages: []
   };
 }
 
@@ -191,7 +195,8 @@ function joinRoomDraft(nickname: string, inviteCode: string): RoomDraft {
         lastSeenAt: timestamp
       }
     ],
-    goals: []
+    goals: [],
+    roomiMessages: []
   };
 }
 
@@ -202,6 +207,7 @@ function roomSessionToDraft(session: RoomSession): RoomDraft {
     room: session.snapshot.room,
     participants: session.snapshot.participants,
     goals: session.snapshot.goals,
+    roomiMessages: session.snapshot.roomiMessages,
     currentSession: session.snapshot.currentSession,
     videoJoin: session.videoJoin
   };
@@ -233,7 +239,10 @@ export function App() {
 
     return subscribeToRoom(
       socket,
-      roomDraft.room.id,
+      {
+        roomId: roomDraft.room.id,
+        participantId: roomDraft.currentParticipantId
+      },
       (snapshot) => {
         setRoomDraft((current) =>
           current && current.room.id === snapshot.room.id
@@ -242,8 +251,16 @@ export function App() {
                 room: snapshot.room,
                 participants: snapshot.participants,
                 goals: snapshot.goals,
+                roomiMessages: snapshot.roomiMessages,
                 currentSession: snapshot.currentSession
               }
+            : current
+        );
+      },
+      (message) => {
+        setRoomDraft((current) =>
+          current && current.room.id === message.roomId
+            ? { ...current, roomiMessages: [...current.roomiMessages, message].slice(-20) }
             : current
         );
       },
@@ -388,6 +405,7 @@ export function App() {
                 room: snapshot.room,
                 participants: snapshot.participants,
                 goals: snapshot.goals,
+                roomiMessages: snapshot.roomiMessages,
                 currentSession: snapshot.currentSession
               }
             : current
@@ -483,6 +501,7 @@ export function App() {
             onLeaveRoom={() => go('waiting')}
             participants={activeRoom.participants}
             goals={activeRoom.goals}
+            roomiMessages={activeRoom.roomiMessages}
             room={activeRoom.room}
             currentSession={activeRoom.currentSession}
             videoJoin={activeRoom.videoJoin}

@@ -15,7 +15,7 @@ const roomiOrchestrator = new RoomiOrchestrator(new GeminiClient({ apiKey: env.g
 const app = createApp(roomService, roomiOrchestrator);
 const httpServer = createServer(app);
 
-registerRealtimeGateway(httpServer, roomService);
+registerRealtimeGateway(httpServer, roomService, roomiOrchestrator);
 
 httpServer.listen(env.port, env.host, () => {
   const displayHost = env.host === '0.0.0.0' ? 'localhost' : env.host;

@@ -16,6 +16,17 @@ export interface TextGenerator {
   generateText(prompt: string): Promise<string>;
 }
 
+type StartMessageInput = {
+  sessionMinutes: number;
+  goalCount: number;
+};
+
+type FocusRecoveryInput = {
+  nickname: string;
+  goal?: string;
+  status: 'distracted' | 'away';
+};
+
 export class RoomiOrchestrator {
   constructor(private readonly generator?: TextGenerator) {}
 
@@ -42,8 +53,28 @@ export class RoomiOrchestrator {
     return this.templateRefinement(rawGoal, sessionMinutes);
   }
 
-  async generateMessage(kind: RoomiPromptKind, userText: string) {
-    return `[${kind}] ${userText}`;
+  async generateStartMessage(input: StartMessageInput): Promise<string> {
+    return this.generateLiveMessage(
+      'start',
+      [
+        `집중 세션 길이: ${input.sessionMinutes}분`,
+        `등록된 목표 수: ${input.goalCount}개`
+      ].join('\n'),
+      `좋아, 지금부터 ${input.sessionMinutes}분이야. 각자 목표 하나에만 집중해보자.`
+    );
+  }
+
+  async generateFocusRecoveryMessage(input: FocusRecoveryInput): Promise<string> {
+    const statusLabel = input.status === 'away' ? '자리 비움' : '집중 흐트러짐';
+    return this.generateLiveMessage(
+      'focus_recovery',
+      [
+        `참가자: ${input.nickname}`,
+        `상태: ${statusLabel}`,
+        `현재 목표: ${input.goal ?? '등록된 목표 없음'}`
+      ].join('\n'),
+      `${input.nickname}, 잠깐 흐름이 끊긴 것 같아. 돌아오면 목표의 다음 한 단계만 바로 시작해보자.`
+    );
   }
 
   private templateRefinement(rawGoal: string, sessionMinutes: number): GoalRefinement {
@@ -62,6 +93,40 @@ export class RoomiOrchestrator {
       '- 따뜻하고 간결한 한 문장, 이모지·따옴표 없이',
       '- 목표 문장만 출력하고 다른 설명은 붙이지 마',
       `참가자 목표: ${rawGoal}`
+    ].join('\n');
+  }
+
+  private async generateLiveMessage(
+    kind: Extract<RoomiPromptKind, 'start' | 'focus_recovery'>,
+    context: string,
+    fallback: string
+  ): Promise<string> {
+    if (!this.generator) return fallback;
+
+    try {
+      const text = (await this.generator.generateText(this.buildLivePrompt(kind, context))).trim();
+      return text || fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  private buildLivePrompt(
+    kind: Extract<RoomiPromptKind, 'start' | 'focus_recovery'>,
+    context: string
+  ): string {
+    const instruction =
+      kind === 'start'
+        ? '방 전체에 보낼 시작 멘트를 작성해줘.'
+        : '해당 참가자에게만 보낼 집중 회복 멘트를 작성해줘.';
+
+    return [
+      '너는 친구 말투의 스터디룸 운영자 "루미"야.',
+      instruction,
+      '- 비난하지 말고, 바로 할 수 있는 작은 다음 행동을 제안할 것',
+      '- 한국어 반말, 1~2문장, 이모지·따옴표 없이',
+      context,
+      '메시지만 출력해.'
     ].join('\n');
   }
 }

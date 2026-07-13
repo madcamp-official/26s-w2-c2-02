@@ -125,7 +125,7 @@ describe('App screen router', () => {
     fireEvent.click(screen.getByRole('button', { name: '세션 시작하기' }));
     await screen.findByLabelText('내 웹캠 미리보기');
     expect(screen.getByText('소요 (나)')).toBeInTheDocument();
-    expect(screen.getByText('소요, 아직 집중 중이야?')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '집중 확인' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '마이크 끄기' }));
     expect(audioTrack.enabled).toBe(false);

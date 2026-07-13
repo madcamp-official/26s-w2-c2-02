@@ -5,6 +5,7 @@ import type {
   Participant,
   ParticipantStatus,
   Room,
+  RoomiMessage,
   RoomSession,
   RoomSettings,
   RoomSnapshot,
@@ -20,10 +21,13 @@ import type { RoomStore } from './room-store';
 import type { DailyVideoProvider } from '../video/daily-video-provider';
 
 type RoomUpdatedListener = (snapshot: RoomSnapshot) => void;
+type RoomiMessageListener = (message: RoomiMessage) => void;
+type AddRoomiMessageInput = Omit<RoomiMessage, 'id' | 'createdAt'>;
 
 export class RoomService {
   private readonly dailyRooms = new Map<string, { name: string; roomUrl: string }>();
   private readonly roomUpdatedListeners = new Set<RoomUpdatedListener>();
+  private readonly roomiMessageListeners = new Set<RoomiMessageListener>();
 
   constructor(
     private readonly store: RoomStore,
@@ -35,7 +39,7 @@ export class RoomService {
     const currentParticipant = snapshot.participants[0];
 
     return {
-      snapshot,
+      snapshot: this.snapshotForParticipant(snapshot.room.id, currentParticipant.id),
       currentParticipantId: currentParticipant.id,
       videoJoin: await this.tryCreateVideoJoin(snapshot, currentParticipant)
     };
@@ -82,7 +86,7 @@ export class RoomService {
     }
 
     return {
-      snapshot,
+      snapshot: this.snapshotForParticipant(snapshot.room.id, currentParticipant.id),
       currentParticipantId: currentParticipant.id,
       videoJoin: await this.tryCreateVideoJoin(snapshot, currentParticipant)
     };
@@ -244,11 +248,26 @@ export class RoomService {
   }
 
   getByInviteCode(inviteCode: string): RoomSnapshot | undefined {
-    return this.store.findByInviteCode(normalizeInviteCode(inviteCode));
+    const snapshot = this.store.findByInviteCode(normalizeInviteCode(inviteCode));
+    return snapshot ? this.withVisibleMessages(snapshot) : undefined;
   }
 
   getByRoomId(roomId: string): RoomSnapshot | undefined {
     return this.store.findByRoomId(roomId);
+  }
+
+  snapshotForParticipant(roomId: string, participantId: string): RoomSnapshot {
+    const snapshot = this.store.findByRoomId(roomId);
+
+    if (!snapshot) {
+      throw new Error('Room not found');
+    }
+
+    if (!snapshot.participants.some((participant) => participant.id === participantId)) {
+      throw new Error('Participant not found');
+    }
+
+    return this.withVisibleMessages(snapshot, participantId);
   }
 
   onRoomUpdated(listener: RoomUpdatedListener): () => void {
@@ -256,6 +275,40 @@ export class RoomService {
 
     return () => {
       this.roomUpdatedListeners.delete(listener);
+    };
+  }
+
+  addRoomiMessage(input: AddRoomiMessageInput): RoomiMessage {
+    const snapshot = this.store.findByRoomId(input.roomId);
+
+    if (!snapshot) {
+      throw new Error('Room not found');
+    }
+
+    if (
+      input.targetParticipantId &&
+      !snapshot.participants.some((participant) => participant.id === input.targetParticipantId)
+    ) {
+      throw new Error('Target participant not found');
+    }
+
+    const message: RoomiMessage = {
+      ...input,
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString()
+    };
+
+    snapshot.roomiMessages = [...snapshot.roomiMessages, message];
+    this.store.update(snapshot);
+    this.roomiMessageListeners.forEach((listener) => listener(message));
+    return message;
+  }
+
+  onRoomiMessage(listener: RoomiMessageListener): () => void {
+    this.roomiMessageListeners.add(listener);
+
+    return () => {
+      this.roomiMessageListeners.delete(listener);
     };
   }
 
@@ -345,5 +398,14 @@ export class RoomService {
 
   private emitRoomUpdated(snapshot: RoomSnapshot) {
     this.roomUpdatedListeners.forEach((listener) => listener(snapshot));
+  }
+
+  private withVisibleMessages(snapshot: RoomSnapshot, participantId?: string): RoomSnapshot {
+    return {
+      ...snapshot,
+      roomiMessages: snapshot.roomiMessages.filter(
+        (message) => !message.targetParticipantId || message.targetParticipantId === participantId
+      )
+    };
   }
 }

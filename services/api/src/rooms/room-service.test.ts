@@ -229,3 +229,43 @@ describe('RoomService.startSession', () => {
     expect(() => service.startSession('missing-room', 'x')).toThrow('Room not found');
   });
 });
+
+describe('RoomService Roomi messages', () => {
+  it('stores a personal message and emits it to realtime listeners', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0]!;
+    let receivedText: string | undefined;
+    service.onRoomiMessage((message) => {
+      receivedText = message.text;
+    });
+
+    const message = service.addRoomiMessage({
+      roomId: created.room.id,
+      kind: 'focus_recovery',
+      text: '다음 한 단계부터 다시 시작해보자.',
+      targetParticipantId: host.id
+    });
+
+    expect(message.id).toBeTruthy();
+    expect(receivedText).toBe(message.text);
+    expect(service.getByRoomId(created.room.id)?.roomiMessages).toEqual([message]);
+  });
+
+  it('does not include another participant’s personal message in a snapshot', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0]!;
+    const joined = service.joinRoom({ nickname: 'member', inviteCode: created.room.inviteCode });
+    const member = joined.participants.at(-1)!;
+    service.addRoomiMessage({
+      roomId: created.room.id,
+      kind: 'focus_recovery',
+      text: 'member only',
+      targetParticipantId: member.id
+    });
+
+    expect(service.snapshotForParticipant(created.room.id, host.id).roomiMessages).toEqual([]);
+    expect(service.snapshotForParticipant(created.room.id, member.id).roomiMessages).toHaveLength(1);
+  });
+});

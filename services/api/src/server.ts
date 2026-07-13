@@ -60,11 +60,20 @@ export function createApp(roomService: RoomService, roomiOrchestrator: RoomiOrch
     }
   });
 
-  app.post('/sessions', (request, response) => {
+  app.post('/sessions', async (request, response) => {
     try {
       const { roomId, participantId } = request.body as SessionStartInput;
       const snapshot = roomService.startSession(roomId, participantId);
-      response.json(snapshot);
+      const text = await roomiOrchestrator.generateStartMessage({
+        sessionMinutes: snapshot.currentSession?.plannedMinutes ?? snapshot.room.settings.sessionMinutes,
+        goalCount: snapshot.goals.length
+      });
+      roomService.addRoomiMessage({
+        roomId: snapshot.room.id,
+        kind: 'start',
+        text
+      });
+      response.json(roomService.snapshotForParticipant(roomId, participantId));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Session start failed';
       response.status(statusForRoomError(message, 404)).json({ message });

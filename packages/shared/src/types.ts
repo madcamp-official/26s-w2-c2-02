@@ -113,6 +113,11 @@ export type LeaveRoomInput = {
   participantId: string;
 };
 
+export type RoomSubscriptionInput = {
+  roomId: string;
+  participantId: string;
+};
+
 export type UpdateParticipantStatusInput = {
   roomId: string;
   participantId: string;

@@ -1,5 +1,7 @@
 import type {
+  RoomiMessage,
   RoomSnapshot,
+  RoomSubscriptionInput,
   GoalSubmitInput,
   LeaveRoomInput,
   ParticipantReadyInput,
@@ -25,7 +27,7 @@ export const realtimeEvents = {
 export type ClientToServerEvents = {
   [realtimeEvents.client.leaveRoom]: (input: LeaveRoomInput) => void;
   [realtimeEvents.client.subscribeRoom]: (
-    roomId: string,
+    input: RoomSubscriptionInput,
     acknowledge: (snapshot: RoomSnapshot | undefined) => void
   ) => void;
   [realtimeEvents.client.participantReady]: (input: ParticipantReadyInput) => void;
@@ -38,6 +40,6 @@ export type ClientToServerEvents = {
 export type ServerToClientEvents = {
   [realtimeEvents.server.roomSnapshot]: (snapshot: RoomSnapshot) => void;
   [realtimeEvents.server.roomUpdated]: (snapshot: RoomSnapshot) => void;
-  [realtimeEvents.server.roomiMessage]: (message: string) => void;
+  [realtimeEvents.server.roomiMessage]: (message: RoomiMessage) => void;
   [realtimeEvents.server.error]: (message: string) => void;
 };
