@@ -40,6 +40,20 @@ export function createApp(roomService: RoomService) {
     }
   });
 
+  app.post('/rooms/:roomId/goals', (request, response) => {
+    try {
+      const { participantId, rawText } = request.body as {
+        participantId: string;
+        rawText: string;
+      };
+      const snapshot = roomService.submitGoal(request.params.roomId, participantId, rawText);
+      response.json(snapshot);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Goal submission failed';
+      response.status(statusForRoomError(message, 404)).json({ message });
+    }
+  });
+
   app.get('/rooms/:inviteCode', (request, response) => {
     const snapshot = roomService.getByInviteCode(request.params.inviteCode);
 

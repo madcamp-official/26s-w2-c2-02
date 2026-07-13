@@ -7,6 +7,7 @@
 | `GET` | `/health` | Check API availability. |
 | `POST` | `/rooms` | Create a room with a host participant and return the caller participant id. |
 | `POST` | `/rooms/join` | Join an existing room by invite code and return the caller participant id. |
+| `POST` | `/rooms/:roomId/goals` | Upsert the calling participant's goal (`participantId`, `rawText`) and return the room snapshot. Allowed regardless of room status (late joiners can set goals). |
 | `GET` | `/rooms/:inviteCode` | Read a room snapshot by invite code. |
 
 Invite codes are 6-character uppercase alphanumeric strings. Roomi excludes ambiguous characters (`0`, `O`, `1`, `I`, `L`) and normalizes user input before lookup.
@@ -45,6 +46,7 @@ Client events are defined in `packages/shared/src/realtime-events.ts`.
 | `room:subscribe` | client to server | Subscribe to an existing room after REST create/join and receive snapshots. Membership is created only via REST (`POST /rooms`, `POST /rooms/join`); sockets never add participants. |
 | `room:leave` | client to server | Remove the participant from the room and leave the realtime channel. |
 | `participant:ready` | client to server | Set the waiting-room readiness flag (`isReady`) for a participant; broadcasts `room:updated`. |
+| `goal:submit` | client to server | Upsert the participant's goal (`rawText`); mirrors `POST /rooms/:roomId/goals` and broadcasts `room:updated`. |
 | `participant:update-status` | client to server | Publish focus/break/away status updates. |
 | `room:snapshot` | server to client | Send the current room snapshot to a newly subscribed client. |
 | `room:updated` | server to client | Broadcast the latest room snapshot. |

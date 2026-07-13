@@ -66,11 +66,11 @@
 - **위험**: 집중용 `status`와 대기용 `isReady` 혼용 시 스터디룸 단계 의미 충돌 → 별도 필드로 분리(2단계).
 - **검증**: `RoomService.setReady` 단위 테스트(set/clear/broadcast/미존재 방) + gateway 통합 테스트로 **2개 소켓 구독 상태에서 ready 변경이 양쪽에 broadcast** 되는 것 확인. vitest 8건 통과.
 
-### 4. 목표 등록/수정 API
-- **행동**: `POST /rooms/:roomId/goals`(participant 기준 upsert, `rawText`) → snapshot broadcast. socket `goal:submit`도 동일 서비스 호출. **`room.status`가 `waiting`이 아니어도 허용**(진행 중 목표 입력).
+### 4. 목표 등록/수정 API ✅ (완료)
+- **행동**: `POST /rooms/:roomId/goals`(participant 기준 upsert, `rawText`) → snapshot broadcast. socket `goal:submit`도 동일 `RoomService.submitGoal()` 호출. `room.status`가 `waiting`이 아니어도 허용(진행 중 목표 입력). 참가자 미존재 시 404.
 - **이유**: 개인 목표가 있어야 다듬기·세션시작이 성립. 늦은 참가자도 목표 입력 필요.
-- **위험**: 같은 participant 다중 goal → 목록 중복. participantId 기준 upsert로 방지.
-- **검증**: 같은 참가자 2회 제출 시 goal 1건 유지.
+- **위험**: 같은 participant 다중 goal → 목록 중복. participantId 기준 upsert로 방지(재제출 시 `refinedText` 무효화).
+- **검증**: 같은 참가자 2회 제출 시 goal 1건 유지 — `submitGoal` 단위 테스트(생성/upsert/참가자별 분리/broadcast/studying 허용/미존재 방·참가자) + REST(`server.test.ts`) + gateway `goal:submit` 통합. vitest 19건 통과.
 
 ### 5. 루미 목표 다듬기 API (LLM)
 - **행동**: `POST /goals/refine`(`rawGoal`, `sessionMinutes`) → `RoomiOrchestrator` 통해 `refinedText`+사유 반환, **LLM 실패 시 템플릿 fallback**. 원본은 서버에만.

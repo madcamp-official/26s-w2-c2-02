@@ -124,3 +124,9 @@ export type ParticipantReadyInput = {
   participantId: string;
   isReady: boolean;
 };
+
+export type GoalSubmitInput = {
+  roomId: string;
+  participantId: string;
+  rawText: string;
+};

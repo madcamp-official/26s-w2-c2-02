@@ -70,3 +70,88 @@ describe('RoomService participant readiness', () => {
     );
   });
 });
+
+describe('RoomService goals', () => {
+  it('records a goal for a participant', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+
+    const snapshot = service.submitGoal(created.room.id, host.id, '수학 3단원');
+
+    expect(snapshot.goals).toHaveLength(1);
+    expect(snapshot.goals[0]?.participantId).toBe(host.id);
+    expect(snapshot.goals[0]?.rawText).toBe('수학 3단원');
+  });
+
+  it('upserts by participant: submitting twice keeps a single goal', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    service.submitGoal(created.room.id, host.id, '수학 3단원');
+
+    const snapshot = service.submitGoal(created.room.id, host.id, '영어 단어 50개');
+
+    expect(snapshot.goals).toHaveLength(1);
+    expect(snapshot.goals[0]?.rawText).toBe('영어 단어 50개');
+  });
+
+  it('keeps one goal per participant', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    const joined = service.joinRoom({
+      nickname: 'member',
+      inviteCode: created.room.inviteCode
+    });
+    const member = joined.participants.at(-1)!;
+
+    service.submitGoal(created.room.id, host.id, '수학');
+    const snapshot = service.submitGoal(created.room.id, member.id, '영어');
+
+    expect(snapshot.goals).toHaveLength(2);
+  });
+
+  it('broadcasts a room update when a goal is submitted', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    let received: number | undefined;
+    service.onRoomUpdated((snapshot) => {
+      received = snapshot.goals.length;
+    });
+
+    service.submitGoal(created.room.id, host.id, '수학');
+
+    expect(received).toBe(1);
+  });
+
+  it('allows submitting a goal while the room is already studying', () => {
+    const store = new InMemoryRoomStore();
+    const service = new RoomService(store);
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    const stored = store.findByRoomId(created.room.id)!;
+    stored.room.status = 'studying';
+    store.update(stored);
+
+    const snapshot = service.submitGoal(created.room.id, host.id, '늦게 합류한 목표');
+
+    expect(snapshot.goals).toHaveLength(1);
+  });
+
+  it('throws when the participant is not in the room', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+
+    expect(() => service.submitGoal(created.room.id, 'ghost', '목표')).toThrow(
+      'Participant not found'
+    );
+  });
+
+  it('throws when the room does not exist', () => {
+    const service = createService();
+
+    expect(() => service.submitGoal('missing-room', 'x', '목표')).toThrow('Room not found');
+  });
+});

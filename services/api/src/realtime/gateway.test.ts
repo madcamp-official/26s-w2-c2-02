@@ -85,4 +85,26 @@ describe('realtime gateway', () => {
     expect(aliceSnapshot.participants[0]?.isReady).toBe(true);
     expect(bobSnapshot.participants[0]?.isReady).toBe(true);
   });
+
+  it('broadcasts goal submissions to every subscribed socket', async () => {
+    const created = roomService.createRoom({ nickname: 'host' });
+    const { id: roomId } = created.room;
+    const hostId = created.participants[0].id;
+
+    const [alice, bob] = await Promise.all([connectClient(), connectClient()]);
+    await Promise.all([subscribe(alice, roomId), subscribe(bob, roomId)]);
+
+    const bobUpdate = once(bob, realtimeEvents.server.roomUpdated);
+
+    alice.emit(realtimeEvents.client.submitGoal, {
+      roomId,
+      participantId: hostId,
+      rawText: '수학 3단원'
+    });
+
+    const bobSnapshot = await bobUpdate;
+
+    expect(bobSnapshot.goals).toHaveLength(1);
+    expect(bobSnapshot.goals[0]?.rawText).toBe('수학 3단원');
+  });
 });
