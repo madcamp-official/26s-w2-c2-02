@@ -1,4 +1,4 @@
-import { Camera, Mic } from 'lucide-react';
+import { ArrowLeft, Camera, Mic } from 'lucide-react';
 import { RoomiMascot } from '../components/RoomiMascot';
 import type { ScreenProps } from './types';
 
@@ -8,13 +8,17 @@ interface OnboardingPermissionProps extends ScreenProps {
   permission: MediaPermissionState;
   onPermissionChange: (permission: MediaPermissionState) => void;
   onReady: () => void;
+  onBack: () => void;
 }
+
+const isMac = window.roomi?.platform === 'darwin';
 
 /** Onboarding 4 · 카메라·마이크 권한 (Figma 67:61). */
 export function OnboardingPermission({
   permission,
   onPermissionChange,
-  onReady
+  onReady,
+  onBack
 }: OnboardingPermissionProps) {
   const isChecking = permission === 'checking';
   const isGranted = permission === 'granted';
@@ -24,18 +28,30 @@ export function OnboardingPermission({
     onPermissionChange('checking');
 
     try {
+      // 데스크톱 앱에서는 먼저 OS 레벨 접근을 확보한다. (미결정이면 시스템 다이얼로그가 뜬다.)
+      await window.roomi?.media.ensureAccess();
+
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       stream.getTracks().forEach((track) => track.stop());
       onPermissionChange('granted');
       onReady();
-    } catch {
+    } catch (error) {
+      console.error('미디어 권한 확인 실패:', error);
       onPermissionChange('denied');
     }
+  };
+
+  const openPrivacySettings = () => {
+    void window.roomi?.media.openPrivacySettings();
   };
 
   return (
     <div className="screen screen--onboarding">
       <div className="onb-card">
+        <button type="button" className="onb-card__back" onClick={onBack} aria-label="이전 화면으로">
+          <ArrowLeft size={16} />
+          <span>이전</span>
+        </button>
         <span className="pill pill--purple onb-card__step">STEP 4 / 4 · 권한</span>
         <div className="onb-card__mascot">
           <RoomiMascot size={64} />
@@ -90,6 +106,15 @@ export function OnboardingPermission({
           >
             {isChecking ? '권한 확인 중...' : isGranted ? '대기실로 이동' : '권한 확인하고 입장'}
           </button>
+          {isDenied && isMac ? (
+            <button
+              type="button"
+              className="btn btn--ghost btn--block"
+              onClick={openPrivacySettings}
+            >
+              시스템 설정에서 권한 켜기
+            </button>
+          ) : null}
         </div>
       </div>
     </div>

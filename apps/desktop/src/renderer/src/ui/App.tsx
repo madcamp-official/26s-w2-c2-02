@@ -322,6 +322,7 @@ export function App() {
               }
               go('waiting');
             }}
+            onBack={() => go(isHost ? 'create-room' : 'onboarding-join')}
             go={go}
           />
         )}

@@ -57,6 +57,9 @@
 
 .onb-actions {
   margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 /* Nickname / join input groups */

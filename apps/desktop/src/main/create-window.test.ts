@@ -50,7 +50,6 @@ describe('createMainWindow', () => {
         minHeight: 680,
         title: 'Roomi',
         frame: false,
-        titleBarStyle: 'hidden',
         backgroundColor: '#f4f5f7',
         icon: '/tmp/roomi-icon.png',
         webPreferences: {
