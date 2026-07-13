@@ -125,12 +125,22 @@ describe('WaitingRoom', () => {
   });
 
   it('renders the in-progress mode for a studying room with a join CTA', () => {
-    const props = { ...baseProps(), isHost: false, currentParticipantId: 'p-3', room: room('studying') };
+    const initial = baseProps();
+    const props = {
+      ...initial,
+      isHost: false,
+      currentParticipantId: 'p-3',
+      room: room('studying'),
+      participants: initial.participants.map((candidate) =>
+        candidate.id === 'p-host' ? { ...candidate, status: 'focused' as const } : candidate
+      )
+    };
     render(<WaitingRoom {...props} />);
 
     expect(screen.getByText('진행 중')).toBeInTheDocument();
     expect(screen.getByText('이미 공부 중이에요')).toBeInTheDocument();
     expect(screen.getByText('준비 중')).toBeInTheDocument();
+    expect(screen.getByText('공부 중')).toBeInTheDocument();
     expect(screen.queryByText('초대 대기중')).not.toBeInTheDocument();
     const joinButton = screen.getByRole('button', { name: '스터디룸 참여하기' });
     fireEvent.click(joinButton);

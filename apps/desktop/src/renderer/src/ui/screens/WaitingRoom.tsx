@@ -109,14 +109,17 @@ export function WaitingRoom({
   };
 
   const people = [
-    ...participants.map((participant) => ({
-      id: participant.id,
-      name: participant.nickname,
-      sub: participant.role === 'host' ? '방장' : '',
-      status: participant.isReady ? '준비완료' : '준비 중',
-      tone: participant.isReady ? 'green' : 'muted',
-      initial: participant.nickname.slice(0, 1)
-    })),
+    ...participants.map((participant) => {
+      const isStudying = inProgress && participant.status !== 'online';
+      return {
+        id: participant.id,
+        name: participant.nickname,
+        sub: participant.role === 'host' ? '방장' : '',
+        status: isStudying ? '공부 중' : participant.isReady ? '준비완료' : '준비 중',
+        tone: isStudying || participant.isReady ? 'green' : 'muted',
+        initial: participant.nickname.slice(0, 1)
+      };
+    }),
     ...Array.from(
       { length: Math.max(room.settings.maxParticipants - participants.length, 0) },
       (_, index) => ({

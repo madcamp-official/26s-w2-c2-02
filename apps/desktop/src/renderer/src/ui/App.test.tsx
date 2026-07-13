@@ -75,10 +75,11 @@ describe('App screen router', () => {
       getTracks: () => [audioTrack, videoTrack]
     } as unknown as MediaStream;
 
+    const getUserMedia = vi.fn().mockResolvedValue(stream);
     Object.defineProperty(navigator, 'mediaDevices', {
       configurable: true,
       value: {
-        getUserMedia: vi.fn().mockResolvedValue(stream)
+        getUserMedia
       }
     });
     stubHostApi();
@@ -111,6 +112,14 @@ describe('App screen router', () => {
     expect(screen.getByText('0명이 준비를 마쳤어요.')).toBeInTheDocument();
     expect(audioTrack.stop).toHaveBeenCalled();
     expect(videoTrack.stop).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '방 나가기' }));
+    fireEvent.click(screen.getByRole('button', { name: /새로운 방 만들기/ }));
+    fireEvent.click(screen.getByRole('button', { name: '방 만들고 대기실로 가기' }));
+
+    await screen.findByRole('heading', { level: 1, name: '다 같이 목표를 정해볼까요?' });
+    expect(screen.queryByText('카메라와 마이크를 확인할게요')).not.toBeInTheDocument();
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
   });
 
   it('keeps session end behind host-only actions', async () => {
@@ -268,12 +277,22 @@ describe('App screen router', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: '이미 공부 중이에요' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '스터디룸 참여하기' }));
+    expect(socketMock.emit).toHaveBeenCalledWith('participant:update-status', {
+      roomId: 'room-server',
+      participantId: 'participant-minji',
+      status: 'focused'
+    });
     await screen.findByLabelText('내 웹캠 미리보기');
     expect(screen.getAllByText('소요').length).toBeGreaterThan(0);
     expect(screen.getByText('민지 (나)')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '방장 메뉴' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '나가기' }));
+    expect(socketMock.emit).toHaveBeenCalledWith('participant:update-status', {
+      roomId: 'room-server',
+      participantId: 'participant-minji',
+      status: 'online'
+    });
     expect(await screen.findByRole('heading', { level: 1, name: '이미 공부 중이에요' })).toBeInTheDocument();
     expect(socketMock.emit).not.toHaveBeenCalledWith('room:leave', {
       roomId: 'room-server',
@@ -372,7 +391,7 @@ function stubHostApi() {
       const snapshot = url.endsWith('/sessions')
         ? {
             room: { ...room, status: 'studying' as const },
-            participants: [participant],
+            participants: [{ ...participant, status: 'focused' as const }],
             goals: [],
             roomiMessages: [],
             currentSession: {

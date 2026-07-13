@@ -34,7 +34,8 @@ import {
   RoomApiError,
   startSession,
   submitGoal,
-  subscribeToRoom
+  subscribeToRoom,
+  updateParticipantStatus
 } from '../room-client';
 
 type MediaPermissionState = 'idle' | 'checking' | 'granted' | 'denied';
@@ -322,7 +323,7 @@ export function App() {
       return;
     }
 
-    go('onboarding-permission');
+    go(mediaPermission === 'granted' ? 'waiting' : 'onboarding-permission');
   };
 
   const joinRoom = async () => {
@@ -353,7 +354,7 @@ export function App() {
       return;
     }
 
-    go('onboarding-permission');
+    go(mediaPermission === 'granted' ? 'waiting' : 'onboarding-permission');
   };
 
   const leaveCurrentRoom = () => {
@@ -365,7 +366,6 @@ export function App() {
     }
 
     setRoomDraft(null);
-    setMediaPermission('idle');
     go('onboarding-create');
   };
 
@@ -436,6 +436,11 @@ export function App() {
         ? {
             ...current,
             room: { ...current.room, status: 'studying' },
+            participants: current.participants.map((participant) =>
+              participant.id === current.currentParticipantId
+                ? { ...participant, status: 'focused' }
+                : participant
+            ),
             currentSession: {
               id: `session-${Date.now()}`,
               roomId: current.room.id,
@@ -447,6 +452,41 @@ export function App() {
         : current
     );
     go('study');
+  };
+
+  const setCurrentSessionPresence = (status: 'online' | 'focused') => {
+    if (!roomDraft) return;
+
+    if (roomDraft.realtime === 'server') {
+      updateParticipantStatus(socketRef.current, {
+        roomId: roomDraft.room.id,
+        participantId: roomDraft.currentParticipantId,
+        status
+      });
+    }
+
+    setRoomDraft((current) =>
+      current
+        ? {
+            ...current,
+            participants: current.participants.map((participant) =>
+              participant.id === current.currentParticipantId
+                ? { ...participant, status }
+                : participant
+            )
+          }
+        : current
+    );
+  };
+
+  const joinCurrentSession = () => {
+    setCurrentSessionPresence('focused');
+    go('study');
+  };
+
+  const leaveCurrentSession = () => {
+    setCurrentSessionPresence('online');
+    go('waiting');
   };
 
   return (
@@ -504,7 +544,7 @@ export function App() {
             onSubmitGoal={submitCurrentGoal}
             onRefineGoal={refineCurrentGoal}
             onStartSession={startCurrentSession}
-            onJoinSession={() => go('study')}
+            onJoinSession={joinCurrentSession}
             onLeaveRoom={leaveCurrentRoom}
             go={go}
           />
@@ -514,7 +554,7 @@ export function App() {
             currentParticipantId={activeRoom.currentParticipantId}
             isHost={isHost}
             onEndSession={() => go('retrospective')}
-            onLeaveRoom={() => go('waiting')}
+            onLeaveRoom={leaveCurrentSession}
             participants={activeRoom.participants}
             goals={activeRoom.goals}
             roomiMessages={activeRoom.roomiMessages}

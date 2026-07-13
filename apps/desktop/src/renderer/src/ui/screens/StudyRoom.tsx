@@ -81,6 +81,10 @@ export function formatSessionTime(seconds: number) {
   return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
 }
 
+export function participantsInStudyRoom(participants: Participant[]) {
+  return participants.filter((participant) => participant.status !== 'online');
+}
+
 export function reconcilePendingCameraState(
   reported: boolean,
   pending: boolean | undefined
@@ -103,6 +107,7 @@ export function StudyRoom({
   videoJoin,
   go
 }: StudyRoomProps) {
+  const studyParticipants = participantsInStudyRoom(participants);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const pendingCameraStateRef = useRef<boolean | undefined>(undefined);
@@ -119,7 +124,8 @@ export function StudyRoom({
   const [dismissedFocusMessageId, setDismissedFocusMessageId] = useState<string>();
   const [timestamp, setTimestamp] = useState(() => Date.now());
   const currentParticipant =
-    participants.find((participant) => participant.id === currentParticipantId) ?? participants[0];
+    studyParticipants.find((participant) => participant.id === currentParticipantId) ??
+    studyParticipants[0];
   const plannedSeconds = (currentSession?.plannedMinutes ?? room.settings.sessionMinutes) * 60;
   const remainingSeconds = currentSession
     ? remainingSessionSeconds(currentSession, timestamp)
@@ -239,13 +245,13 @@ export function StudyRoom({
               <span>남은 시간</span>
               <span className="study-timer-card__participants">
                 <i />
-                {participants.length} / {room.settings.maxParticipants}명 집중 중
+                {studyParticipants.length} / {room.settings.maxParticipants}명 집중 중
               </span>
             </div>
           </section>
 
           <div className="study__grid" aria-label="참가자 영상 영역">
-            {participants.map((participant) => {
+            {studyParticipants.map((participant) => {
               const isMe = participant.id === currentParticipantId;
               const isAway = participant.status === 'away' || participant.status === 'break';
 

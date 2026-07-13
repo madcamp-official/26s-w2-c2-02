@@ -188,6 +188,9 @@ describe('RoomService.startSession', () => {
     expect(snapshot.currentSession?.mode).toBe('study');
     expect(snapshot.currentSession?.plannedMinutes).toBe(created.room.settings.sessionMinutes);
     expect(snapshot.currentSession?.startedAt).toBeTruthy();
+    expect(snapshot.participants.find((participant) => participant.id === host.id)?.status).toBe(
+      'focused'
+    );
   });
 
   it('lets the host start even when other participants are not ready', () => {
@@ -204,6 +207,12 @@ describe('RoomService.startSession', () => {
     const snapshot = service.startSession(created.room.id, host.id);
 
     expect(snapshot.room.status).toBe('studying');
+    expect(snapshot.participants.find((participant) => participant.id === host.id)?.status).toBe(
+      'focused'
+    );
+    expect(snapshot.participants.find((participant) => participant.id !== host.id)?.status).toBe(
+      'online'
+    );
   });
 
   it('broadcasts a room update when the session starts', () => {

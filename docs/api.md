@@ -9,7 +9,7 @@
 | `POST` | `/rooms/join` | Join an existing room by invite code and return the caller participant id. |
 | `POST` | `/rooms/:roomId/goals` | Upsert the calling participant's goal (`participantId`, `rawText`) and return the room snapshot. Allowed regardless of room status (late joiners can set goals). |
 | `POST` | `/goals/refine` | Refine a raw goal (`rawGoal`, `sessionMinutes`) via Gemini and return `{ refinedText, reason, source }`. Always `200`; `source` is `template` when the LLM is unavailable. The raw goal is not persisted. |
-| `POST` | `/sessions` | Host starts the study session (`roomId`, `participantId`) regardless of participants' `isReady` state. Sets `room.status = 'studying'` and `currentSession`, returns the snapshot. `403` for non-host, `409` if not `waiting`, `404` for unknown room. Transition reaches everyone via `room:updated`. |
+| `POST` | `/sessions` | Host starts the study session (`roomId`, `participantId`) regardless of participants' `isReady` state. Sets `room.status = 'studying'`, creates `currentSession`, and changes the host status to `focused`; other participants remain `online` in the waiting room. Returns the snapshot. `403` for non-host, `409` if not `waiting`, `404` for unknown room. Transition reaches everyone via `room:updated`. |
 | `GET` | `/rooms/:inviteCode` | Read a room snapshot by invite code. |
 
 Invite codes are 6-character uppercase alphanumeric strings. Roomi excludes ambiguous characters (`0`, `O`, `1`, `I`, `L`) and normalizes user input before lookup.
@@ -55,7 +55,7 @@ Client events are defined in `packages/shared/src/realtime-events.ts`.
 | `room:leave` | client to server | Remove the participant from the room and leave the realtime channel. A socket disconnect also removes its subscribed participant. If that participant was the host, the earliest-joined remaining participant becomes host. |
 | `participant:ready` | client to server | Set the waiting-room readiness flag (`isReady`) for a participant; broadcasts `room:updated`. |
 | `goal:submit` | client to server | Upsert the participant's goal (`rawText`); mirrors `POST /rooms/:roomId/goals` and broadcasts `room:updated`. |
-| `participant:update-status` | client to server | Publish focus/break/away status updates. |
+| `participant:update-status` | client to server | Publish study-room presence and focus/break/away status updates. During an active session, `online` means waiting-room only; `focused`, `distracted`, `away`, `break`, and `paused` mean the participant has entered the study room. |
 | `room:snapshot` | server to client | Send the current room snapshot to a newly subscribed client. |
 | `room:updated` | server to client | Broadcast the latest room snapshot. |
 | `roomi:message` | server to client | Send a typed Roomi operator message. Session-start messages go to the room; `focus_recovery` messages are delivered only to `targetParticipantId`. |

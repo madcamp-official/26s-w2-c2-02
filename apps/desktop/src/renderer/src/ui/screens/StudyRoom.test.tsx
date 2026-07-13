@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DailyParticipantMedia,
   formatSessionTime,
+  participantsInStudyRoom,
   reconcilePendingCameraState,
   remainingSessionSeconds
 } from './StudyRoom';
@@ -12,6 +13,25 @@ beforeEach(() => {
 });
 
 describe('StudyRoom session clock', () => {
+  it('shows only participants who actually entered the study room', () => {
+    const participant = (id: string, status: 'online' | 'focused') => ({
+      id,
+      roomId: 'room-1',
+      userId: `user-${id}`,
+      nickname: id,
+      role: 'member' as const,
+      status,
+      isReady: false,
+      scoreVisible: true,
+      joinedAt: '2026-07-13T00:00:00.000Z',
+      lastSeenAt: '2026-07-13T00:00:00.000Z'
+    });
+
+    expect(
+      participantsInStudyRoom([participant('waiting', 'online'), participant('studying', 'focused')])
+    ).toMatchObject([{ id: 'studying' }]);
+  });
+
   it('derives the remaining time from the server session start time', () => {
     const startedAt = '2026-07-13T00:00:00.000Z';
     const timestamp = Date.parse(startedAt) + 12 * 60_000 + 18_400;

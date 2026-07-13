@@ -6,6 +6,7 @@ import type {
   GoalRefinement,
   JoinRoomInput,
   ParticipantReadyInput,
+  UpdateParticipantStatusInput,
   RoomiMessage,
   RoomSubscriptionInput,
   RoomSession,
@@ -91,6 +92,13 @@ export function setReady(
   input: ParticipantReadyInput
 ) {
   socket?.emit(realtimeEvents.client.participantReady, input);
+}
+
+export function updateParticipantStatus(
+  socket: Socket<ServerToClientEvents, ClientToServerEvents> | null,
+  input: UpdateParticipantStatusInput
+) {
+  socket?.emit(realtimeEvents.client.updateStatus, input);
 }
 
 export function createRoomSocket() {

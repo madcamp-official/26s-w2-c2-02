@@ -10,6 +10,7 @@
 - Keep tool-specific workflow details out of `AGENTS.md`.
 - Keep repo-shared agent guidance in `AGENTS.md`, Codex skills in `.agents/skills/`, Codex hooks/config in `.codex/`, Claude hooks/config in `.claude/`, Claude compatibility notes in `CLAUDE.md`, and cross-tool workflow summaries in `docs/ai_workflows.md`.
 - Use Korean commit messages by default. Keep important English technical terms such as `workflow`, `hook`, and `API` when they are clearer.
+- Commit and push every completed user-requested change, including small fixes, unless the user explicitly asks not to commit or push. If verification fails or push is blocked, report it instead of hiding the failure.
 
 ## Verification
 

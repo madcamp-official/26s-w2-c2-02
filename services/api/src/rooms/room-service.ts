@@ -243,6 +243,11 @@ export class RoomService {
 
     snapshot.room = { ...snapshot.room, status: 'studying' };
     snapshot.currentSession = session;
+    snapshot.participants = snapshot.participants.map((participant) =>
+      participant.id === participantId
+        ? { ...participant, status: 'focused', lastSeenAt: now }
+        : participant
+    );
     this.store.update(snapshot);
     this.emitRoomUpdated(snapshot);
     return snapshot;
