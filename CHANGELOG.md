@@ -34,6 +34,7 @@
 - 온보딩 닉네임/방 코드 입력, 카메라·마이크 권한 확인, 로컬 방 생성 설정이 대기실 상태로 이어지도록 연결했습니다.
 - Figma 픽셀에서 직접 추출한 색상/타이포/간격을 `styles/tokens.css` 에 design token 으로 정리하고, 공통 `AppBar`·루미 mascot·badge/pill/button 컴포넌트를 추가했습니다.
 - 개발 중 화면을 빠르게 오갈 수 있는 상단 dev 화면 전환 nav 를 추가했습니다(디자인에는 포함되지 않는 개발용 UI).
+- MediaPipe 테스트 화면에서 웹캠 얼굴 landmark 기반 Rule-Based 집중도 label, 점수, feature 지속 시간을 확인할 수 있게 추가했습니다.
 
 ### Changed
 
@@ -45,6 +46,8 @@
 - 중앙 Roomi API 서버를 LAN/배포 환경에서 띄울 수 있도록 `API_HOST` listen 설정과 comma-separated `CLIENT_ORIGIN` allowlist 를 추가했습니다. REST CORS 와 Socket.IO CORS 는 같은 origin 정책을 공유합니다.
 - 다른 PC의 renderer 가 같은 중앙 API 를 바라보도록 `VITE_ROOMI_API_URL` 설정 예시, `/health` 확인 방법, in-memory room store 한계를 `docs/api.md` 와 `docs/architecture.md` 에 정리했습니다.
 - KAIST 내부망 같은 restricted network 에서 Cloudflare Tunnel 로 Roomi API 를 외부 공개하는 설정 예시와 client URL 설정을 `docs/api.md` 에 추가했습니다.
+- `@roomi/api` 가 실행 cwd 와 무관하게 repository root `.env` 를 먼저 읽고 `services/api/.env` 로 override 할 수 있게 변경해, Daily 서버 키가 package cwd 실행에서 누락되지 않도록 했습니다.
+- `CLIENT_ORIGIN` 이 origin 내부 wildcard 를 지원하도록 변경해, `http://192.168.*:5175` 같은 LAN renderer origin 을 REST CORS 와 Socket.IO CORS 에 함께 허용할 수 있게 했습니다.
 - Windows 환경에서도 `test:e2e:local` 을 같은 명령으로 실행할 수 있도록 Electron E2E local runner 를 Unix `env -u` 기반 shell command 에서 cross-platform Node runner 로 변경했습니다.
 - Windows 환경에서도 `@roomi/desktop` dev script 가 로컬 Electron GUI 를 띄울 수 있도록 Unix `env -u` 기반 실행을 cross-platform Node runner 로 변경했습니다.
 - renderer 화면의 1440x900 고정 폭/높이 기준을 제거하고, 창 크기 변경에 따라 주요 페이지가 줄바꿈·재정렬되도록 반응형 레이아웃으로 조정했습니다.
@@ -81,6 +84,7 @@
 - 스크럼 회의록 생성 script 는 `scripts/scrum_notes/YYYY-MM-DD.md` 에 날짜별로 저장하고, 이전 날짜 노트와 겹치는 항목은 제외하도록 변경했습니다.
 - 같은 날짜의 스크럼 회의록이 이미 있으면 새 파일을 만들지 않고 안내 메시지만 출력하도록 변경했습니다.
 - Codex/Claude Stop hook 이 자동 커밋 환경변수 `AI_AUTO_COMMIT`, `CODEX_AUTO_COMMIT`, `CLAUDE_AUTO_COMMIT` 를 모두 `1` 로 주입하도록 변경했습니다.
+- MediaPipe WASM 초기화를 위해 desktop renderer CSP 에 `wasm-unsafe-eval` 을 허용하고, Rule-Based 기준값을 화면에서 조정할 수 있는 설정 모달을 추가했습니다.
 
 ### Notes
 ### Manual Steps
@@ -88,4 +92,5 @@
 - 라이브 LLM 메시지를 사용하려면 API 서버의 `services/api/.env`에 `GEMINI_API_KEY`를 설정해야 합니다. 키가 없으면 템플릿 fallback이 자동 적용됩니다.
 - `@roomi/*` workspace package scope 로 변경된 뒤에는 `pnpm install` 을 다시 실행해 로컬 workspace link 를 갱신해야 합니다.
 - 새 workspace script 를 사용하기 전에 `pnpm install` 을 실행해야 합니다.
+- MediaPipe 테스트 화면을 사용하려면 `pnpm install` 로 `@mediapipe/tasks-vision` dependency 를 설치해야 합니다.
 - Daily 또는 LLM provider 를 연결하기 전에 `.env.example` 을 `.env` 로 복사하고 필요한 service key 를 채워야 합니다.

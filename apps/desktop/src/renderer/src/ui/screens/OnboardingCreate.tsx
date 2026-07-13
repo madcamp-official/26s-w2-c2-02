@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronRight, KeyRound, Plus } from 'lucide-react';
+import { ArrowLeft, Camera, ChevronRight, KeyRound, Plus } from 'lucide-react';
 import { RoomiMascot } from '../components/RoomiMascot';
 import type { ScreenProps } from './types';
 
@@ -53,6 +53,17 @@ export function OnboardingCreate({ nickname, go }: OnboardingCreateProps) {
             <span className="choice__body">
               <span className="choice__title">방 코드로 입장하기</span>
               <span className="choice__desc">친구에게 받은 코드로 바로 들어가요</span>
+            </span>
+            <ChevronRight className="choice__arrow" size={20} />
+          </button>
+
+          <button type="button" className="choice" onClick={() => go('mediapipe-test')}>
+            <span className="choice__icon">
+              <Camera size={20} />
+            </span>
+            <span className="choice__body">
+              <span className="choice__title">MediaPipe 집중도 테스트</span>
+              <span className="choice__desc">웹캠 landmark와 Rule-Based label을 확인해요</span>
             </span>
             <ChevronRight className="choice__arrow" size={20} />
           </button>

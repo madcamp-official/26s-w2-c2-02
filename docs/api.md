@@ -76,18 +76,19 @@ Keep server secrets only on the machine that runs the central API server.
 
 ### API Server Environment
 
-Copy `services/api/.env.example` to `services/api/.env` on the API server machine. The API loads env from its own working directory (`pnpm dev:api` runs in `services/api`), so a repo-root `.env` is not read.
+Copy the root `.env.example` to the repository root `.env` on the API server machine.
+The API server loads the root `.env` first, then loads `services/api/.env` if it exists. Values in `services/api/.env` override the root file, which is useful for server-specific deployment settings.
 
 | Variable | Purpose |
 |---|---|
 | `API_PORT` | Backend HTTP and Socket.IO port. |
 | `API_HOST` | Backend listen host. Use `0.0.0.0` when the API must accept LAN or deployed traffic. |
-| `CLIENT_ORIGIN` | Comma-separated allowlist of renderer/browser origins allowed by REST CORS and Socket.IO CORS. |
+| `CLIENT_ORIGIN` | Comma-separated allowlist of renderer/browser origins allowed by REST CORS and Socket.IO CORS. Supports `*` inside an origin pattern, but a bare `*` is ignored. |
 | `DAILY_API_KEY` | Daily API key for room/token creation. |
 | `DAILY_DOMAIN` | Daily domain used by the video provider. |
 | `GEMINI_API_KEY` | Google Gemini API key for goal refinement, kept server-side only. When unset, `POST /goals/refine` returns a deterministic template instead of calling the LLM. |
 
-During local development, the API also accepts renderer origins on `localhost` and `127.0.0.1` in the `5100-5199` port range. This lets Electron and a browser guest join the same local API during one-machine testing.
+During local development, the API also accepts renderer origins on `localhost` and `127.0.0.1` in the `5100-5199` port range. This lets Electron and a browser guest join the same local API during one-machine testing. If another PC serves the renderer from a LAN address, add an exact origin or a narrow wildcard such as `http://192.168.*:5175`.
 
 Daily credentials belong only in the API server `.env`. The renderer receives a Daily room URL and participant token from `POST /rooms` or `POST /rooms/join`; it must not receive `DAILY_API_KEY`.
 
@@ -114,7 +115,7 @@ Server `.env` example:
 ```env
 API_PORT=4100
 API_HOST=0.0.0.0
-CLIENT_ORIGIN=http://localhost:5175,http://127.0.0.1:5175,http://192.168.0.23:5175
+CLIENT_ORIGIN=http://localhost:5175,http://127.0.0.1:5175,http://192.168.*:5175
 DAILY_API_KEY=...
 DAILY_DOMAIN=...
 GEMINI_API_KEY=
@@ -150,12 +151,12 @@ With that setting, REST room creation/join and Socket.IO subscriptions both conn
 
 If the central API server runs inside a restricted campus network, such as KAIST internal network, expose it through Cloudflare Tunnel instead of opening inbound firewall ports.
 
-Roomi API server `.env` on the internal server:
+Roomi API server `.env` on the internal server. Put this in the repository root `.env`, or in `services/api/.env` if this server needs API-only overrides:
 
 ```env
 API_PORT=4100
 API_HOST=127.0.0.1
-CLIENT_ORIGIN=http://localhost:5175,http://127.0.0.1:5175
+CLIENT_ORIGIN=http://localhost:5175,http://127.0.0.1:5175,http://192.168.*:5175
 DAILY_API_KEY=...
 DAILY_DOMAIN=...
 GEMINI_API_KEY=

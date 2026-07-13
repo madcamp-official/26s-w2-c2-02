@@ -96,7 +96,12 @@ export function StudyRoom({
 }: StudyRoomProps) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
-  const { callObject, participantsByRoomiId, status: dailyStatus } = useDailyRoom(videoJoin);
+  const {
+    callObject,
+    localMedia,
+    participantsByRoomiId,
+    status: dailyStatus
+  } = useDailyRoom(videoJoin);
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [isHostMenuOpen, setIsHostMenuOpen] = useState(false);
@@ -130,6 +135,15 @@ export function StudyRoom({
     const interval = window.setInterval(() => setTimestamp(Date.now()), 1_000);
     return () => window.clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!callObject) {
+      return;
+    }
+
+    setIsMicOn(localMedia.audio);
+    setIsCameraOn(localMedia.video);
+  }, [callObject, localMedia.audio, localMedia.video]);
 
   useEffect(() => {
     if (videoJoin) {
@@ -444,15 +458,15 @@ function DailyParticipantMedia({
   isMe: boolean;
   participant?: {
     tracks?: {
-      audio?: { persistentTrack?: MediaStreamTrack; state?: string };
-      video?: { persistentTrack?: MediaStreamTrack; state?: string };
+      audio?: { persistentTrack?: MediaStreamTrack; state?: string; track?: MediaStreamTrack };
+      video?: { persistentTrack?: MediaStreamTrack; state?: string; track?: MediaStreamTrack };
     };
   };
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const videoTrack = participant?.tracks?.video?.persistentTrack;
-  const audioTrack = participant?.tracks?.audio?.persistentTrack;
+  const videoTrack = participant?.tracks?.video?.track ?? participant?.tracks?.video?.persistentTrack;
+  const audioTrack = participant?.tracks?.audio?.track ?? participant?.tracks?.audio?.persistentTrack;
   const isVideoPlayable = participant?.tracks?.video?.state === 'playable';
 
   useEffect(() => {
@@ -461,6 +475,9 @@ function DailyParticipantMedia({
     }
 
     videoRef.current.srcObject = new MediaStream([videoTrack]);
+    void videoRef.current.play().catch((error) => {
+      console.error('Daily video playback failed:', error);
+    });
   }, [videoTrack]);
 
   useEffect(() => {
@@ -469,6 +486,9 @@ function DailyParticipantMedia({
     }
 
     audioRef.current.srcObject = new MediaStream([audioTrack]);
+    void audioRef.current.play().catch((error) => {
+      console.error('Daily audio playback failed:', error);
+    });
   }, [audioTrack, isMe]);
 
   return (
