@@ -63,7 +63,7 @@ Keep server secrets only on the machine that runs the central API server.
 
 ### API Server Environment
 
-Copy the root `.env.example` to the repository root `.env` on the API server machine.
+Copy `services/api/.env.example` to `services/api/.env` on the API server machine. The API loads env from its own working directory (`pnpm dev:api` runs in `services/api`), so a repo-root `.env` is not read.
 
 | Variable | Purpose |
 |---|---|
