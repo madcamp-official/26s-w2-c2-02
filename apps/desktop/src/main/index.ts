@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, session, shell, systemPreferences } from 'electron';
 import { createMainWindow } from './create-window';
+import { roomiIconPath, setMacDockIcon } from './app-icon';
 
 type MediaAccessResult = { camera: boolean; microphone: boolean };
 
@@ -74,12 +75,18 @@ ipcMain.handle('window:close', (event) => {
 });
 
 app.whenReady().then(() => {
+  const iconPath = roomiIconPath({
+    dirname: __dirname,
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath
+  });
+  setMacDockIcon(process.platform, app.dock, iconPath);
   enableMediaPermissions();
-  createMainWindow();
+  createMainWindow({ iconPath });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow();
+      createMainWindow({ iconPath });
     }
   });
 });

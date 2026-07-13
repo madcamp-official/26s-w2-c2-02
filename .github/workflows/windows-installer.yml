@@ -1,0 +1,50 @@
+name: Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  package-windows:
+    runs-on: windows-latest
+    env:
+      VITE_ROOMI_API_URL: ${{ vars.ROOMI_API_URL || 'https://api.roomi.madcamp-kaist.org' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify API and desktop
+        run: |
+          pnpm --filter @roomi/api test -- --run
+          pnpm --filter @roomi/desktop test -- --run
+          pnpm --filter @roomi/api typecheck
+          pnpm --filter @roomi/desktop typecheck
+
+      - name: Build NSIS installer
+        run: pnpm dist:win
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: roomi-windows-${{ github.run_number }}
+          path: |
+            apps/desktop/release/Roomi-Setup-*.exe
+            apps/desktop/release/Roomi-Setup-*.sha256
+          if-no-files-found: error
