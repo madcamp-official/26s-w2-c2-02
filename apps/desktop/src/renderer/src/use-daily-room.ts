@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { DailyCall, DailyParticipant } from '@daily-co/daily-js';
 import type { VideoJoinInfo } from '@roomi/shared';
 
@@ -20,6 +20,10 @@ export function useDailyRoom(videoJoin: VideoJoinInfo | undefined) {
     video: true
   });
   const [status, setStatus] = useState<DailyRoomState['status']>('idle');
+  const [connectionGeneration, setConnectionGeneration] = useState(0);
+  const restart = useCallback(() => {
+    setConnectionGeneration((generation) => generation + 1);
+  }, []);
 
   useEffect(() => {
     if (!videoJoin) {
@@ -31,10 +35,11 @@ export function useDailyRoom(videoJoin: VideoJoinInfo | undefined) {
 
     let cancelled = false;
     let call: DailyCall | undefined;
+    let syncInterval: number | undefined;
 
     const syncParticipants = () => {
       if (call) {
-        setDailyParticipants(call.participants());
+        setDailyParticipants({ ...call.participants() });
         setLocalMedia({
           audio: call.localAudio(),
           video: call.localVideo()
@@ -88,6 +93,7 @@ export function useDailyRoom(videoJoin: VideoJoinInfo | undefined) {
       .then(() => {
         if (!cancelled) {
           syncParticipants();
+          syncInterval = window.setInterval(syncParticipants, 1_000);
           setStatus('joined');
         }
       })
@@ -107,12 +113,13 @@ export function useDailyRoom(videoJoin: VideoJoinInfo | undefined) {
       call?.off('track-started', syncParticipants);
       call?.off('track-stopped', syncParticipants);
       call?.off('show-local-video-changed', syncParticipants);
+      if (syncInterval) window.clearInterval(syncInterval);
       void call?.leave().finally(() => call?.destroy());
       setCallObject(undefined);
       setDailyParticipants({});
       setLocalMedia({ audio: true, video: true });
     };
-  }, [videoJoin?.roomUrl, videoJoin?.token]);
+  }, [videoJoin?.roomUrl, videoJoin?.token, connectionGeneration]);
 
   const participantsByRoomiId = useMemo(() => {
     const byRoomiId = new Map<string, DailyParticipant>();
@@ -130,6 +137,7 @@ export function useDailyRoom(videoJoin: VideoJoinInfo | undefined) {
     callObject,
     localMedia,
     participantsByRoomiId,
-    status
+    status,
+    restart
   };
 }

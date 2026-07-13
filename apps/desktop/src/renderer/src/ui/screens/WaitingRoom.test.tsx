@@ -65,10 +65,12 @@ function baseProps() {
 }
 
 describe('WaitingRoom', () => {
-  it('shows the real ready count from isReady flags', () => {
+  it('shows participant readiness without a separate status card', () => {
     render(<WaitingRoom {...baseProps()} />);
 
-    expect(screen.getByText('2 / 4명 준비완료')).toBeInTheDocument();
+    expect(screen.getByText('2명이 준비를 마쳤어요.')).toBeInTheDocument();
+    expect(screen.queryByText('현재 현황')).not.toBeInTheDocument();
+    expect(screen.queryByText('2 / 4명 준비완료')).not.toBeInTheDocument();
   });
 
   it('lets the host start the session', () => {
@@ -80,6 +82,29 @@ describe('WaitingRoom', () => {
 
     expect(props.onStartSession).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('button', { name: /준비/ })).not.toBeInTheDocument();
+  });
+
+  it('locks the start action synchronously to prevent duplicate requests', () => {
+    const props = baseProps();
+    render(<WaitingRoom {...props} />);
+    const startButton = screen.getByRole('button', { name: '세션 시작하기' });
+
+    fireEvent.click(startButton);
+    fireEvent.click(startButton);
+
+    expect(props.onStartSession).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: '방 생성중' })).toBeDisabled();
+  });
+
+  it('keeps the creating state when the studying snapshot arrives before navigation', () => {
+    const props = baseProps();
+    const { rerender } = render(<WaitingRoom {...props} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '세션 시작하기' }));
+    rerender(<WaitingRoom {...props} room={room('studying')} />);
+
+    expect(screen.getByRole('button', { name: '방 생성중' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: '스터디룸 참여하기' })).not.toBeInTheDocument();
   });
 
   it('provides a separate control for leaving the room', () => {
@@ -96,19 +121,43 @@ describe('WaitingRoom', () => {
     render(<WaitingRoom {...props} />);
 
     expect(screen.queryByRole('button', { name: '세션 시작하기' })).not.toBeInTheDocument();
-    expect(screen.getByText('방장이 시작하기를 기다리고 있어요.')).toBeInTheDocument();
+    expect(screen.getByText('방장이 세션을 시작하면 참여 버튼이 열려요.')).toBeInTheDocument();
   });
 
   it('renders the in-progress mode for a studying room with a join CTA', () => {
-    const props = { ...baseProps(), isHost: false, currentParticipantId: 'p-3', room: room('studying') };
+    const initial = baseProps();
+    const props = {
+      ...initial,
+      isHost: false,
+      currentParticipantId: 'p-3',
+      room: room('studying'),
+      participants: initial.participants.map((candidate) =>
+        candidate.id === 'p-host' ? { ...candidate, status: 'focused' as const } : candidate
+      )
+    };
     render(<WaitingRoom {...props} />);
 
     expect(screen.getByText('진행 중')).toBeInTheDocument();
     expect(screen.getByText('이미 공부 중이에요')).toBeInTheDocument();
-    const joinButton = screen.getByRole('button', { name: '합류하기' });
+    expect(screen.getByText('준비 중')).toBeInTheDocument();
+    expect(screen.getByText('공부 중')).toBeInTheDocument();
+    expect(screen.queryByText('초대 대기중')).not.toBeInTheDocument();
+    const joinButton = screen.getByRole('button', { name: '스터디룸 참여하기' });
     fireEvent.click(joinButton);
     expect(props.onJoinSession).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('button', { name: '세션 시작하기' })).not.toBeInTheDocument();
+  });
+
+  it('locks the study-room join action synchronously to prevent duplicate entry', () => {
+    const props = { ...baseProps(), isHost: false, currentParticipantId: 'p-3', room: room('studying') };
+    render(<WaitingRoom {...props} />);
+    const joinButton = screen.getByRole('button', { name: '스터디룸 참여하기' });
+
+    fireEvent.click(joinButton);
+    fireEvent.click(joinButton);
+
+    expect(props.onJoinSession).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: '입장 중' })).toBeDisabled();
   });
 
   it('submits the typed goal', () => {

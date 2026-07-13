@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { RoomiMascot } from '../components/RoomiMascot';
+import { InviteCodeCard } from '../components/InviteCodeCard';
 import {
-  formatInviteCode,
   type Goal,
   type GoalRefinement,
   type Participant,
@@ -17,8 +17,8 @@ interface WaitingRoomProps extends ScreenProps {
   isHost: boolean;
   onSubmitGoal: (rawText: string) => void;
   onRefineGoal: (rawText: string) => Promise<GoalRefinement>;
-  onStartSession: () => void;
-  onJoinSession: () => void;
+  onStartSession: () => void | Promise<void>;
+  onJoinSession: () => void | Promise<void>;
   onLeaveRoom: () => void;
 }
 
@@ -42,6 +42,10 @@ export function WaitingRoom({
   const [refinement, setRefinement] = useState<GoalRefinement | null>(null);
   const [refineError, setRefineError] = useState<string | null>(null);
   const [isRefining, setIsRefining] = useState(false);
+  const [isStartingSession, setIsStartingSession] = useState(false);
+  const [isJoiningSession, setIsJoiningSession] = useState(false);
+  const sessionActionLockRef = useRef(false);
+  const [sessionActionError, setSessionActionError] = useState<string | null>(null);
 
   const submitGoal = () => {
     const trimmed = goalText.trim();
@@ -76,22 +80,53 @@ export function WaitingRoom({
     setRefinement(null);
   };
 
+  const startSession = async () => {
+    if (sessionActionLockRef.current) return;
+    sessionActionLockRef.current = true;
+    setIsStartingSession(true);
+    setSessionActionError(null);
+    try {
+      await onStartSession();
+    } catch {
+      sessionActionLockRef.current = false;
+      setIsStartingSession(false);
+      setSessionActionError('방을 생성하지 못했어요. 잠시 후 다시 시도해 주세요.');
+    }
+  };
+
+  const joinSession = async () => {
+    if (sessionActionLockRef.current) return;
+    sessionActionLockRef.current = true;
+    setIsJoiningSession(true);
+    setSessionActionError(null);
+    try {
+      await onJoinSession();
+    } catch {
+      sessionActionLockRef.current = false;
+      setIsJoiningSession(false);
+      setSessionActionError('스터디룸에 입장하지 못했어요. 잠시 후 다시 시도해 주세요.');
+    }
+  };
+
   const people = [
-    ...participants.map((participant) => ({
-      id: participant.id,
-      name: participant.nickname,
-      sub: participant.role === 'host' ? '방장' : '',
-      status: inProgress ? '공부 중' : participant.isReady ? '준비완료' : '준비 중',
-      tone: inProgress ? 'blue' : participant.isReady ? 'green' : 'muted',
-      initial: participant.nickname.slice(0, 1)
-    })),
+    ...participants.map((participant) => {
+      const isStudying = inProgress && participant.status !== 'online';
+      return {
+        id: participant.id,
+        name: participant.nickname,
+        sub: participant.role === 'host' ? '방장' : '',
+        status: isStudying ? '공부 중' : participant.isReady ? '준비완료' : '준비 중',
+        tone: isStudying || participant.isReady ? 'green' : 'muted',
+        initial: participant.nickname.slice(0, 1)
+      };
+    }),
     ...Array.from(
       { length: Math.max(room.settings.maxParticipants - participants.length, 0) },
       (_, index) => ({
         id: `empty-${index}`,
         name: '빈 자리',
         sub: '',
-        status: '초대 대기중',
+        status: '',
         tone: 'muted',
         initial: ''
       })
@@ -102,7 +137,8 @@ export function WaitingRoom({
     <div className="screen screen--app">
       <div className="waiting__body">
         <main className="waiting__main">
-          <p className="waiting__eyebrow">대기실 · 방 코드 {formatInviteCode(room.inviteCode)}</p>
+          <p className="waiting__eyebrow">대기실</p>
+          <InviteCodeCard inviteCode={room.inviteCode} />
           {inProgress ? (
             <>
               <span className="badge badge--blue">진행 중</span>
@@ -118,6 +154,11 @@ export function WaitingRoom({
                 각자 목표를 적으면 루미가 세션 안에 끝낼 수 있는 크기로 다듬어줘요.
               </p>
             </>
+          )}
+          {sessionActionError && (
+            <p className="onb-hint onb-hint--error" role="alert">
+              {sessionActionError}
+            </p>
           )}
 
           <label className="waiting__label" htmlFor="goal">
@@ -184,41 +225,42 @@ export function WaitingRoom({
                   <div className="person__name">{p.name}</div>
                   {p.sub && <div className="person__sub">{p.sub}</div>}
                 </div>
-                <span className={`badge badge--${p.tone}`}>{p.status}</span>
+                {p.status && <span className={`badge badge--${p.tone}`}>{p.status}</span>}
               </div>
             ))}
           </div>
 
-          <div className="status-card">
-            <div className="status-card__label">현재 현황</div>
-            <div className="status-card__value">
-              {readyCount} / {room.settings.maxParticipants}명 준비완료
-            </div>
-            <div className="status-card__note">
-              {inProgress
-                ? '진행 중인 세션에 합류할 수 있어요.'
-                : '방장은 준비 상태와 관계없이 언제든 시작할 수 있어요.'}
-            </div>
-          </div>
-
-          {inProgress ? (
+          {isHost && isStartingSession ? (
             <button
               type="button"
               className="btn btn--primary waiting__start"
-              onClick={onJoinSession}
+              disabled
             >
-              합류하기
+              방 생성중
+            </button>
+          ) : inProgress ? (
+            <button
+              type="button"
+              className="btn btn--primary waiting__start"
+              disabled={isJoiningSession}
+              onClick={joinSession}
+            >
+              {isJoiningSession ? '입장 중' : '스터디룸 참여하기'}
             </button>
           ) : isHost ? (
             <button
               type="button"
               className="btn btn--primary waiting__start"
-              onClick={onStartSession}
+              disabled={isStartingSession}
+              onClick={startSession}
             >
-              세션 시작하기
+              {isStartingSession ? '방 생성중' : '세션 시작하기'}
             </button>
           ) : (
-            <p className="waiting__wait-note">방장이 시작하기를 기다리고 있어요.</p>
+            <div className="waiting__wait-note" role="status">
+              <span className="waiting__wait-dot" aria-hidden="true" />
+              <span>방장이 세션을 시작하면 참여 버튼이 열려요.</span>
+            </div>
           )}
 
           <button type="button" className="btn btn--ghost waiting__leave" onClick={onLeaveRoom}>

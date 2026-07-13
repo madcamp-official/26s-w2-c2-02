@@ -5,6 +5,7 @@ import {
   type Goal,
   type Participant,
   type Room,
+  type RoomiMessage,
   type RoomSettings,
   type RoomSession,
   type StudySession,
@@ -33,7 +34,8 @@ import {
   RoomApiError,
   startSession,
   submitGoal,
-  subscribeToRoom
+  subscribeToRoom,
+  updateParticipantStatus
 } from '../room-client';
 
 type MediaPermissionState = 'idle' | 'checking' | 'granted' | 'denied';
@@ -43,6 +45,7 @@ type RoomDraft = {
   room: Room;
   participants: Participant[];
   goals: Goal[];
+  roomiMessages: RoomiMessage[];
   currentSession?: StudySession;
   realtime: 'local' | 'server';
   videoJoin?: VideoJoinInfo;
@@ -112,7 +115,8 @@ const fallbackRoom: RoomDraft = {
       lastSeenAt: now()
     }
   ],
-  goals: []
+  goals: [],
+  roomiMessages: []
 };
 
 function createRoomDraft(nickname: string, settings: RoomSettings): RoomDraft {
@@ -146,7 +150,8 @@ function createRoomDraft(nickname: string, settings: RoomSettings): RoomDraft {
         lastSeenAt: timestamp
       }
     ],
-    goals: []
+    goals: [],
+    roomiMessages: []
   };
 }
 
@@ -192,7 +197,8 @@ function joinRoomDraft(nickname: string, inviteCode: string): RoomDraft {
         lastSeenAt: timestamp
       }
     ],
-    goals: []
+    goals: [],
+    roomiMessages: []
   };
 }
 
@@ -203,6 +209,7 @@ function roomSessionToDraft(session: RoomSession): RoomDraft {
     room: session.snapshot.room,
     participants: session.snapshot.participants,
     goals: session.snapshot.goals,
+    roomiMessages: session.snapshot.roomiMessages,
     currentSession: session.snapshot.currentSession,
     videoJoin: session.videoJoin
   };
@@ -216,6 +223,10 @@ export function App() {
   const [createError, setCreateError] = useState<string | undefined>();
   const [mediaPermission, setMediaPermission] = useState<MediaPermissionState>('idle');
   const [roomDraft, setRoomDraft] = useState<RoomDraft | null>(null);
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
+  const [isJoiningRoom, setIsJoiningRoom] = useState(false);
+  const createRoomLockRef = useRef(false);
+  const joinRoomLockRef = useRef(false);
   const socketRef = useRef<Socket<ServerToClientEvents, ClientToServerEvents> | null>(null);
   const go = (id: ScreenId) => setScreen(id);
   const activeRoom = roomDraft ?? fallbackRoom;
@@ -223,6 +234,13 @@ export function App() {
     (participant) => participant.id === activeRoom.currentParticipantId
   );
   const isHost = currentParticipant?.role === 'host';
+
+  const resetRoomRequestState = () => {
+    createRoomLockRef.current = false;
+    joinRoomLockRef.current = false;
+    setIsCreatingRoom(false);
+    setIsJoiningRoom(false);
+  };
 
   useEffect(() => {
     if (!roomDraft || roomDraft.realtime !== 'server') {
@@ -234,7 +252,10 @@ export function App() {
 
     return subscribeToRoom(
       socket,
-      roomDraft.room.id,
+      {
+        roomId: roomDraft.room.id,
+        participantId: roomDraft.currentParticipantId
+      },
       (snapshot) => {
         setRoomDraft((current) =>
           current && current.room.id === snapshot.room.id
@@ -243,8 +264,16 @@ export function App() {
                 room: snapshot.room,
                 participants: snapshot.participants,
                 goals: snapshot.goals,
+                roomiMessages: snapshot.roomiMessages,
                 currentSession: snapshot.currentSession
               }
+            : current
+        );
+      },
+      (message) => {
+        setRoomDraft((current) =>
+          current && current.room.id === message.roomId
+            ? { ...current, roomiMessages: [...current.roomiMessages, message].slice(-20) }
             : current
         );
       },
@@ -254,25 +283,6 @@ export function App() {
     );
   }, [roomDraft?.room.id, roomDraft?.realtime]);
 
-  // Members who are present when the host starts follow the session automatically.
-  // A late joiner arrives with the room already studying (prev !== 'waiting'), so
-  // they stay in the in-progress waiting mode and join via the "합류하기" button.
-  const prevStatusRef = useRef(activeRoom.room.status);
-  useEffect(() => {
-    const previous = prevStatusRef.current;
-    const currentStatus = activeRoom.room.status;
-    prevStatusRef.current = currentStatus;
-
-    if (
-      screen === 'waiting' &&
-      !isHost &&
-      previous === 'waiting' &&
-      (currentStatus === 'studying' || currentStatus === 'break')
-    ) {
-      go('study');
-    }
-  }, [screen, isHost, activeRoom.room.status]);
-
   // An ended room is never joinable. This also covers a participant who receives
   // the terminal snapshot while they are already in the waiting or study screen.
   useEffect(() => {
@@ -281,7 +291,24 @@ export function App() {
     }
   }, [screen, activeRoom.room.status]);
 
+  useEffect(() => {
+    if (createError) setIsCreatingRoom(false);
+  }, [createError]);
+
+  useEffect(() => {
+    if (joinError) setIsJoiningRoom(false);
+  }, [joinError]);
+
+  useEffect(() => {
+    if (screen === 'onboarding-permission') {
+      resetRoomRequestState();
+    }
+  }, [screen]);
+
   const createRoom = async (settings: RoomSettings) => {
+    if (createRoomLockRef.current) return;
+    createRoomLockRef.current = true;
+    setIsCreatingRoom(true);
     const input = { nickname: nickname || '나', settings };
     setCreateError(undefined);
 
@@ -290,17 +317,24 @@ export function App() {
       setRoomDraft(roomSessionToDraft(session));
     } catch (error) {
       if (error instanceof RoomApiError) {
+        createRoomLockRef.current = false;
         setCreateError('방을 만들지 못했어요. API 서버와 Daily 설정을 확인해주세요.');
         return;
       }
 
-      setRoomDraft(createRoomDraft(input.nickname, settings));
+      createRoomLockRef.current = false;
+      setCreateError('서버에 연결하지 못했어요. API 서버가 실행 중인지 확인해 주세요.');
+      return;
     }
 
-    go('onboarding-permission');
+    resetRoomRequestState();
+    go(mediaPermission === 'granted' ? 'waiting' : 'onboarding-permission');
   };
 
   const joinRoom = async () => {
+    if (joinRoomLockRef.current) return;
+    joinRoomLockRef.current = true;
+    setIsJoiningRoom(true);
     const input = { nickname: nickname || '나', inviteCode: normalizeInviteCode(joinCode) };
     setJoinError(undefined);
 
@@ -309,7 +343,9 @@ export function App() {
       setRoomDraft(roomSessionToDraft(session));
     } catch (error) {
       if (error instanceof RoomApiError) {
-        setJoinError(
+        joinRoomLockRef.current = false;
+      joinRoomLockRef.current = false;
+      setJoinError(
           error.status === 409
             ? '방이 가득 찼어요. 방장에게 새 방을 요청해주세요.'
             : error.status === 503
@@ -323,7 +359,8 @@ export function App() {
       return;
     }
 
-    go('onboarding-permission');
+    resetRoomRequestState();
+    go(mediaPermission === 'granted' ? 'waiting' : 'onboarding-permission');
   };
 
   const leaveCurrentRoom = () => {
@@ -334,8 +371,8 @@ export function App() {
       });
     }
 
+    resetRoomRequestState();
     setRoomDraft(null);
-    setMediaPermission('idle');
     go('onboarding-create');
   };
 
@@ -389,14 +426,15 @@ export function App() {
                 room: snapshot.room,
                 participants: snapshot.participants,
                 goals: snapshot.goals,
+                roomiMessages: snapshot.roomiMessages,
                 currentSession: snapshot.currentSession
               }
             : current
         );
         go('study');
         return;
-      } catch {
-        // Fall back to a local transition so the host is never blocked by the API.
+      } catch (error) {
+        throw error;
       }
     }
 
@@ -405,6 +443,11 @@ export function App() {
         ? {
             ...current,
             room: { ...current.room, status: 'studying' },
+            participants: current.participants.map((participant) =>
+              participant.id === current.currentParticipantId
+                ? { ...participant, status: 'focused' }
+                : participant
+            ),
             currentSession: {
               id: `session-${Date.now()}`,
               roomId: current.room.id,
@@ -416,6 +459,41 @@ export function App() {
         : current
     );
     go('study');
+  };
+
+  const setCurrentSessionPresence = (status: 'online' | 'focused') => {
+    if (!roomDraft) return;
+
+    if (roomDraft.realtime === 'server') {
+      updateParticipantStatus(socketRef.current, {
+        roomId: roomDraft.room.id,
+        participantId: roomDraft.currentParticipantId,
+        status
+      });
+    }
+
+    setRoomDraft((current) =>
+      current
+        ? {
+            ...current,
+            participants: current.participants.map((participant) =>
+              participant.id === current.currentParticipantId
+                ? { ...participant, status }
+                : participant
+            )
+          }
+        : current
+    );
+  };
+
+  const joinCurrentSession = () => {
+    setCurrentSessionPresence('focused');
+    go('study');
+  };
+
+  const leaveCurrentSession = () => {
+    setCurrentSessionPresence('online');
+    go('waiting');
   };
 
   return (
@@ -431,6 +509,7 @@ export function App() {
           <OnboardingJoin
             code={joinCode}
             error={joinError}
+            isJoining={isJoiningRoom}
             onCodeChange={(code) => {
               setJoinCode(code);
               setJoinError(undefined);
@@ -456,8 +535,8 @@ export function App() {
         {screen === 'mediapipe-test' && <MediaPipeTest go={go} />}
         {screen === 'create-room' && (
           <CreateRoom
-            inviteCode={activeRoom.room.inviteCode}
             error={createError}
+            isCreating={isCreatingRoom}
             onCreateRoom={createRoom}
             go={go}
           />
@@ -472,7 +551,7 @@ export function App() {
             onSubmitGoal={submitCurrentGoal}
             onRefineGoal={refineCurrentGoal}
             onStartSession={startCurrentSession}
-            onJoinSession={() => go('study')}
+            onJoinSession={joinCurrentSession}
             onLeaveRoom={leaveCurrentRoom}
             go={go}
           />
@@ -482,9 +561,10 @@ export function App() {
             currentParticipantId={activeRoom.currentParticipantId}
             isHost={isHost}
             onEndSession={() => go('retrospective')}
-            onLeaveRoom={() => go('waiting')}
+            onLeaveRoom={leaveCurrentSession}
             participants={activeRoom.participants}
             goals={activeRoom.goals}
+            roomiMessages={activeRoom.roomiMessages}
             room={activeRoom.room}
             currentSession={activeRoom.currentSession}
             videoJoin={activeRoom.videoJoin}

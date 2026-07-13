@@ -42,3 +42,26 @@ describe('RoomiOrchestrator.refineGoal', () => {
     expect(result.refinedText).toContain('50');
   });
 });
+
+describe('RoomiOrchestrator live-session messages', () => {
+  it('uses the generator for a session start message', async () => {
+    const orchestrator = new RoomiOrchestrator(generatorReturning('좋아, 오늘 목표 하나씩 끝내보자.'));
+
+    const message = await orchestrator.generateStartMessage({ sessionMinutes: 50, goalCount: 2 });
+
+    expect(message).toBe('좋아, 오늘 목표 하나씩 끝내보자.');
+  });
+
+  it('falls back to a supportive private recovery message', async () => {
+    const orchestrator = new RoomiOrchestrator(failingGenerator);
+
+    const message = await orchestrator.generateFocusRecoveryMessage({
+      nickname: '소요',
+      goal: '수학 문제 3개 풀기',
+      status: 'away'
+    });
+
+    expect(message).toContain('소요');
+    expect(message).toContain('다음 한 단계');
+  });
+});

@@ -6,6 +6,9 @@ import type {
   GoalRefinement,
   JoinRoomInput,
   ParticipantReadyInput,
+  UpdateParticipantStatusInput,
+  RoomiMessage,
+  RoomSubscriptionInput,
   RoomSession,
   RoomSnapshot,
   ServerToClientEvents
@@ -91,6 +94,13 @@ export function setReady(
   socket?.emit(realtimeEvents.client.participantReady, input);
 }
 
+export function updateParticipantStatus(
+  socket: Socket<ServerToClientEvents, ClientToServerEvents> | null,
+  input: UpdateParticipantStatusInput
+) {
+  socket?.emit(realtimeEvents.client.updateStatus, input);
+}
+
 export function createRoomSocket() {
   return io(apiBaseUrl, {
     autoConnect: false,
@@ -100,23 +110,26 @@ export function createRoomSocket() {
 
 export function subscribeToRoom(
   socket: Socket<ServerToClientEvents, ClientToServerEvents>,
-  roomId: string,
+  input: RoomSubscriptionInput,
   onSnapshot: (snapshot: RoomSnapshot) => void,
+  onRoomiMessage: (message: RoomiMessage) => void,
   onError: (message: string) => void
 ) {
   socket.connect();
-  socket.emit(realtimeEvents.client.subscribeRoom, roomId, (snapshot) => {
+  socket.emit(realtimeEvents.client.subscribeRoom, input, (snapshot) => {
     if (snapshot) {
       onSnapshot(snapshot);
     }
   });
   socket.on(realtimeEvents.server.roomSnapshot, onSnapshot);
   socket.on(realtimeEvents.server.roomUpdated, onSnapshot);
+  socket.on(realtimeEvents.server.roomiMessage, onRoomiMessage);
   socket.on(realtimeEvents.server.error, onError);
 
   return () => {
     socket.off(realtimeEvents.server.roomSnapshot, onSnapshot);
     socket.off(realtimeEvents.server.roomUpdated, onSnapshot);
+    socket.off(realtimeEvents.server.roomiMessage, onRoomiMessage);
     socket.off(realtimeEvents.server.error, onError);
     socket.disconnect();
   };

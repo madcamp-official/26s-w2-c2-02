@@ -1,9 +1,29 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { VideoProvider } from '../video/daily-video-provider';
 import { InMemoryRoomStore } from '../adapters/storage/in-memory-room-store';
 import { RoomService } from './room-service';
 
 function createService() {
   return new RoomService(new InMemoryRoomStore());
+}
+
+function createVideoProvider(): VideoProvider & {
+  createRoom: ReturnType<typeof vi.fn<VideoProvider['createRoom']>>;
+  createJoinInfo: ReturnType<typeof vi.fn<VideoProvider['createJoinInfo']>>;
+  deleteRoom: ReturnType<typeof vi.fn<(dailyRoomName: string) => Promise<void>>>;
+} {
+  return {
+    createRoom: vi.fn(async (roomId: string, _maxParticipants: number) => ({
+      name: `daily-${roomId}`,
+      roomUrl: `https://daily.example/${roomId}`
+    })),
+    createJoinInfo: vi.fn(async (input: Parameters<VideoProvider['createJoinInfo']>[0]) => ({
+      name: input.dailyRoomName,
+      roomUrl: input.roomUrl,
+      token: `token-${input.userId}`
+    })),
+    deleteRoom: vi.fn(async (_dailyRoomName: string) => undefined)
+  };
 }
 
 describe('RoomService participant readiness', () => {
@@ -168,6 +188,9 @@ describe('RoomService.startSession', () => {
     expect(snapshot.currentSession?.mode).toBe('study');
     expect(snapshot.currentSession?.plannedMinutes).toBe(created.room.settings.sessionMinutes);
     expect(snapshot.currentSession?.startedAt).toBeTruthy();
+    expect(snapshot.participants.find((participant) => participant.id === host.id)?.status).toBe(
+      'focused'
+    );
   });
 
   it('lets the host start even when other participants are not ready', () => {
@@ -184,6 +207,12 @@ describe('RoomService.startSession', () => {
     const snapshot = service.startSession(created.room.id, host.id);
 
     expect(snapshot.room.status).toBe('studying');
+    expect(snapshot.participants.find((participant) => participant.id === host.id)?.status).toBe(
+      'focused'
+    );
+    expect(snapshot.participants.find((participant) => participant.id !== host.id)?.status).toBe(
+      'online'
+    );
   });
 
   it('broadcasts a room update when the session starts', () => {
@@ -227,5 +256,127 @@ describe('RoomService.startSession', () => {
     const service = createService();
 
     expect(() => service.startSession('missing-room', 'x')).toThrow('Room not found');
+  });
+});
+
+describe('RoomService.leaveRoom host delegation', () => {
+  it('promotes the earliest remaining participant when the host leaves', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const originalHost = created.participants[0]!;
+    const firstJoin = service.joinRoom({
+      nickname: 'first',
+      inviteCode: created.room.inviteCode
+    });
+    const firstMember = firstJoin.participants.at(-1)!;
+    service.joinRoom({
+      nickname: 'second',
+      inviteCode: created.room.inviteCode
+    });
+
+    const snapshot = service.leaveRoom(created.room.id, originalHost.id);
+
+    expect(snapshot.room.hostUserId).toBe(firstMember.userId);
+    expect(snapshot.participants.find((participant) => participant.id === firstMember.id)?.role).toBe(
+      'host'
+    );
+    expect(snapshot.participants.filter((participant) => participant.role === 'host')).toHaveLength(1);
+  });
+
+  it('broadcasts the delegated host after the host leaves', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const originalHost = created.participants[0]!;
+    const joined = service.joinRoom({
+      nickname: 'member',
+      inviteCode: created.room.inviteCode
+    });
+    const member = joined.participants.at(-1)!;
+    let delegatedHostId: string | undefined;
+    service.onRoomUpdated((snapshot) => {
+      delegatedHostId = snapshot.participants.find((participant) => participant.role === 'host')?.id;
+    });
+
+    service.leaveRoom(created.room.id, originalHost.id);
+
+    expect(delegatedHostId).toBe(member.id);
+  });
+
+  it('deletes the Daily room when the last participant leaves', async () => {
+    const videoProvider = createVideoProvider();
+    const service = new RoomService(new InMemoryRoomStore(), videoProvider);
+    const session = await service.createRoomSession({ nickname: 'host' });
+
+    service.leaveRoom(session.snapshot.room.id, session.currentParticipantId);
+    await vi.waitFor(() => expect(videoProvider.deleteRoom).toHaveBeenCalledTimes(1));
+
+    expect(videoProvider.deleteRoom).toHaveBeenCalledWith(`daily-${session.snapshot.room.id}`);
+  });
+});
+
+describe('RoomService Daily session rollback', () => {
+  it('does not return a local-only room when Daily room creation fails', async () => {
+    const videoProvider = createVideoProvider();
+    videoProvider.createRoom.mockRejectedValueOnce(new Error('Daily room creation failed: 500'));
+    const service = new RoomService(new InMemoryRoomStore(), videoProvider);
+
+    await expect(service.createRoomSession({ nickname: 'host' })).rejects.toThrow(
+      'Daily room creation failed'
+    );
+  });
+
+  it('removes a joining participant when Daily token creation fails', async () => {
+    const videoProvider = createVideoProvider();
+    const service = new RoomService(new InMemoryRoomStore(), videoProvider);
+    const hostSession = await service.createRoomSession({ nickname: 'host' });
+    videoProvider.createJoinInfo.mockRejectedValueOnce(new Error('Daily token creation failed: 500'));
+
+    await expect(
+      service.joinRoomSession({
+        nickname: 'member',
+        inviteCode: hostSession.snapshot.room.inviteCode
+      })
+    ).rejects.toThrow('Daily token creation failed');
+    expect(service.getByRoomId(hostSession.snapshot.room.id)?.participants).toHaveLength(1);
+  });
+});
+
+describe('RoomService Roomi messages', () => {
+  it('stores a personal message and emits it to realtime listeners', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0]!;
+    let receivedText: string | undefined;
+    service.onRoomiMessage((message) => {
+      receivedText = message.text;
+    });
+
+    const message = service.addRoomiMessage({
+      roomId: created.room.id,
+      kind: 'focus_recovery',
+      text: '다음 한 단계부터 다시 시작해보자.',
+      targetParticipantId: host.id
+    });
+
+    expect(message.id).toBeTruthy();
+    expect(receivedText).toBe(message.text);
+    expect(service.getByRoomId(created.room.id)?.roomiMessages).toEqual([message]);
+  });
+
+  it('does not include another participant’s personal message in a snapshot', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0]!;
+    const joined = service.joinRoom({ nickname: 'member', inviteCode: created.room.inviteCode });
+    const member = joined.participants.at(-1)!;
+    service.addRoomiMessage({
+      roomId: created.room.id,
+      kind: 'focus_recovery',
+      text: 'member only',
+      targetParticipantId: member.id
+    });
+
+    expect(service.snapshotForParticipant(created.room.id, host.id).roomiMessages).toEqual([]);
+    expect(service.snapshotForParticipant(created.room.id, member.id).roomiMessages).toHaveLength(1);
   });
 });

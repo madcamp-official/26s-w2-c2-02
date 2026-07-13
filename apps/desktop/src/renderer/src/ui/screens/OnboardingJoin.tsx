@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { RoomiMascot } from '../components/RoomiMascot';
 import { inviteCodeLength, isInviteCodeComplete, normalizeInviteCode } from '@roomi/shared';
@@ -13,14 +13,37 @@ import type { ScreenProps } from './types';
 interface OnboardingJoinProps extends ScreenProps {
   code: string;
   error?: string;
+  isJoining?: boolean;
   onCodeChange: (code: string) => void;
   onJoin: () => void;
 }
 
-export function OnboardingJoin({ code, error, onCodeChange, onJoin, go }: OnboardingJoinProps) {
+export function OnboardingJoin({
+  code,
+  error,
+  isJoining = false,
+  onCodeChange,
+  onJoin,
+  go
+}: OnboardingJoinProps) {
   const isCodeComplete = isInviteCodeComplete(code);
+  const [inputValue, setInputValue] = useState(code);
+  const isComposingRef = useRef(false);
   const [hasUnsupportedCodeCharacter, setHasUnsupportedCodeCharacter] = useState(false);
-  const codeCharacters = normalizeInviteCode(code).padEnd(inviteCodeLength, ' ').split('');
+  const [isCodeFocused, setIsCodeFocused] = useState(false);
+  const normalizedCode = normalizeInviteCode(code);
+  const activeSlotIndex = normalizedCode.length < inviteCodeLength ? normalizedCode.length : -1;
+  const codeCharacters = normalizedCode.padEnd(inviteCodeLength, ' ').split('');
+  const handleCodeChange = (value: string) => {
+    setHasUnsupportedCodeCharacter(/[0O1IL]/i.test(value));
+    const normalized = normalizeInviteCode(value);
+    setInputValue(normalized);
+    onCodeChange(normalized);
+  };
+
+  useEffect(() => {
+    if (!isComposingRef.current) setInputValue(code);
+  }, [code]);
 
   return (
     <div className="screen screen--onboarding">
@@ -49,26 +72,55 @@ export function OnboardingJoin({ code, error, onCodeChange, onJoin, go }: Onboar
             <input
               id="room-code"
               className="code-entry__input"
-              value={code}
+              value={inputValue}
+              lang="en"
               onChange={(e) => {
-                setHasUnsupportedCodeCharacter(/[0O1IL]/i.test(e.target.value));
-                onCodeChange(normalizeInviteCode(e.target.value));
+                if (isComposingRef.current) {
+                  setInputValue(e.target.value);
+                  return;
+                }
+                handleCodeChange(e.target.value);
+              }}
+              onCompositionStart={() => {
+                isComposingRef.current = true;
+              }}
+              onCompositionEnd={(event) => {
+                isComposingRef.current = false;
+                handleCodeChange(event.currentTarget.value);
+              }}
+              onFocus={() => setIsCodeFocused(true)}
+              onBlur={() => setIsCodeFocused(false)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && isCodeComplete && !isJoining) {
+                  event.preventDefault();
+                  onJoin();
+                }
               }}
               inputMode="text"
+              pattern="[A-Za-z0-9]*"
               autoCapitalize="characters"
               autoComplete="off"
               spellCheck={false}
-              maxLength={inviteCodeLength + 1}
             />
             <div className="code-entry__slots" aria-hidden="true">
               {codeCharacters.slice(0, 3).map((character, index) => (
-                <span key={`prefix-${index}-${character}`} className="code-entry__slot">
+                <span
+                  key={`prefix-${index}-${character}`}
+                  className={`code-entry__slot${
+                    isCodeFocused && activeSlotIndex === index ? ' code-entry__slot--active' : ''
+                  }`}
+                >
                   {character.trim() ? character : ''}
                 </span>
               ))}
               <span className="code-entry__dash" />
               {codeCharacters.slice(3).map((character, index) => (
-                <span key={`suffix-${index}-${character}`} className="code-entry__slot">
+                <span
+                  key={`suffix-${index}-${character}`}
+                  className={`code-entry__slot${
+                    isCodeFocused && activeSlotIndex === index + 3 ? ' code-entry__slot--active' : ''
+                  }`}
+                >
                   {character.trim() ? character : ''}
                 </span>
               ))}
@@ -86,10 +138,10 @@ export function OnboardingJoin({ code, error, onCodeChange, onJoin, go }: Onboar
           <button
             type="button"
             className="btn btn--primary btn--block"
-            disabled={!isCodeComplete}
+            disabled={!isCodeComplete || isJoining}
             onClick={onJoin}
           >
-            입장하기
+            {isJoining ? '방 입장 중' : '입장하기'}
           </button>
         </div>
       </div>

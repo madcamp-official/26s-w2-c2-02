@@ -1,4 +1,4 @@
-import { ipcRenderer } from 'electron';
+import { clipboard, ipcRenderer } from 'electron';
 
 export type MediaAccessResult = { camera: boolean; microphone: boolean };
 
@@ -13,6 +13,9 @@ export type RoomiApi = {
     ensureAccess: () => Promise<MediaAccessResult>;
     openPrivacySettings: () => Promise<void>;
   };
+  clipboard: {
+    writeText: (text: string) => void;
+  };
 };
 
 export const roomiApi: RoomiApi = {
@@ -25,5 +28,8 @@ export const roomiApi: RoomiApi = {
   media: {
     ensureAccess: () => ipcRenderer.invoke('media:ensure-access'),
     openPrivacySettings: () => ipcRenderer.invoke('media:open-privacy-settings')
+  },
+  clipboard: {
+    writeText: (text) => clipboard.writeText(text)
   }
 };

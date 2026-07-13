@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { ArrowLeft, Camera, ChevronRight, KeyRound, Plus } from 'lucide-react';
 import { RoomiMascot } from '../components/RoomiMascot';
 import type { ScreenProps } from './types';
@@ -13,6 +14,27 @@ interface OnboardingCreateProps extends ScreenProps {
 }
 
 export function OnboardingCreate({ nickname, go }: OnboardingCreateProps) {
+  const choiceRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const actions = [() => go('create-room'), () => go('onboarding-join'), () => go('mediapipe-test')];
+
+  useEffect(() => choiceRefs.current[0]?.focus(), []);
+
+  const handleChoiceKeyDown = (event: React.KeyboardEvent, index: number) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      actions[index]();
+      return;
+    }
+    const delta = ['ArrowRight', 'ArrowDown'].includes(event.key)
+      ? 1
+      : ['ArrowLeft', 'ArrowUp'].includes(event.key)
+        ? -1
+        : 0;
+    if (!delta) return;
+    event.preventDefault();
+    choiceRefs.current[(index + delta + actions.length) % actions.length]?.focus();
+  };
+
   return (
     <div className="screen screen--onboarding">
       <div className="onb-card">
@@ -35,7 +57,7 @@ export function OnboardingCreate({ nickname, go }: OnboardingCreateProps) {
         </p>
 
         <div className="onb-choices">
-          <button type="button" className="choice" onClick={() => go('create-room')}>
+          <button ref={(node) => { choiceRefs.current[0] = node; }} type="button" className="choice" onKeyDown={(event) => handleChoiceKeyDown(event, 0)} onClick={actions[0]}>
             <span className="choice__icon">
               <Plus size={20} />
             </span>
@@ -46,7 +68,7 @@ export function OnboardingCreate({ nickname, go }: OnboardingCreateProps) {
             <ChevronRight className="choice__arrow" size={20} />
           </button>
 
-          <button type="button" className="choice" onClick={() => go('onboarding-join')}>
+          <button ref={(node) => { choiceRefs.current[1] = node; }} type="button" className="choice" onKeyDown={(event) => handleChoiceKeyDown(event, 1)} onClick={actions[1]}>
             <span className="choice__icon">
               <KeyRound size={20} />
             </span>
@@ -57,7 +79,7 @@ export function OnboardingCreate({ nickname, go }: OnboardingCreateProps) {
             <ChevronRight className="choice__arrow" size={20} />
           </button>
 
-          <button type="button" className="choice" onClick={() => go('mediapipe-test')}>
+          <button ref={(node) => { choiceRefs.current[2] = node; }} type="button" className="choice" onKeyDown={(event) => handleChoiceKeyDown(event, 2)} onClick={actions[2]}>
             <span className="choice__icon">
               <Camera size={20} />
             </span>

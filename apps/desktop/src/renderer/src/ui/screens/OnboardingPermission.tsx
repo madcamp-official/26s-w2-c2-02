@@ -47,7 +47,16 @@ export function OnboardingPermission({
 
   return (
     <div className="screen screen--onboarding">
-      <div className="onb-card">
+      <div
+        className="onb-card"
+        onKeyDown={(event) => {
+          const target = event.target as HTMLElement;
+          if (event.key === 'Enter' && !isChecking && !target.closest('.onb-card__back')) {
+            event.preventDefault();
+            void checkMediaPermission();
+          }
+        }}
+      >
         <button type="button" className="onb-card__back" onClick={onBack} aria-label="이전 화면으로">
           <ArrowLeft size={16} />
           <span>이전</span>
@@ -102,6 +111,7 @@ export function OnboardingPermission({
             type="button"
             className="btn btn--primary btn--block"
             disabled={isChecking}
+            autoFocus
             onClick={checkMediaPermission}
           >
             {isChecking ? '권한 확인 중...' : isGranted ? '대기실로 이동' : '권한 확인하고 입장'}

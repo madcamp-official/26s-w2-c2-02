@@ -21,6 +21,7 @@
 - 검증을 못 했으면 이유를 명시합니다.
 - 공통 규칙은 한곳에만 둡니다. 공통 규칙은 `AGENTS.md`, 도구 전용 규칙은 각 전용 파일에 둡니다.
 - commit 메시지는 한국어를 기본으로 작성합니다. `workflow`, `hook`, `API` 같은 중요한 영어 용어는 필요한 경우 그대로 둡니다.
+- 사용자 요청으로 완료한 변경은 크기와 관계없이 검증 후 매번 commit 하고 push 합니다. 사용자가 명시적으로 제외하거나 검증·원격 접근이 막힌 경우에는 생략 이유를 보고합니다.
 
 ## Workflow 요약
 
@@ -153,9 +154,9 @@ Claude Code hook 은 Claude 공식 project-local 설정 파일인 `.claude/setti
 
 ## Push/Pull 승인 흐름
 
-- `git push` 와 `git pull` 은 자동 실행하지 않습니다.
-- 원격보다 앞서거나 뒤처진 상태는 먼저 감지하고 사용자에게 제안합니다.
-- 사용자가 승인한 뒤에만 실행합니다.
+- 완료된 사용자 요청은 기본적으로 commit 후 현재 topic branch 에 `git push` 합니다. 이 저장소 규칙 자체가 일반 push 에 대한 사전 승인으로 동작합니다.
+- 사용자가 push 제외를 명시했거나 검증이 실패한 경우에는 push 하지 않고 이유를 보고합니다.
+- `git pull` 과 history rewrite 는 여전히 별도 승인을 받은 뒤에만 실행합니다.
 - `git pull` 은 `--ff-only` 를 기본으로 사용하고, `--ff-only` 없는 pull 은 hook 에서 차단합니다.
 - `git push --force`, `git push --mirror`, `git push --delete` 는 hook 에서 차단합니다.
 - `git push --force-with-lease` 는 이미 공유된 커밋 author 수정처럼 명시적으로 승인된 history rewrite 에만 사용합니다.

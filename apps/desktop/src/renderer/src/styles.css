@@ -6,6 +6,28 @@
   scrollbar-width: thin;
 }
 
+.invite-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f5f1ff, #fff);
+}
+
+.invite-card__label { color: var(--text-muted); font-size: 12px; font-weight: 700; }
+.invite-card__code {
+  grid-column: 1;
+  color: var(--purple-700);
+  font-size: clamp(26px, 3vw, 38px);
+  letter-spacing: 0.12em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.invite-card__copy { grid-column: 2; grid-row: 1 / span 2; white-space: nowrap; }
+
 *::-webkit-scrollbar {
   width: 10px;
   height: 10px;

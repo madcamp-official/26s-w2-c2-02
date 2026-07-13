@@ -1,6 +1,6 @@
 import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { RoomSnapshot } from '@roomi/shared';
+import type { RoomiMessage, RoomSnapshot } from '@roomi/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { InMemoryRoomStore } from './adapters/storage/in-memory-room-store';
 import { RoomService } from './rooms/room-service';
@@ -100,6 +100,8 @@ describe('POST /sessions', () => {
   it('starts the session for the host and returns the studying snapshot', async () => {
     const created = roomService.createRoom({ nickname: 'host' });
     const host = created.participants[0];
+    const messages: RoomiMessage[] = [];
+    roomService.onRoomiMessage((message) => messages.push(message));
 
     const response = await startSession({ roomId: created.room.id, participantId: host.id });
     const snapshot = (await response.json()) as RoomSnapshot;
@@ -107,6 +109,8 @@ describe('POST /sessions', () => {
     expect(response.status).toBe(200);
     expect(snapshot.room.status).toBe('studying');
     expect(snapshot.currentSession?.mode).toBe('study');
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.kind).toBe('start');
   });
 
   it('returns 403 when a non-host tries to start', async () => {

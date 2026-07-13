@@ -5,6 +5,7 @@ import type {
   Participant,
   ParticipantStatus,
   Room,
+  RoomiMessage,
   RoomSession,
   RoomSettings,
   RoomSnapshot,
@@ -17,27 +18,38 @@ import {
 } from '@roomi/shared';
 import { defaultRoomSettings } from './default-settings';
 import type { RoomStore } from './room-store';
-import type { DailyVideoProvider } from '../video/daily-video-provider';
+import type { VideoProvider } from '../video/daily-video-provider';
 
 type RoomUpdatedListener = (snapshot: RoomSnapshot) => void;
+type RoomiMessageListener = (message: RoomiMessage) => void;
+type AddRoomiMessageInput = Omit<RoomiMessage, 'id' | 'createdAt'>;
 
 export class RoomService {
   private readonly dailyRooms = new Map<string, { name: string; roomUrl: string }>();
   private readonly roomUpdatedListeners = new Set<RoomUpdatedListener>();
+  private readonly roomiMessageListeners = new Set<RoomiMessageListener>();
 
   constructor(
     private readonly store: RoomStore,
-    private readonly videoProvider?: DailyVideoProvider
+    private readonly videoProvider?: VideoProvider
   ) {}
 
   async createRoomSession(input: CreateRoomInput): Promise<RoomSession> {
     const snapshot = this.createRoom(input);
     const currentParticipant = snapshot.participants[0];
 
+    let videoJoin: VideoJoinInfo | undefined;
+    try {
+      videoJoin = await this.createVideoJoin(snapshot, currentParticipant);
+    } catch (error) {
+      this.leaveRoom(snapshot.room.id, currentParticipant.id);
+      throw error;
+    }
+
     return {
-      snapshot,
+      snapshot: this.snapshotForParticipant(snapshot.room.id, currentParticipant.id),
       currentParticipantId: currentParticipant.id,
-      videoJoin: await this.tryCreateVideoJoin(snapshot, currentParticipant)
+      videoJoin
     };
   }
 
@@ -81,10 +93,18 @@ export class RoomService {
       throw new Error('Participant was not created');
     }
 
+    let videoJoin: VideoJoinInfo | undefined;
+    try {
+      videoJoin = await this.createVideoJoin(snapshot, currentParticipant);
+    } catch (error) {
+      this.leaveRoom(snapshot.room.id, currentParticipant.id);
+      throw error;
+    }
+
     return {
-      snapshot,
+      snapshot: this.snapshotForParticipant(snapshot.room.id, currentParticipant.id),
       currentParticipantId: currentParticipant.id,
-      videoJoin: await this.tryCreateVideoJoin(snapshot, currentParticipant)
+      videoJoin
     };
   }
 
@@ -223,6 +243,11 @@ export class RoomService {
 
     snapshot.room = { ...snapshot.room, status: 'studying' };
     snapshot.currentSession = session;
+    snapshot.participants = snapshot.participants.map((participant) =>
+      participant.id === participantId
+        ? { ...participant, status: 'focused', lastSeenAt: now }
+        : participant
+    );
     this.store.update(snapshot);
     this.emitRoomUpdated(snapshot);
     return snapshot;
@@ -235,20 +260,57 @@ export class RoomService {
       throw new Error('Room not found');
     }
 
+    const leavingParticipant = snapshot.participants.find(
+      (participant) => participant.id === participantId
+    );
+
     snapshot.participants = snapshot.participants.filter(
       (participant) => participant.id !== participantId
     );
+
+    if (snapshot.participants.length === 0) {
+      this.deleteDailyRoom(snapshot.room.id);
+    }
+
+    if (leavingParticipant?.role === 'host' && snapshot.participants.length > 0) {
+      const nextHost = [...snapshot.participants].sort(
+        (left, right) => Date.parse(left.joinedAt) - Date.parse(right.joinedAt)
+      )[0]!;
+
+      snapshot.room = { ...snapshot.room, hostUserId: nextHost.userId };
+      snapshot.participants = snapshot.participants.map((participant) =>
+        participant.id === nextHost.id
+          ? { ...participant, role: 'host' }
+          : { ...participant, role: 'member' }
+      );
+    }
+
     this.store.update(snapshot);
     this.emitRoomUpdated(snapshot);
     return snapshot;
   }
 
   getByInviteCode(inviteCode: string): RoomSnapshot | undefined {
-    return this.store.findByInviteCode(normalizeInviteCode(inviteCode));
+    const snapshot = this.store.findByInviteCode(normalizeInviteCode(inviteCode));
+    return snapshot ? this.withVisibleMessages(snapshot) : undefined;
   }
 
   getByRoomId(roomId: string): RoomSnapshot | undefined {
     return this.store.findByRoomId(roomId);
+  }
+
+  snapshotForParticipant(roomId: string, participantId: string): RoomSnapshot {
+    const snapshot = this.store.findByRoomId(roomId);
+
+    if (!snapshot) {
+      throw new Error('Room not found');
+    }
+
+    if (!snapshot.participants.some((participant) => participant.id === participantId)) {
+      throw new Error('Participant not found');
+    }
+
+    return this.withVisibleMessages(snapshot, participantId);
   }
 
   onRoomUpdated(listener: RoomUpdatedListener): () => void {
@@ -256,6 +318,40 @@ export class RoomService {
 
     return () => {
       this.roomUpdatedListeners.delete(listener);
+    };
+  }
+
+  addRoomiMessage(input: AddRoomiMessageInput): RoomiMessage {
+    const snapshot = this.store.findByRoomId(input.roomId);
+
+    if (!snapshot) {
+      throw new Error('Room not found');
+    }
+
+    if (
+      input.targetParticipantId &&
+      !snapshot.participants.some((participant) => participant.id === input.targetParticipantId)
+    ) {
+      throw new Error('Target participant not found');
+    }
+
+    const message: RoomiMessage = {
+      ...input,
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString()
+    };
+
+    snapshot.roomiMessages = [...snapshot.roomiMessages, message];
+    this.store.update(snapshot);
+    this.roomiMessageListeners.forEach((listener) => listener(message));
+    return message;
+  }
+
+  onRoomiMessage(listener: RoomiMessageListener): () => void {
+    this.roomiMessageListeners.add(listener);
+
+    return () => {
+      this.roomiMessageListeners.delete(listener);
     };
   }
 
@@ -331,19 +427,29 @@ export class RoomService {
     };
   }
 
-  private async tryCreateVideoJoin(
-    snapshot: RoomSnapshot,
-    participant: Participant
-  ): Promise<VideoJoinInfo | undefined> {
-    try {
-      return await this.createVideoJoin(snapshot, participant);
-    } catch (error) {
-      console.warn(error instanceof Error ? error.message : 'Daily video join creation failed');
-      return undefined;
+  private deleteDailyRoom(roomId: string) {
+    const dailyRoom = this.dailyRooms.get(roomId);
+
+    if (!dailyRoom || !this.videoProvider) {
+      return;
     }
+
+    this.dailyRooms.delete(roomId);
+    void this.videoProvider.deleteRoom(dailyRoom.name).catch((error) => {
+      console.warn(error instanceof Error ? error.message : 'Daily room deletion failed');
+    });
   }
 
   private emitRoomUpdated(snapshot: RoomSnapshot) {
     this.roomUpdatedListeners.forEach((listener) => listener(snapshot));
+  }
+
+  private withVisibleMessages(snapshot: RoomSnapshot, participantId?: string): RoomSnapshot {
+    return {
+      ...snapshot,
+      roomiMessages: snapshot.roomiMessages.filter(
+        (message) => !message.targetParticipantId || message.targetParticipantId === participantId
+      )
+    };
   }
 }
