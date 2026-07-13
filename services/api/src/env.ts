@@ -1,4 +1,12 @@
-import 'dotenv/config';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { config as loadEnv } from 'dotenv';
+
+const serviceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = resolve(serviceRoot, '..', '..');
+
+loadEnv({ path: resolve(repoRoot, '.env') });
+loadEnv({ path: resolve(serviceRoot, '.env'), override: true });
 
 const localRendererOriginPattern = /^http:\/\/(localhost|127\.0\.0\.1):51\d{2}$/;
 

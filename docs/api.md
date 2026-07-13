@@ -61,6 +61,7 @@ Keep server secrets only on the machine that runs the central API server.
 ### API Server Environment
 
 Copy the root `.env.example` to the repository root `.env` on the API server machine.
+The API server loads the root `.env` first, then loads `services/api/.env` if it exists. Values in `services/api/.env` override the root file, which is useful for server-specific deployment settings.
 
 | Variable | Purpose |
 |---|---|
@@ -134,7 +135,7 @@ With that setting, REST room creation/join and Socket.IO subscriptions both conn
 
 If the central API server runs inside a restricted campus network, such as KAIST internal network, expose it through Cloudflare Tunnel instead of opening inbound firewall ports.
 
-Roomi API server `.env` on the internal server:
+Roomi API server `.env` on the internal server. Put this in the repository root `.env`, or in `services/api/.env` if this server needs API-only overrides:
 
 ```env
 API_PORT=4100
