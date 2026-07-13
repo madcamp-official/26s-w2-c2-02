@@ -7,6 +7,7 @@
 
 ### Added
 
+- 설치된 Windows 앱이 공개 GitHub Release에서 새 버전을 확인하고 자동 다운로드한 뒤, 재시작 또는 앱 종료 시 기존 설치 위에 업데이트하도록 추가했습니다. `vX.Y.Z` tag는 desktop package 버전과 일치해야 합니다.
 - Windows x64용 NSIS 설치 파일과 SHA-256을 로컬 및 GitHub Actions에서 생성하는 desktop 배포 workflow를 추가했습니다. 현재 산출물은 unsigned이므로 외부 배포 전 코드 서명이 필요합니다.
 - 루미 메시지를 방 상태에 저장하고 실시간으로 전달하도록 연결했습니다. 자리 비움이 60초 이상 이어진 경우에만 해당 참가자에게 집중 회복 메시지를 보내며, 같은 참가자에게는 5분 cooldown을 적용합니다.
 - 스터디 라이브 세션을 시작하면 루미가 Gemini 기반 시작 멘트를 실시간으로 안내하고, 집중 이탈·자리 비움 상태에는 해당 참가자에게만 회복 메시지를 보냅니다. Gemini를 사용할 수 없을 때도 템플릿 문구로 세션이 계속 진행됩니다.
@@ -114,6 +115,7 @@
 ### Notes
 ### Manual Steps
 
+- 자동 업데이트를 실제 출시하기 전에 이전 버전 설치 PC에서 새 GitHub Release 감지·다운로드·재시작 설치를 확인하고, 외부 배포용 코드 서명을 적용해야 합니다.
 - 생성된 Windows installer는 깨끗한 PC에서 설치·카메라/마이크 권한·두 사용자 Daily 연결·재설치·제거를 수동 확인해야 합니다.
 - Windows installer를 외부 배포하기 전 코드 서명 인증서를 CI에 연결해야 합니다. 현재 unsigned 산출물은 SmartScreen 경고가 표시될 수 있습니다.
 - 라이브 LLM 메시지를 사용하려면 API 서버의 `services/api/.env`에 `GEMINI_API_KEY`를 설정해야 합니다. 키가 없으면 템플릿 fallback이 자동 적용됩니다.

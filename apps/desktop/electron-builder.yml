@@ -38,4 +38,8 @@ mac:
   category: public.app-category.productivity
   artifactName: ${productName}-${version}-${arch}.${ext}
 
-publish: null
+publish:
+  provider: github
+  owner: madcamp-official
+  repo: 26s-w2-c2-02
+  releaseType: release

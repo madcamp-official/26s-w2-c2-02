@@ -1,6 +1,8 @@
-import { app, BrowserWindow, ipcMain, session, shell, systemPreferences } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, session, shell, systemPreferences } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import { createMainWindow } from './create-window';
 import { roomiIconPath, setMacDockIcon } from './app-icon';
+import { configureAutoUpdates } from './auto-update';
 
 type MediaAccessResult = { camera: boolean; microphone: boolean };
 
@@ -83,6 +85,12 @@ app.whenReady().then(() => {
   setMacDockIcon(process.platform, app.dock, iconPath);
   enableMediaPermissions();
   createMainWindow({ iconPath });
+  configureAutoUpdates({
+    isPackaged: app.isPackaged,
+    platform: process.platform,
+    updater: autoUpdater,
+    showMessageBox: (options) => dialog.showMessageBox(options)
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

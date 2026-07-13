@@ -1,5 +1,8 @@
 name: Windows installer
 
+permissions:
+  contents: write
+
 on:
   workflow_dispatch:
   push:
@@ -37,6 +40,10 @@ jobs:
           pnpm --filter @roomi/api typecheck
           pnpm --filter @roomi/desktop typecheck
 
+      - name: Verify release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node apps/desktop/scripts/validate-release-tag.mjs
+
       - name: Build NSIS installer
         run: pnpm dist:win
 
@@ -47,4 +54,18 @@ jobs:
           path: |
             apps/desktop/release/Roomi-Setup-*.exe
             apps/desktop/release/Roomi-Setup-*.sha256
+            apps/desktop/release/Roomi-Setup-*.exe.blockmap
+            apps/desktop/release/latest.yml
           if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            apps/desktop/release/Roomi-Setup-*.exe
+            apps/desktop/release/Roomi-Setup-*.sha256
+            apps/desktop/release/Roomi-Setup-*.exe.blockmap
+            apps/desktop/release/latest.yml

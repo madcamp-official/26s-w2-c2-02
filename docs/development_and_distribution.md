@@ -83,19 +83,46 @@ pnpm dist:win
 
 workflow가 성공하면 실행 결과의 Artifacts에서 Windows installer와 SHA-256 파일을 받을 수 있습니다. 저장소 변수 `ROOMI_API_URL`을 설정하면 기본 production API 주소를 대체합니다.
 
+`v*` tag로 실행된 경우에는 installer, blockmap, `latest.yml`, SHA-256 파일을 같은 이름의 공개 GitHub Release에도 게시합니다. 설치된 앱은 이 Release를 새 버전 공급원으로 사용합니다.
+
+### 새 버전 출시와 자동 업데이트
+
+새 버전을 출시할 때는 데스크톱 package 버전과 Git tag를 함께 올려야 합니다. 예를 들어 `0.1.0` 다음 버전을 출시하려면 다음 순서로 진행합니다.
+
+1. `apps/desktop/package.json`의 `version`을 `0.1.1`로 변경합니다.
+2. 변경사항을 `main`에 반영합니다.
+3. 같은 버전의 tag를 만들고 push합니다.
+
+   ```bash
+   git tag v0.1.1
+   git push origin v0.1.1
+   ```
+
+4. `Windows installer` workflow와 GitHub Release 생성이 성공했는지 확인합니다.
+
+tag와 package 버전이 다르면 workflow가 release 생성 전에 실패합니다. 기존 tag와 버전은 다시 사용하지 않습니다.
+
+이미 설치된 Roomi는 실행할 때 공개 GitHub Release의 `latest.yml`을 확인합니다. 더 높은 버전이 있으면 installer를 백그라운드에서 내려받고 다음 중 하나를 선택할 수 있습니다.
+
+- `지금 재시작`: 앱을 종료하고 새 버전을 기존 설치 위에 즉시 적용합니다.
+- `나중에`: 현재 작업을 계속하고 앱을 종료할 때 내려받은 버전을 적용합니다.
+
+따라서 사용자가 기존 버전을 제거하거나 매번 installer를 직접 받을 필요는 없습니다. 개발 실행과 macOS에서는 자동 업데이트를 확인하지 않습니다.
+
 ### 출시 전 확인
 
 1. `.sha256` 파일과 installer의 SHA-256 값이 일치하는지 확인합니다.
 2. 깨끗한 Windows 사용자 환경에서 설치·실행·재설치·제거를 확인합니다.
 3. 두 PC에서 같은 방에 접속해 Daily 영상을 확인합니다.
 4. 카메라 끄기·켜기, 휴식 복귀, 퇴장 후 재입장을 확인합니다.
-5. 최종 installer에 코드 서명이 적용됐는지 확인합니다.
+5. 이전 버전을 설치한 PC에서 새 Release 감지, 다운로드, 재시작 설치를 확인합니다.
+6. 최종 installer에 코드 서명이 적용됐는지 확인합니다.
 
 ```powershell
 Get-AuthenticodeSignature apps/desktop/release/Roomi-Setup-0.1.0.exe
 ```
 
-현재 installer는 unsigned입니다. 코드 서명 전 파일은 Windows SmartScreen 또는 알 수 없는 게시자 경고가 표시될 수 있으므로 내부 확인용으로만 사용합니다. 외부 배포 전에는 코드 서명 인증서를 CI secret에 연결해야 합니다.
+현재 installer는 unsigned입니다. 코드 서명 전 파일은 Windows SmartScreen 또는 알 수 없는 게시자 경고가 표시될 수 있으므로 내부 확인용으로만 사용합니다. 외부 배포와 자동 업데이트 운영 전에는 코드 서명 인증서를 CI secret에 연결해야 합니다.
 
 ## 3. macOS 참고
 
