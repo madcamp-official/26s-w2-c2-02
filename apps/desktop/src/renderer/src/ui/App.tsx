@@ -235,6 +235,13 @@ export function App() {
   );
   const isHost = currentParticipant?.role === 'host';
 
+  const resetRoomRequestState = () => {
+    createRoomLockRef.current = false;
+    joinRoomLockRef.current = false;
+    setIsCreatingRoom(false);
+    setIsJoiningRoom(false);
+  };
+
   useEffect(() => {
     if (!roomDraft || roomDraft.realtime !== 'server') {
       return undefined;
@@ -294,10 +301,7 @@ export function App() {
 
   useEffect(() => {
     if (screen === 'onboarding-permission') {
-      createRoomLockRef.current = false;
-      joinRoomLockRef.current = false;
-      setIsCreatingRoom(false);
-      setIsJoiningRoom(false);
+      resetRoomRequestState();
     }
   }, [screen]);
 
@@ -323,6 +327,7 @@ export function App() {
       return;
     }
 
+    resetRoomRequestState();
     go(mediaPermission === 'granted' ? 'waiting' : 'onboarding-permission');
   };
 
@@ -354,6 +359,7 @@ export function App() {
       return;
     }
 
+    resetRoomRequestState();
     go(mediaPermission === 'granted' ? 'waiting' : 'onboarding-permission');
   };
 
@@ -365,6 +371,7 @@ export function App() {
       });
     }
 
+    resetRoomRequestState();
     setRoomDraft(null);
     go('onboarding-create');
   };

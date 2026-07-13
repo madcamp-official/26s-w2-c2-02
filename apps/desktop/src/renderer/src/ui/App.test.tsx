@@ -120,6 +120,10 @@ describe('App screen router', () => {
     await screen.findByRole('heading', { level: 1, name: '다 같이 목표를 정해볼까요?' });
     expect(screen.queryByText('카메라와 마이크를 확인할게요')).not.toBeInTheDocument();
     expect(getUserMedia).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: '방 나가기' }));
+    fireEvent.click(screen.getByRole('button', { name: /새로운 방 만들기/ }));
+    expect(screen.getByRole('button', { name: '방 만들고 대기실로 가기' })).toBeEnabled();
   });
 
   it('keeps session end behind host-only actions', async () => {
