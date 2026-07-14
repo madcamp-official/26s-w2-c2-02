@@ -321,3 +321,35 @@ describe('POST /focus/predict', () => {
     expect(received).toEqual(['user/1']);
   });
 });
+
+describe('CORS for packaged Electron', () => {
+  let httpServer: HttpServer;
+  let baseUrl: string;
+
+  beforeEach(async () => {
+    httpServer = createServer(
+      createApp(new RoomService(new InMemoryRoomStore()), new RoomiOrchestrator())
+    );
+    await new Promise<void>((resolve) => httpServer.listen(0, resolve));
+    const { port } = httpServer.address() as AddressInfo;
+    baseUrl = `http://localhost:${port}`;
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  });
+
+  it.each(['file://', 'null'])('allows the packaged renderer origin %s', async (origin) => {
+    const response = await fetch(`${baseUrl}/focus/predict`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: origin,
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'content-type'
+      }
+    });
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get('access-control-allow-origin')).toBe(origin);
+  });
+});
