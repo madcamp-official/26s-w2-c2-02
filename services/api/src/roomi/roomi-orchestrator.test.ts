@@ -135,3 +135,137 @@ describe('RoomiOrchestrator.generateRetrospective', () => {
     expect(result.goalFeedback).toContain('일부만');
   });
 });
+
+describe('RoomiOrchestrator face party games', () => {
+  it('uses the generator for hidden mission prompts', async () => {
+    const calls: string[] = [];
+    const generator: TextGenerator = {
+      generateText: async (prompt) => {
+        calls.push(prompt);
+        return 'During the round, scratch your cheek once before answering.';
+      }
+    };
+    const orchestrator = new RoomiOrchestrator(generator);
+
+    const prompt = await orchestrator.generateHiddenMissionPrompt({
+      nickname: 'Mina',
+      theme: 'snack debate',
+      roundSeconds: 45
+    });
+
+    expect(prompt).toBe('During the round, scratch your cheek once before answering.');
+    expect(calls[0]).toContain('snack debate');
+    expect(calls[0]).toContain('no emotion claims');
+    expect(calls[0]).toContain('no lie detection');
+  });
+
+  it('falls back to a hidden mission template without emotion or lie claims', async () => {
+    const orchestrator = new RoomiOrchestrator();
+
+    const prompt = await orchestrator.generateHiddenMissionPrompt({
+      nickname: 'Joon',
+      theme: 'movie night',
+      roundSeconds: 30
+    });
+
+    expect(prompt).toContain('Joon');
+    expect(prompt).toContain('movie night');
+    expect(prompt).toContain('visible cue');
+    expect(prompt).not.toMatch(/emotion|lie|truth/i);
+  });
+
+  it('parses poker bluff questions and visible-signal tell hints from the generator', async () => {
+    const orchestrator = new RoomiOrchestrator(
+      generatorReturning(
+        [
+          'QUESTIONS:',
+          '- What detail changed first?',
+          '- Who else was there?',
+          'HINTS:',
+          '- Watch for pauses before concrete details.',
+          '- Compare gesture timing with the story timeline.'
+        ].join('\n')
+      )
+    );
+
+    const prompt = await orchestrator.generatePokerBluffPrompt({
+      theme: 'travel story',
+      questionCount: 2,
+      tellHintCount: 2
+    });
+
+    expect(prompt).toEqual({
+      questions: ['What detail changed first?', 'Who else was there?'],
+      tellHints: [
+        'Watch for pauses before concrete details.',
+        'Compare gesture timing with the story timeline.'
+      ]
+    });
+  });
+
+  it('falls back to poker bluff templates when structured output is missing', async () => {
+    const orchestrator = new RoomiOrchestrator(generatorReturning('Ask anything you want.'));
+
+    const prompt = await orchestrator.generatePokerBluffPrompt({
+      theme: 'cafeteria',
+      questionCount: 2,
+      tellHintCount: 2
+    });
+
+    expect(prompt.questions).toHaveLength(2);
+    expect(prompt.tellHints).toHaveLength(2);
+    expect(prompt.questions[0]).toContain('cafeteria');
+    expect(prompt.tellHints.join(' ')).toMatch(/pauses|gestures|eye contact|visible/i);
+    expect(prompt.tellHints.join(' ')).not.toMatch(/lying|emotion/i);
+  });
+
+  it('uses generated copycat seeds as a bounded list', async () => {
+    const orchestrator = new RoomiOrchestrator(
+      generatorReturning(['1. statue face', '2. tiny nod', '3. eyebrow raise'].join('\n'))
+    );
+
+    const seeds = await orchestrator.generateCopycatSeedExpressions({ count: 2 });
+
+    expect(seeds).toEqual(['statue face', 'tiny nod']);
+  });
+
+  it('falls back to copycat seed expressions with visible prompts only', async () => {
+    const orchestrator = new RoomiOrchestrator(failingGenerator);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const seeds = await orchestrator.generateCopycatSeedExpressions({
+      theme: 'team lunch',
+      count: 3
+    });
+
+    expect(seeds).toHaveLength(3);
+    expect(seeds.join(' ')).toContain('team lunch');
+    expect(seeds.join(' ')).not.toMatch(/emotion|diagnosis|lie/i);
+  });
+
+  it('generates game intro, reveal, and summary fallbacks with privacy language', async () => {
+    const orchestrator = new RoomiOrchestrator();
+
+    const intro = await orchestrator.generateGameIntroMessage({
+      game: 'poker_bluff',
+      roundNumber: 2
+    });
+    const reveal = await orchestrator.generateGameRevealMessage({
+      game: 'hidden_mission',
+      winnerNickname: 'Ara',
+      visibleSignals: ['gesture timing', 'gaze direction']
+    });
+    const summary = await orchestrator.generateGameSummaryMessage({
+      game: 'copycat',
+      playerCount: 4,
+      visibleSignals: ['facial movement']
+    });
+
+    expect(intro).toContain('Poker Bluff');
+    expect(intro).toContain('No emotion or lie claims');
+    expect(reveal).toContain('Ara');
+    expect(reveal).toContain('gesture timing');
+    expect(summary).toContain('visible signals');
+    expect([intro, reveal, summary].join(' ')).not.toMatch(/detected emotion|detected lie/i);
+  });
+});

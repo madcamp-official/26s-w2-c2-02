@@ -5,7 +5,13 @@ export type RoomiPromptKind =
   | 'start'
   | 'focus_recovery'
   | 'break_return'
-  | 'summary';
+  | 'summary'
+  | 'hidden_mission'
+  | 'poker_bluff'
+  | 'copycat_seed'
+  | 'game_intro'
+  | 'game_reveal'
+  | 'game_summary';
 
 /**
  * Single seam between the app and any LLM text provider. OllamaClient implements
@@ -36,6 +42,44 @@ type RetrospectiveInput = {
 export type RetrospectiveText = {
   goalFeedback: string;
   lumiComment: string;
+};
+
+export type FacePartyGameKind = 'hidden_mission' | 'poker_bluff' | 'copycat';
+
+export type FacePartyGameTone = 'friendly' | 'playful' | 'calm';
+
+export type HiddenMissionPromptInput = {
+  nickname?: string;
+  theme?: string;
+  roundSeconds?: number;
+  tone?: FacePartyGameTone;
+};
+
+export type PokerBluffPromptInput = {
+  theme?: string;
+  questionCount?: number;
+  tellHintCount?: number;
+  tone?: FacePartyGameTone;
+};
+
+export type PokerBluffPrompt = {
+  questions: string[];
+  tellHints: string[];
+};
+
+export type CopycatSeedInput = {
+  theme?: string;
+  count?: number;
+  tone?: FacePartyGameTone;
+};
+
+export type FacePartyGameMessageInput = {
+  game: FacePartyGameKind;
+  roundNumber?: number;
+  playerCount?: number;
+  winnerNickname?: string;
+  visibleSignals?: string[];
+  tone?: FacePartyGameTone;
 };
 
 export class RoomiOrchestrator {
@@ -112,6 +156,68 @@ export class RoomiOrchestrator {
     }
   }
 
+  async generateHiddenMissionPrompt(input: HiddenMissionPromptInput = {}): Promise<string> {
+    const fallback = this.templateHiddenMissionPrompt(input);
+    return this.generateFacePartyText(
+      'hidden_mission',
+      this.buildHiddenMissionPrompt(input),
+      fallback
+    );
+  }
+
+  async generatePokerBluffPrompt(input: PokerBluffPromptInput = {}): Promise<PokerBluffPrompt> {
+    const fallback = this.templatePokerBluffPrompt(input);
+
+    if (!this.generator) return fallback;
+
+    try {
+      const raw = await this.generator.generateText(this.buildPokerBluffPrompt(input));
+      return this.parsePokerBluffOutput(raw) ?? fallback;
+    } catch (error) {
+      this.logGeneratorFailure('poker_bluff', error);
+      return fallback;
+    }
+  }
+
+  async generateCopycatSeedExpressions(input: CopycatSeedInput = {}): Promise<string[]> {
+    const fallback = this.templateCopycatSeedExpressions(input);
+
+    if (!this.generator) return fallback;
+
+    try {
+      const raw = await this.generator.generateText(this.buildCopycatSeedPrompt(input));
+      const parsed = this.parseLineList(raw, input.count ?? 4);
+      return parsed.length > 0 ? parsed : fallback;
+    } catch (error) {
+      this.logGeneratorFailure('copycat_seed', error);
+      return fallback;
+    }
+  }
+
+  async generateGameIntroMessage(input: FacePartyGameMessageInput): Promise<string> {
+    return this.generateFacePartyText(
+      'game_intro',
+      this.buildFacePartyMessagePrompt('intro', input),
+      this.templateGameIntroMessage(input)
+    );
+  }
+
+  async generateGameRevealMessage(input: FacePartyGameMessageInput): Promise<string> {
+    return this.generateFacePartyText(
+      'game_reveal',
+      this.buildFacePartyMessagePrompt('reveal', input),
+      this.templateGameRevealMessage(input)
+    );
+  }
+
+  async generateGameSummaryMessage(input: FacePartyGameMessageInput): Promise<string> {
+    return this.generateFacePartyText(
+      'game_summary',
+      this.buildFacePartyMessagePrompt('summary', input),
+      this.templateGameSummaryMessage(input)
+    );
+  }
+
   private templateRetrospective(input: RetrospectiveInput): RetrospectiveText {
     const goalFeedback =
       input.goalCompletionRate >= 1
@@ -149,6 +255,188 @@ export class RoomiOrchestrator {
     }
 
     return { goalFeedback: feedback, lumiComment: lumi };
+  }
+
+  private templateHiddenMissionPrompt(input: HiddenMissionPromptInput): string {
+    const theme = input.theme ?? 'video call';
+    const duration = input.roundSeconds ? `${input.roundSeconds} seconds` : 'this round';
+    const target = input.nickname ? `${input.nickname}, ` : '';
+    return `${target}during ${duration}, work in one tiny visible cue about ${theme}: touch your chin once, then keep playing naturally.`;
+  }
+
+  private templatePokerBluffPrompt(input: PokerBluffPromptInput): PokerBluffPrompt {
+    const theme = input.theme ?? 'weekend plans';
+    const questionCount = input.questionCount ?? 3;
+    const tellHintCount = input.tellHintCount ?? 3;
+    const questions = [
+      `What is one real detail about your ${theme} story?`,
+      `Which part of the ${theme} story would your friends remember?`,
+      `What tiny detail would make the ${theme} story easier to picture?`,
+      `What changed at the last second in your ${theme} story?`
+    ].slice(0, questionCount);
+    const tellHints = [
+      'Watch for pauses before specific details.',
+      'Compare whether gestures match the timing of the story.',
+      'Notice if eye contact changes when follow-up questions get concrete.',
+      'Listen for repeated wording when the group asks for a timeline.'
+    ].slice(0, tellHintCount);
+
+    return { questions, tellHints };
+  }
+
+  private templateCopycatSeedExpressions(input: CopycatSeedInput): string[] {
+    const theme = input.theme ?? 'quick reaction';
+    return [
+      `big surprised face for ${theme}`,
+      `tiny suspicious side-eye for ${theme}`,
+      `silent celebration face for ${theme}`,
+      `trying-not-to-laugh face for ${theme}`,
+      `serious announcement face for ${theme}`
+    ].slice(0, input.count ?? 4);
+  }
+
+  private templateGameIntroMessage(input: FacePartyGameMessageInput): string {
+    const name = this.faceGameName(input.game);
+    const round = input.roundNumber ? ` Round ${input.roundNumber}.` : '';
+    return `${name}${round} Keep it light: use only visible cues like timing, gestures, gaze direction, and facial movement. No emotion or lie claims.`;
+  }
+
+  private templateGameRevealMessage(input: FacePartyGameMessageInput): string {
+    const winner = input.winnerNickname ? `${input.winnerNickname} takes this one.` : 'Reveal time.';
+    const signals = this.formatVisibleSignals(input.visibleSignals);
+    return `${winner} The useful clues were visible signals only${signals}.`;
+  }
+
+  private templateGameSummaryMessage(input: FacePartyGameMessageInput): string {
+    const name = this.faceGameName(input.game);
+    const players = input.playerCount ? `${input.playerCount} players` : 'the table';
+    const signals = this.formatVisibleSignals(input.visibleSignals);
+    return `${name} wrapped with ${players}. Best discussion came from visible signals${signals}, without guessing feelings or truthfulness.`;
+  }
+
+  private buildHiddenMissionPrompt(input: HiddenMissionPromptInput): string {
+    return [
+      'Create one private hidden mission for a face party game.',
+      `Nickname: ${input.nickname ?? 'player'}`,
+      `Theme: ${input.theme ?? 'video call'}`,
+      `Round seconds: ${input.roundSeconds ?? 'unspecified'}`,
+      `Tone: ${input.tone ?? 'playful'}`,
+      'Rules: one short sentence, concrete visible action, no emotion claims, no lie detection, no identity-sensitive traits.',
+      'Output only the mission text.'
+    ].join('\n');
+  }
+
+  private buildPokerBluffPrompt(input: PokerBluffPromptInput): string {
+    return [
+      'Create poker bluff party-game content for video chat.',
+      `Theme: ${input.theme ?? 'weekend plans'}`,
+      `Questions: ${input.questionCount ?? 3}`,
+      `Visible-signal hints: ${input.tellHintCount ?? 3}`,
+      `Tone: ${input.tone ?? 'playful'}`,
+      'Privacy rules: do not claim someone is lying, do not infer emotion, intent, health, or identity. Hints must only mention visible signals such as timing, gaze direction, gestures, facial movement, posture, or voice pacing.',
+      'Format exactly:',
+      'QUESTIONS:',
+      '- <question>',
+      'HINTS:',
+      '- <visible signal hint>'
+    ].join('\n');
+  }
+
+  private buildCopycatSeedPrompt(input: CopycatSeedInput): string {
+    return [
+      'Create seed expressions for a copycat face party game.',
+      `Theme: ${input.theme ?? 'quick reaction'}`,
+      `Count: ${input.count ?? 4}`,
+      `Tone: ${input.tone ?? 'playful'}`,
+      'Rules: visible face/gesture prompts only. No emotion claims, no diagnosis, no sensitive traits.',
+      'Return one seed per line, no numbering.'
+    ].join('\n');
+  }
+
+  private buildFacePartyMessagePrompt(
+    stage: 'intro' | 'reveal' | 'summary',
+    input: FacePartyGameMessageInput
+  ): string {
+    return [
+      `Create a ${stage} message for a face party game.`,
+      `Game: ${this.faceGameName(input.game)}`,
+      `Round: ${input.roundNumber ?? 'unspecified'}`,
+      `Players: ${input.playerCount ?? 'unspecified'}`,
+      `Winner: ${input.winnerNickname ?? 'unspecified'}`,
+      `Visible signals: ${(input.visibleSignals ?? []).join(', ') || 'none provided'}`,
+      `Tone: ${input.tone ?? 'friendly'}`,
+      'Privacy rules: mention only visible signals. Do not say the app detected emotions, lies, intent, attraction, health, or identity traits.',
+      'Output one or two short sentences only.'
+    ].join('\n');
+  }
+
+  private parsePokerBluffOutput(rawOutput: string): PokerBluffPrompt | null {
+    const questions: string[] = [];
+    const tellHints: string[] = [];
+    let section: 'questions' | 'hints' | null = null;
+
+    for (const line of rawOutput.split(/\r?\n/)) {
+      const cleaned = this.cleanListItem(line);
+      if (!cleaned) continue;
+      if (/^questions:?$/i.test(cleaned)) {
+        section = 'questions';
+        continue;
+      }
+      if (/^(hints|tell hints|visible-signal hints):?$/i.test(cleaned)) {
+        section = 'hints';
+        continue;
+      }
+      if (section === 'questions') questions.push(cleaned);
+      if (section === 'hints') tellHints.push(cleaned);
+    }
+
+    return questions.length > 0 && tellHints.length > 0 ? { questions, tellHints } : null;
+  }
+
+  private parseLineList(rawOutput: string, limit: number): string[] {
+    return rawOutput
+      .split(/\r?\n/)
+      .map((line) => this.cleanListItem(line))
+      .filter(Boolean)
+      .slice(0, limit);
+  }
+
+  private cleanListItem(line: string): string {
+    return line
+      .trim()
+      .replace(/^[-*]\s*/, '')
+      .replace(/^\d+[.)]\s*/, '')
+      .trim();
+  }
+
+  private async generateFacePartyText(
+    kind: Extract<
+      RoomiPromptKind,
+      'hidden_mission' | 'game_intro' | 'game_reveal' | 'game_summary'
+    >,
+    prompt: string,
+    fallback: string
+  ): Promise<string> {
+    if (!this.generator) return fallback;
+
+    try {
+      const text = (await this.generator.generateText(prompt)).trim();
+      return text || fallback;
+    } catch (error) {
+      this.logGeneratorFailure(kind, error);
+      return fallback;
+    }
+  }
+
+  private faceGameName(game: FacePartyGameKind): string {
+    if (game === 'hidden_mission') return 'Hidden Mission';
+    if (game === 'poker_bluff') return 'Poker Bluff';
+    return 'Copycat';
+  }
+
+  private formatVisibleSignals(signals?: string[]): string {
+    if (!signals || signals.length === 0) return '';
+    return `: ${signals.join(', ')}`;
   }
 
   private templateRefinement(rawGoal: string, sessionMinutes: number): GoalRefinement {
