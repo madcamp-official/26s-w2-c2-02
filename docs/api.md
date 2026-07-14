@@ -9,6 +9,8 @@
 | `POST` | `/rooms/join` | Join an existing room by invite code and return the caller participant id. |
 | `POST` | `/rooms/:roomId/goals` | Upsert the calling participant's goal (`participantId`, `rawText`) and return the room snapshot. Allowed regardless of room status (late joiners can set goals). |
 | `POST` | `/goals/refine` | Refine a raw goal (`rawGoal`, `sessionMinutes`) via Ollama and return `{ refinedText, reason, source }`. Always `200`; `source` is `template` when the LLM is unavailable. The raw goal is not persisted. |
+| `GET` | `/v1/models` | Forward an OpenAI-compatible model list request to the configured internal LLM server. |
+| `POST` | `/v1/chat/completions` | Forward an OpenAI-compatible chat completion request to the configured internal LLM server. |
 | `POST` | `/focus/predict` | Forward a renderer feature window to the internal ML server's `/v1/focus/predict` endpoint. Returns the ML response unchanged, `502` when the upstream is unavailable, and `504` when it times out. |
 | `POST` | `/focus/feedback` | Forward a renderer user correction to the internal ML server's `/v1/focus/feedback` endpoint. Returns the ML response unchanged, `502` when the upstream is unavailable, and `504` when it times out. |
 | `DELETE` | `/focus/feedback/:userId` | Forward a feedback reset request to the internal ML server's `/v1/focus/feedback/:userId` endpoint. Deletes that user's feedback and resets personalization on the ML server. |
@@ -93,8 +95,10 @@ The API server loads the root `.env` first, then loads `services/api/.env` if it
 | `ROOMI_ML_API_TIMEOUT_MS` | Timeout in milliseconds for central API requests to the internal ML server. Defaults to `5000`. |
 | `OLLAMA_BASE_URL` | Base URL of the Ollama server used for goal refinement (e.g. the Cloudflare Tunnel URL for the ML server), kept server-side only. When unset, `POST /goals/refine` returns a deterministic template instead of calling the LLM. |
 | `OLLAMA_MODEL` | Ollama model name to request (e.g. `gemma3`). Defaults to `gemma3` when unset. |
+| `ROOMI_LLM_API_URL` | Internal OpenAI-compatible LLM server base URL. Defaults to `http://192.168.0.83:8081`; keep this server-side when clients should not call the LLM server directly. |
+| `ROOMI_LLM_API_TIMEOUT_MS` | Timeout in milliseconds for central API requests to the internal LLM server. Defaults to `30000`. |
 
-During local development, the API also accepts renderer origins on `localhost` and `127.0.0.1` in the `5100-5199` port range. Packaged Electron requests are allowed with the `file://` and serialized `null` origins. This lets Electron and a browser guest join the same central API. If another PC serves the renderer from a LAN address, add an exact origin or a narrow wildcard such as `http://192.168.*:5175`.
+During local development, the API also accepts renderer origins on `localhost`, `127.0.0.1`, and private LAN addresses (`10.*`, `172.16-31.*`, `192.168.*`) in the `5100-5199` port range. Packaged Electron requests are allowed with the `file://` and serialized `null` origins. This lets Electron and browser guests join the same central API during one-machine or LAN testing. For non-private origins, add an exact origin or a narrow wildcard through `CLIENT_ORIGIN`.
 
 Daily credentials belong only in the API server `.env`. The renderer receives a Daily room URL and participant token from `POST /rooms` or `POST /rooms/join`; it must not receive `DAILY_API_KEY`.
 
@@ -128,6 +132,8 @@ ROOMI_ML_API_URL=http://192.168.0.83:8080
 ROOMI_ML_API_TIMEOUT_MS=5000
 OLLAMA_BASE_URL=
 OLLAMA_MODEL=gemma3
+ROOMI_LLM_API_URL=http://192.168.0.83:8081
+ROOMI_LLM_API_TIMEOUT_MS=30000
 ```
 
 Start the API:
@@ -147,6 +153,16 @@ Expected response:
 ```json
 { "ok": true, "service": "roomi-api" }
 ```
+
+If another local computer should call the central API as an LLM proxy, use the same Roomi API base URL as the rest of the app. In the shared MAD Camp environment, the public base URL is `https://api.roomi.madcamp-kaist.org`:
+
+```sh
+curl https://api.roomi.madcamp-kaist.org/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"gemma3:4b","messages":[{"role":"user","content":"안녕"}]}'
+```
+
+The internal LLM server can keep using `ROOMI_LLM_API_URL=http://192.168.0.83:8081`; external clients should not need a separate LLM hostname.
 
 Client `apps/desktop/.env` example for the desktop renderer:
 
