@@ -73,6 +73,21 @@ export function startSession(input: { roomId: string; participantId: string }) {
   return requestSnapshot('/sessions', input);
 }
 
+export function endSession(input: { roomId: string; participantId: string }) {
+  return requestSnapshot('/sessions/end', input);
+}
+
+export function setGoalAchieved(input: {
+  roomId: string;
+  participantId: string;
+  achieved: boolean;
+}) {
+  return requestSnapshot(`/rooms/${input.roomId}/goals/achieved`, {
+    participantId: input.participantId,
+    achieved: input.achieved
+  });
+}
+
 export async function refineGoal(input: GoalRefineInput): Promise<GoalRefinement> {
   const response = await fetch(`${apiBaseUrl}/goals/refine`, {
     method: 'POST',

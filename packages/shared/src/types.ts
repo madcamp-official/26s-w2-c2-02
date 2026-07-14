@@ -57,6 +57,7 @@ export type Goal = {
   participantId: string;
   rawText: string;
   refinedText?: string;
+  achieved?: boolean;
   createdAt: ISODateString;
 };
 
@@ -69,6 +70,19 @@ export type RoomiMessage = {
   createdAt: ISODateString;
 };
 
+export type FocusRankingEntry = {
+  participantId: string;
+  focusMinutes: number;
+};
+
+export type SessionSummary = {
+  focusMinutes: number;
+  goalCompletionRate: number;
+  goalFeedback?: string;
+  lumiComment?: string;
+  ranking?: FocusRankingEntry[];
+};
+
 export type StudySession = {
   id: string;
   roomId: string;
@@ -76,6 +90,7 @@ export type StudySession = {
   endedAt?: ISODateString;
   plannedMinutes: number;
   mode: 'study' | 'break' | 'ended';
+  summary?: SessionSummary;
 };
 
 export type RoomSnapshot = {
@@ -144,6 +159,17 @@ export type GoalRefineInput = {
 export type SessionStartInput = {
   roomId: string;
   participantId: string;
+};
+
+export type SessionEndInput = {
+  roomId: string;
+  participantId: string;
+};
+
+export type GoalAchievedInput = {
+  roomId: string;
+  participantId: string;
+  achieved: boolean;
 };
 
 export type GoalRefinement = {

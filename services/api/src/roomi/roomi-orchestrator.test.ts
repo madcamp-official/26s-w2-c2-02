@@ -73,3 +73,65 @@ describe('RoomiOrchestrator live-session messages', () => {
     expect(message).toContain('다음 한 단계');
   });
 });
+
+describe('RoomiOrchestrator.generateRetrospective', () => {
+  it('parses a well-formed FEEDBACK/LUMI response from the generator', async () => {
+    const orchestrator = new RoomiOrchestrator(
+      generatorReturning(
+        ['FEEDBACK: 목표를 끝까지 달성했어요.', 'LUMI: 오늘도 수고했어.'].join('\n')
+      )
+    );
+
+    const result = await orchestrator.generateRetrospective({
+      sessionMinutes: 50,
+      focusMinutes: 42,
+      goalCompletionRate: 1
+    });
+
+    expect(result).toEqual({
+      goalFeedback: '목표를 끝까지 달성했어요.',
+      lumiComment: '오늘도 수고했어.'
+    });
+  });
+
+  it('falls back to a template when the generator throws', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const orchestrator = new RoomiOrchestrator(failingGenerator);
+
+    const result = await orchestrator.generateRetrospective({
+      sessionMinutes: 50,
+      focusMinutes: 42,
+      goalCompletionRate: 1
+    });
+
+    expect(result.goalFeedback).toContain('달성');
+    expect(result.lumiComment).toBeTruthy();
+    expect(consoleError).toHaveBeenCalledWith(
+      '[RoomiOrchestrator] Ollama summary generation failed: ollama unavailable'
+    );
+  });
+
+  it('falls back to a template when the generator output cannot be parsed', async () => {
+    const orchestrator = new RoomiOrchestrator(generatorReturning('오늘 세션 잘 마쳤어요!'));
+
+    const result = await orchestrator.generateRetrospective({
+      sessionMinutes: 50,
+      focusMinutes: 10,
+      goalCompletionRate: 0
+    });
+
+    expect(result.goalFeedback).toContain('시간이 부족');
+  });
+
+  it('falls back to a template when no generator is configured', async () => {
+    const orchestrator = new RoomiOrchestrator();
+
+    const result = await orchestrator.generateRetrospective({
+      sessionMinutes: 50,
+      focusMinutes: 45,
+      goalCompletionRate: 0.5
+    });
+
+    expect(result.goalFeedback).toContain('일부만');
+  });
+});

@@ -2,8 +2,10 @@ import cors from 'cors';
 import express from 'express';
 import type {
   CreateRoomInput,
+  GoalAchievedInput,
   GoalRefineInput,
   JoinRoomInput,
+  SessionEndInput,
   SessionStartInput
 } from '@roomi/shared';
 import { isAllowedClientOrigin } from './env';
@@ -11,6 +13,7 @@ import { MlFocusUpstreamError, type MlFocusPredictor } from './focus/ml-focus-cl
 import { LlmProxyUpstreamError, type LlmProxy } from './llm/llm-proxy-client';
 import type { RoomService } from './rooms/room-service';
 import type { RoomiOrchestrator } from './roomi/roomi-orchestrator';
+import { computeSummary } from './summaries/summary-service';
 
 export function createApp(
   roomService: RoomService,
@@ -108,6 +111,49 @@ export function createApp(
       response.json(roomService.snapshotForParticipant(roomId, participantId));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Session start failed';
+      response.status(statusForRoomError(message, 404)).json({ message });
+    }
+  });
+
+  app.post('/sessions/end', async (request, response) => {
+    try {
+      const { roomId, participantId } = request.body as SessionEndInput;
+      const snapshot = roomService.endSession(roomId, participantId);
+      const session = snapshot.currentSession;
+
+      if (!session) {
+        throw new Error('No active session to end');
+      }
+
+      const baseSummary = computeSummary(session, snapshot.goals);
+      const ranking = roomService.getFocusRanking(roomId);
+      const retrospective = await roomiOrchestrator.generateRetrospective({
+        sessionMinutes: session.plannedMinutes,
+        focusMinutes: baseSummary.focusMinutes,
+        goalCompletionRate: baseSummary.goalCompletionRate
+      });
+
+      roomService.attachSessionSummary(roomId, { ...baseSummary, ranking, ...retrospective });
+      roomService.addRoomiMessage({
+        roomId: snapshot.room.id,
+        kind: 'summary',
+        text: retrospective.lumiComment
+      });
+
+      response.json(roomService.snapshotForParticipant(roomId, participantId));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Session end failed';
+      response.status(statusForRoomError(message, 404)).json({ message });
+    }
+  });
+
+  app.post('/rooms/:roomId/goals/achieved', (request, response) => {
+    try {
+      const { participantId, achieved } = request.body as GoalAchievedInput;
+      const snapshot = roomService.setGoalAchieved(request.params.roomId, participantId, achieved);
+      response.json(snapshot);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Goal update failed';
       response.status(statusForRoomError(message, 404)).json({ message });
     }
   });
