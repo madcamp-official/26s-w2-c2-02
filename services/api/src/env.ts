@@ -55,6 +55,7 @@ export const env = {
   dailyDomain: process.env.DAILY_DOMAIN,
   ollamaBaseUrl: process.env.OLLAMA_BASE_URL,
   ollamaModel: process.env.OLLAMA_MODEL,
+  ollamaTimeoutMs: Number(process.env.OLLAMA_TIMEOUT_MS ?? 20000),
   mlApiUrl: process.env.ROOMI_ML_API_URL ?? 'http://192.168.0.83:8080',
   mlApiTimeoutMs: Number(process.env.ROOMI_ML_API_TIMEOUT_MS ?? 5000)
 };
