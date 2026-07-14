@@ -93,8 +93,9 @@ The API server loads the root `.env` first, then loads `services/api/.env` if it
 | `DAILY_DOMAIN` | Daily domain used by the video provider. |
 | `ROOMI_ML_API_URL` | Internal ML server base URL. Defaults to `http://192.168.0.83:8080`; keep this server-side. |
 | `ROOMI_ML_API_TIMEOUT_MS` | Timeout in milliseconds for central API requests to the internal ML server. Defaults to `5000`. |
-| `OLLAMA_BASE_URL` | Base URL of the Ollama server used for goal refinement (e.g. the Cloudflare Tunnel URL for the ML server), kept server-side only. When unset, `POST /goals/refine` returns a deterministic template instead of calling the LLM. |
-| `OLLAMA_MODEL` | Ollama model name to request (e.g. `gemma3`). Defaults to `gemma3` when unset. |
+| `OLLAMA_BASE_URL` | Base URL that exposes the Ollama OpenAI-compatible `/v1/chat/completions` endpoint (currently the central Roomi API's own Cloudflare Tunnel domain, `https://api.roomi.madcamp-kaist.org`), kept server-side only. When unset, `POST /goals/refine` returns a deterministic template instead of calling the LLM. |
+| `OLLAMA_MODEL` | Ollama model name to request (e.g. `gemma3:12b`). Defaults to `gemma3:12b` when unset. |
+| `OLLAMA_TIMEOUT_MS` | Timeout in milliseconds for central API requests to the Ollama server. Defaults to `20000`. |
 | `ROOMI_LLM_API_URL` | Internal OpenAI-compatible LLM server base URL. Defaults to `http://192.168.0.83:8081`; keep this server-side when clients should not call the LLM server directly. |
 | `ROOMI_LLM_API_TIMEOUT_MS` | Timeout in milliseconds for central API requests to the internal LLM server. Defaults to `30000`. |
 
@@ -131,7 +132,8 @@ DAILY_DOMAIN=...
 ROOMI_ML_API_URL=http://192.168.0.83:8080
 ROOMI_ML_API_TIMEOUT_MS=5000
 OLLAMA_BASE_URL=
-OLLAMA_MODEL=gemma3
+OLLAMA_MODEL=gemma3:12b
+OLLAMA_TIMEOUT_MS=20000
 ROOMI_LLM_API_URL=http://192.168.0.83:8081
 ROOMI_LLM_API_TIMEOUT_MS=30000
 ```
@@ -159,7 +161,7 @@ If another local computer should call the central API as an LLM proxy, use the s
 ```sh
 curl https://api.roomi.madcamp-kaist.org/v1/chat/completions \
   -H 'Content-Type: application/json' \
-  -d '{"model":"gemma3:4b","messages":[{"role":"user","content":"안녕"}]}'
+  -d '{"model":"gemma3:12b","messages":[{"role":"user","content":"안녕"}]}'
 ```
 
 The internal LLM server can keep using `ROOMI_LLM_API_URL=http://192.168.0.83:8081`; external clients should not need a separate LLM hostname.
@@ -185,7 +187,7 @@ CLIENT_ORIGIN=http://localhost:5175,http://127.0.0.1:5175,http://192.168.*:5175
 DAILY_API_KEY=...
 DAILY_DOMAIN=...
 OLLAMA_BASE_URL=
-OLLAMA_MODEL=gemma3
+OLLAMA_MODEL=gemma3:12b
 ```
 
 Run Roomi API locally on the internal server:

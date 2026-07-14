@@ -14,7 +14,7 @@ const store = new InMemoryRoomStore();
 const roomService = new RoomService(store, new DailyVideoProvider());
 // Set OLLAMA_BASE_URL to go live; without it the orchestrator falls back to templates.
 const roomiOrchestrator = new RoomiOrchestrator(
-  new OllamaClient({ baseUrl: env.ollamaBaseUrl, model: env.ollamaModel })
+  new OllamaClient({ baseUrl: env.ollamaBaseUrl, model: env.ollamaModel, timeoutMs: env.ollamaTimeoutMs })
 );
 const mlFocusPredictor = new MlFocusClient({
   baseUrl: env.mlApiUrl,

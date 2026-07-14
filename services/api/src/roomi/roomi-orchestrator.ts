@@ -33,9 +33,9 @@ export class RoomiOrchestrator {
   async refineGoal(rawGoal: string, sessionMinutes: number): Promise<GoalRefinement> {
     if (this.generator) {
       try {
-        const refinedText = (
+        const refinedText = this.sanitizeRefinedText(
           await this.generator.generateText(this.buildRefinePrompt(rawGoal, sessionMinutes))
-        ).trim();
+        );
 
         if (refinedText) {
           return {
@@ -88,13 +88,32 @@ export class RoomiOrchestrator {
 
   private buildRefinePrompt(rawGoal: string, sessionMinutes: number): string {
     return [
-      '너는 스터디룸 운영자 "루미"야. 참가자의 거친 공부 목표를 그 자리에서 실천 가능한',
-      `한 문장 목표로 다듬어줘. 세션 길이는 ${sessionMinutes}분이야.`,
+      '너는 스터디룸 운영자 "루미"야.',
+      `참가자가 직접 입력한 실제 공부 목표는 "${rawGoal}"야. 예시가 아니니 절대 다른 과목이나 주제로 바꾸지 마.`,
+      `세션 길이는 ${sessionMinutes}분이야.`,
+      '규칙:',
+      `- 반드시 "${rawGoal}"와 같은 주제만 다룰 것`,
       '- 시간 안에 끝낼 수 있게 범위를 구체화할 것',
-      '- 따뜻하고 간결한 한 문장, 이모지·따옴표 없이',
-      '- 목표 문장만 출력하고 다른 설명은 붙이지 마',
-      `참가자 목표: ${rawGoal}`
+      '- 따뜻하고 간결한 한 문장, 이모지·따옴표·태그·라벨 없이',
+      '- 다듬어진 목표 문장 한 줄만 출력하고 다른 설명은 붙이지 마',
+      `다시 한번 확인: 참가자 목표는 "${rawGoal}"야. 다른 주제를 지어내지 말고 이 목표만 다듬어.`
     ].join('\n');
+  }
+
+  private sanitizeRefinedText(rawOutput: string): string {
+    const cleaned = rawOutput
+      .trim()
+      .replace(/^<[^>]+>|<\/[^>]+>$/g, '')
+      .replace(/^["'“”]|["'“”]$/g, '')
+      .trim();
+
+    // Small local models occasionally emit the literal token "undefined"/"null"
+    // instead of real text; treat that as a failed generation, not valid output.
+    if (/^(undefined|null)$/i.test(cleaned)) {
+      return '';
+    }
+
+    return cleaned;
   }
 
   private async generateLiveMessage(
@@ -115,7 +134,7 @@ export class RoomiOrchestrator {
 
   private logGeneratorFailure(kind: RoomiPromptKind, error: unknown): void {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[RoomiOrchestrator] LLM ${kind} generation failed: ${message}`);
+    console.error(`[RoomiOrchestrator] Ollama ${kind} generation failed: ${message}`);
   }
 
   private buildLivePrompt(

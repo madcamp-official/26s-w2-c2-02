@@ -115,6 +115,12 @@ export function createApp(
   app.post('/goals/refine', async (request, response) => {
     // The raw goal stays server-side; only the refined text and reason go back.
     const { rawGoal, sessionMinutes } = request.body as GoalRefineInput;
+
+    if (typeof rawGoal !== 'string' || !rawGoal.trim() || typeof sessionMinutes !== 'number') {
+      response.status(400).json({ message: 'rawGoal (string) and sessionMinutes (number) are required' });
+      return;
+    }
+
     const refinement = await roomiOrchestrator.refineGoal(rawGoal, sessionMinutes);
     response.json(refinement);
   });
