@@ -1,67 +1,33 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Bot, Camera, CircleStop, Play, RotateCcw, Settings, SlidersHorizontal } from 'lucide-react';
-import { FaceLandmarker } from '@mediapipe/tasks-vision';
 import {
   type FocusFeedback,
-  type FeatureWindowV1,
-  type PredictResponse,
-  predictFocusWindow,
   resetFocusFeedback,
   sendFocusFeedback
 } from '../../focus-ml-client';
 import {
-  buildFeatureWindow,
-  classifyFocus,
   defaultRuleSettings,
-  emptyFocusSnapshot,
-  extractFrameSignals,
   focusSnapshotFromMl,
   round,
-  updateSignalWindow,
   type FocusLabel,
-  type FocusSnapshot,
-  type FrameSignals,
   type LandmarkPoint,
   type RuleSettings
 } from '../../focus-pipeline';
-import faceLandmarkerModel from '../../assets/mediapipe/face_landmarker.task?url';
-import wasmBinaryPath from '../../assets/mediapipe/vision_wasm_internal.wasm?url';
-import wasmLoaderPath from '../../assets/mediapipe/vision_wasm_internal.js?url';
+import {
+  useFocusDetection,
+  type FocusDetectionMode,
+  type FocusDetectionStatus,
+  type MlPredictionSnapshot,
+  type MlPredictionStatus
+} from '../../use-focus-detection';
 import type { ScreenProps } from './types';
 
-const wasmFileset = {
-  wasmBinaryPath,
-  wasmLoaderPath
-};
-
 type TestStatus = 'idle' | 'loading' | 'running' | 'stopped' | 'error';
-type FocusDecisionMode = 'rule' | 'ml';
-type MlPredictionStatus = 'idle' | 'collecting' | 'predicting' | 'ready' | 'fallback';
 type MlFeedbackStatus = 'idle' | 'sending' | 'sent' | 'dismissed' | 'error';
 type MlFeedbackResetStatus = 'idle' | 'resetting' | 'reset' | 'error';
-type MlPredictionSnapshot = {
-  featureWindow: FeatureWindowV1;
-  response: PredictResponse;
-  windowId: string;
-  windowEnd: string;
-};
-
-type DetectionSnapshot = {
-  faces: number;
-  landmarks: number;
-  fps: number;
-  lastUpdatedAt: string;
-};
 
 const mediapipeTestUserId = 'mediapipe-test-user';
 const mediapipeTestSessionId = 'mediapipe-test-session';
-
-const emptyDetectionSnapshot: DetectionSnapshot = {
-  faces: 0,
-  landmarks: 0,
-  fps: 0,
-  lastUpdatedAt: '-'
-};
 
 const mlWindowSeconds = 20;
 
@@ -160,91 +126,29 @@ const settingGroups: Array<{
 export function MediaPipeTest({ go }: ScreenProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const landmarkerRef = useRef<FaceLandmarker | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const frameRef = useRef<number | null>(null);
-  const lastFrameAtRef = useRef<number | null>(null);
-  const signalWindowRef = useRef<FrameSignals[]>([]);
-  const previousNoseRef = useRef<LandmarkPoint | null>(null);
-  const settingsRef = useRef<RuleSettings>(defaultRuleSettings);
-  const modeRef = useRef<FocusDecisionMode>('rule');
-  const mlWindowStartRef = useRef<number | null>(null);
-  const mlPredictionRequestRef = useRef(0);
 
-  const [status, setStatus] = useState<TestStatus>('idle');
-  const [error, setError] = useState<string | null>(null);
-  const [detectionSnapshot, setDetectionSnapshot] =
-    useState<DetectionSnapshot>(emptyDetectionSnapshot);
-  const [focusSnapshot, setFocusSnapshot] = useState<FocusSnapshot>(emptyFocusSnapshot);
+  const [cameraStatus, setCameraStatus] = useState<TestStatus>('idle');
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [track, setTrack] = useState<MediaStreamTrack | null>(null);
   const [ruleSettings, setRuleSettings] = useState<RuleSettings>(defaultRuleSettings);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [decisionMode, setDecisionMode] = useState<FocusDecisionMode>('rule');
-  const [mlPredictionStatus, setMlPredictionStatus] = useState<MlPredictionStatus>('idle');
-  const [mlPrediction, setMlPrediction] = useState<MlPredictionSnapshot | null>(null);
-  const [mlError, setMlError] = useState<string | null>(null);
+  const [decisionMode, setDecisionMode] = useState<FocusDetectionMode>('rule');
   const [mlFeedbackStatus, setMlFeedbackStatus] = useState<MlFeedbackStatus>('idle');
   const [mlFeedbackError, setMlFeedbackError] = useState<string | null>(null);
   const [mlFeedbackResetStatus, setMlFeedbackResetStatus] =
     useState<MlFeedbackResetStatus>('idle');
   const [mlFeedbackResetMessage, setMlFeedbackResetMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    settingsRef.current = ruleSettings;
-  }, [ruleSettings]);
-
-  useEffect(() => {
-    modeRef.current = decisionMode;
-    if (decisionMode === 'ml' && status === 'running') {
-      setMlPredictionStatus((current) => (current === 'predicting' ? current : 'collecting'));
-    }
-  }, [decisionMode, status]);
-
-  const stop = (updateStatus = true) => {
-    if (frameRef.current !== null) {
-      cancelAnimationFrame(frameRef.current);
-      frameRef.current = null;
-    }
-
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    lastFrameAtRef.current = null;
-    signalWindowRef.current = [];
-    previousNoseRef.current = null;
-    mlWindowStartRef.current = null;
-
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-
+  const clearOverlay = useCallback(() => {
     const canvas = canvasRef.current;
     const context = canvas?.getContext('2d');
     if (canvas && context) {
       context.clearRect(0, 0, canvas.width, canvas.height);
     }
-
-    if (updateStatus) {
-      setDetectionSnapshot(emptyDetectionSnapshot);
-      setFocusSnapshot(emptyFocusSnapshot);
-      setMlPrediction(null);
-      setMlPredictionStatus('idle');
-      setMlError(null);
-      setMlFeedbackStatus('idle');
-      setMlFeedbackError(null);
-      setMlFeedbackResetStatus('idle');
-      setMlFeedbackResetMessage(null);
-      setStatus((current) => (current === 'error' ? current : 'stopped'));
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      stop(false);
-      landmarkerRef.current?.close();
-      landmarkerRef.current = null;
-    };
   }, []);
 
-  const drawLandmarks = (landmarks: Array<Array<LandmarkPoint>>) => {
+  const drawLandmarks = useCallback((landmarks: LandmarkPoint[][]) => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const context = canvas?.getContext('2d');
@@ -278,97 +182,120 @@ export function MediaPipeTest({ go }: ScreenProps) {
       const height = Math.max(...ys) - top;
       context.strokeRect(left, top, width, height);
     });
+  }, []);
+
+  const identity = useMemo(
+    () => ({ userId: mediapipeTestUserId, sessionId: mediapipeTestSessionId }),
+    []
+  );
+
+  const {
+    status: detectionStatus,
+    error: detectionError,
+    focusSnapshot,
+    detectionSnapshot,
+    mlPrediction,
+    mlStatus: mlPredictionStatus,
+    mlError
+  } = useFocusDetection({
+    track,
+    enabled: track !== null,
+    mode: decisionMode,
+    identity,
+    settings: ruleSettings,
+    mlWindowSeconds,
+    onLandmarks: drawLandmarks
+  });
+
+  const status = mergeTestStatus(cameraStatus, detectionStatus);
+  const error = cameraError ?? detectionError;
+
+  // A fresh window prediction reopens the confirm prompt for that window.
+  useEffect(() => {
+    if (!mlPrediction) {
+      return;
+    }
+
+    setMlFeedbackStatus('idle');
+    setMlFeedbackError(null);
+    setMlFeedbackResetStatus('idle');
+    setMlFeedbackResetMessage(null);
+  }, [mlPrediction?.windowId]);
+
+  const releaseCamera = useCallback(() => {
+    streamRef.current?.getTracks().forEach((mediaTrack) => mediaTrack.stop());
+    streamRef.current = null;
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      releaseCamera();
+    };
+  }, [releaseCamera]);
+
+  // The camera opens before the landmarker loads, so a model failure has to
+  // release it here. Copy the message out first: dropping the track tears the
+  // hook down, which clears its own error.
+  useEffect(() => {
+    if (detectionStatus !== 'error' || !detectionError) {
+      return;
+    }
+
+    setCameraError(detectionError);
+    setCameraStatus('error');
+    releaseCamera();
+    setTrack(null);
+  }, [detectionError, detectionStatus, releaseCamera]);
+
+  const stop = () => {
+    setTrack(null);
+    releaseCamera();
+    clearOverlay();
+    setMlFeedbackStatus('idle');
+    setMlFeedbackError(null);
+    setMlFeedbackResetStatus('idle');
+    setMlFeedbackResetMessage(null);
+    setCameraStatus((current) => (current === 'error' ? current : 'stopped'));
   };
 
-  const detectFrame = () => {
-    const landmarker = landmarkerRef.current;
-    const video = videoRef.current;
-
-    if (!landmarker || !video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-      frameRef.current = requestAnimationFrame(detectFrame);
-      return;
-    }
-
-    const now = performance.now();
-    const result = landmarker.detectForVideo(video, now);
-    const landmarks = result.faceLandmarks as Array<Array<LandmarkPoint>>;
-    const lastFrameAt = lastFrameAtRef.current;
-    const fps = lastFrameAt ? Math.round(1000 / Math.max(1, now - lastFrameAt)) : 0;
-    lastFrameAtRef.current = now;
-
-    drawLandmarks(landmarks);
-
-    const settings = settingsRef.current;
-    const frameSignals = extractFrameSignals(landmarks[0], settings, now, previousNoseRef.current);
-    previousNoseRef.current = landmarks[0]?.[1] ?? previousNoseRef.current;
-    signalWindowRef.current = updateSignalWindow(signalWindowRef.current, frameSignals, settings);
-
-    setDetectionSnapshot({
-      faces: landmarks.length,
-      landmarks: landmarks.reduce((count, face) => count + face.length, 0),
-      fps,
-      lastUpdatedAt: new Date().toLocaleTimeString()
-    });
-    const ruleSnapshot = classifyFocus(signalWindowRef.current, settings);
-    setFocusSnapshot(ruleSnapshot);
-    void maybePredictWithMl(signalWindowRef.current, ruleSnapshot, now);
-
-    frameRef.current = requestAnimationFrame(detectFrame);
-  };
-
-  const maybePredictWithMl = async (
-    windowFrames: FrameSignals[],
-    ruleSnapshot: FocusSnapshot,
-    now: number
-  ) => {
-    if (modeRef.current !== 'ml' || windowFrames.length === 0) {
-      return;
-    }
-
-    mlWindowStartRef.current ??= now;
-
-    if (now - mlWindowStartRef.current < mlWindowSeconds * 1000) {
-      setMlPredictionStatus((current) => (current === 'predicting' ? current : 'collecting'));
-      return;
-    }
-
-    const frameWindow = windowFrames.filter((frame) => frame.timestamp >= mlWindowStartRef.current!);
-    const windowStart = mlWindowStartRef.current;
-    mlWindowStartRef.current = now;
-    const requestId = mlPredictionRequestRef.current + 1;
-    mlPredictionRequestRef.current = requestId;
-    setMlPredictionStatus('predicting');
-    setMlError(null);
+  const start = async () => {
+    setCameraStatus('loading');
+    setCameraError(null);
 
     try {
-      const featureWindow = buildFeatureWindow(frameWindow, ruleSnapshot, windowStart, now, {
-        userId: mediapipeTestUserId,
-        sessionId: mediapipeTestSessionId
-      });
-      const response = await predictFocusWindow(featureWindow);
+      await window.roomi?.media.ensureAccess();
 
-      if (mlPredictionRequestRef.current !== requestId) {
-        return;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: false
+      });
+
+      streamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
       }
 
-      setMlPrediction({
-        featureWindow,
-        response,
-        windowId: featureWindow.windowId,
-        windowEnd: new Date().toLocaleTimeString()
-      });
-      setMlPredictionStatus('ready');
-      setMlFeedbackStatus('idle');
-      setMlFeedbackError(null);
-      setMlFeedbackResetStatus('idle');
-      setMlFeedbackResetMessage(null);
+      setTrack(stream.getVideoTracks()[0] ?? null);
+      setCameraStatus('running');
     } catch (reason) {
-      if (mlPredictionRequestRef.current !== requestId) {
-        return;
-      }
-
-      setMlPredictionStatus('fallback');
-      setMlError(reason instanceof Error ? reason.message : 'ML 서버 예측을 사용할 수 없습니다.');
+      console.error('MediaPipe test failed:', reason);
+      stop();
+      setCameraStatus('error');
+      setCameraError(
+        reason instanceof Error
+          ? reason.message
+          : '카메라 또는 MediaPipe 모델을 초기화하지 못했습니다. 개발자 콘솔의 MediaPipe test failed 로그를 확인해주세요.'
+      );
     }
   };
 
@@ -403,78 +330,6 @@ export function MediaPipeTest({ go }: ScreenProps) {
       setMlFeedbackResetStatus('error');
       setMlFeedbackResetMessage(
         reason instanceof Error ? reason.message : 'ML 피드백을 초기화하지 못했어요.'
-      );
-    }
-  };
-
-  const createFaceLandmarker = async () => {
-    const baseOptions = {
-      modelAssetPath: faceLandmarkerModel
-    };
-
-    try {
-      return await FaceLandmarker.createFromOptions(wasmFileset, {
-        baseOptions: {
-          ...baseOptions,
-          delegate: 'GPU'
-        },
-        outputFaceBlendshapes: true,
-        outputFacialTransformationMatrixes: true,
-        runningMode: 'VIDEO',
-        numFaces: 1
-      });
-    } catch (gpuReason) {
-      console.warn('MediaPipe GPU delegate failed. Falling back to CPU.', gpuReason);
-      return FaceLandmarker.createFromOptions(wasmFileset, {
-        baseOptions: {
-          ...baseOptions,
-          delegate: 'CPU'
-        },
-        outputFaceBlendshapes: true,
-        outputFacialTransformationMatrixes: true,
-        runningMode: 'VIDEO',
-        numFaces: 1
-      });
-    }
-  };
-
-  const start = async () => {
-    setStatus('loading');
-    setError(null);
-
-    try {
-      await window.roomi?.media.ensureAccess();
-
-      const landmarker = landmarkerRef.current ?? (await createFaceLandmarker());
-
-      landmarkerRef.current = landmarker;
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'user',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        },
-        audio: false
-      });
-
-      streamRef.current = stream;
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-
-      setStatus('running');
-      frameRef.current = requestAnimationFrame(detectFrame);
-    } catch (reason) {
-      console.error('MediaPipe test failed:', reason);
-      stop();
-      setStatus('error');
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : '카메라 또는 MediaPipe 모델을 초기화하지 못했습니다. 개발자 콘솔의 MediaPipe test failed 로그를 확인해주세요.'
       );
     }
   };
@@ -904,4 +759,20 @@ function getMlCardDescription(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+/**
+ * The camera and the landmarker start independently, so the screen stays in
+ * "초기화 중" until both are up.
+ */
+function mergeTestStatus(camera: TestStatus, detection: FocusDetectionStatus): TestStatus {
+  if (camera === 'error' || detection === 'error') {
+    return 'error';
+  }
+
+  if (camera !== 'running') {
+    return camera;
+  }
+
+  return detection === 'running' ? 'running' : 'loading';
 }
