@@ -90,7 +90,7 @@ The API server loads the root `.env` first, then loads `services/api/.env` if it
 | `GEMINI_API_KEY_2` | Optional secondary Gemini API key. Used only when the primary key fails. |
 | `GEMINI_API_KEY_3` | Optional tertiary Gemini API key. Used only when the first two configured keys fail. |
 
-When no Gemini keys are configured, Roomi returns deterministic template text instead of calling the LLM. If a configured key fails, the API logs the failed key slot and tries the next configured key.
+Multiple Gemini keys can be configured either as `GEMINI_API_KEY=key1,key2,key3` or with the numbered fallback variables. Roomi tries keys in that order. When no Gemini keys are configured, Roomi returns deterministic template text instead of calling the LLM. If a configured key fails, the API logs the failed key slot and tries the next configured key.
 
 During local development, the API also accepts renderer origins on `localhost` and `127.0.0.1` in the `5100-5199` port range. This lets Electron and a browser guest join the same local API during one-machine testing. If another PC serves the renderer from a LAN address, add an exact origin or a narrow wildcard such as `http://192.168.*:5175`.
 

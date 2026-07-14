@@ -58,7 +58,7 @@ export class GeminiClient implements TextGenerator {
 
     try {
       const response = await fetch(
-        `${ENDPOINT}/${this.model}:generateContent?key=${apiKey}`,
+        `${ENDPOINT}/${this.model}:generateContent?key=${encodeURIComponent(apiKey)}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
