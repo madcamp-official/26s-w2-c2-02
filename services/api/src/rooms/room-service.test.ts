@@ -252,6 +252,22 @@ describe('RoomService.startSession', () => {
     );
   });
 
+  it('restarts a fresh full-length session after a previous one ended', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    service.startSession(created.room.id, host.id);
+    service.endSession(created.room.id, host.id);
+
+    const snapshot = service.startSession(created.room.id, host.id);
+
+    expect(snapshot.room.status).toBe('studying');
+    expect(snapshot.currentSession?.mode).toBe('study');
+    expect(snapshot.currentSession?.endedAt).toBeUndefined();
+    expect(snapshot.currentSession?.summary).toBeUndefined();
+    expect(snapshot.currentSession?.plannedMinutes).toBe(created.room.settings.sessionMinutes);
+  });
+
   it('throws when the room does not exist', () => {
     const service = createService();
 

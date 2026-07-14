@@ -241,7 +241,7 @@ export class RoomService {
       throw new Error('Only the host can start the session');
     }
 
-    if (snapshot.room.status !== 'waiting') {
+    if (snapshot.room.status !== 'waiting' && snapshot.room.status !== 'ended') {
       throw new Error('Session already started');
     }
 
