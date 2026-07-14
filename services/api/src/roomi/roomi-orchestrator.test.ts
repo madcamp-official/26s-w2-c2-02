@@ -36,7 +36,7 @@ describe('RoomiOrchestrator.refineGoal', () => {
     expect(result.refinedText).toContain('미적분');
     expect(result.refinedText).toContain('25');
     expect(consoleError).toHaveBeenCalledWith(
-      '[RoomiOrchestrator] Gemini goal_refine generation failed: gemini unavailable'
+      '[RoomiOrchestrator] Ollama goal_refine generation failed: ollama unavailable'
     );
   });
 

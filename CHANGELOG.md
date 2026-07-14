@@ -42,9 +42,8 @@
 
 ### Changed
 
-- Gemini 기반 루미 목표 다듬기와 라이브 메시지 생성이 실패하면 API 서버 로그에 생성 종류와 에러 메시지를 남기도록 했습니다. `GEMINI_API_KEY`, `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3` 순서의 key fallback도 지원하며, 사용자 흐름은 기존처럼 템플릿 fallback으로 계속 진행됩니다.
-- `GEMINI_API_KEY=key1,key2,key3`처럼 한 환경변수에 쉼표로 여러 Gemini key를 넣어도 순서대로 fallback 시도하도록 했습니다.
-- Gemini 요청의 기본 8초 abort 제한을 제거해 응답이 늦은 key가 강제로 실패 처리되지 않도록 했습니다.
+- Ollama 기반 루미 목표 다듬기와 라이브 메시지 생성이 실패하면 API 서버 로그에 생성 종류와 에러 메시지를 남기도록 했습니다. 사용자 흐름은 기존처럼 템플릿 fallback으로 계속 진행됩니다.
+- 루미 텍스트 생성 provider를 Gemini에서 자체 Ollama 서버(Gemma 3) 호출로 교체했습니다. `GEMINI_API_KEY` 계열 환경변수는 `OLLAMA_BASE_URL`/`OLLAMA_MODEL`로 대체됩니다.
 - 중앙 API의 기본 ML 서버 주소를 응답 가능한 LAN endpoint `http://192.168.0.83:8080`으로 변경했습니다. 기존 서버 환경에서 별도 주소를 써야 하면 `ROOMI_ML_API_URL`로 override 해야 합니다.
 - Desktop renderer가 내부 ML 서버에 직접 연결하지 않고 기존 `VITE_ROOMI_API_URL` 중앙 API를 통해 집중도 예측을 요청하도록 변경했습니다. 중앙 서버에는 `ROOMI_ML_API_URL=http://192.168.0.83:8080` 설정이 필요합니다.
 - 중앙 API가 내부 ML 서버의 `/v1/focus/feedback`으로 사용자 확인 feedback을 전달하도록 proxy를 확장했습니다.

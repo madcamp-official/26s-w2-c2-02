@@ -115,7 +115,7 @@ export class RoomiOrchestrator {
 
   private logGeneratorFailure(kind: RoomiPromptKind, error: unknown): void {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[RoomiOrchestrator] Gemini ${kind} generation failed: ${message}`);
+    console.error(`[RoomiOrchestrator] Ollama ${kind} generation failed: ${message}`);
   }
 
   private buildLivePrompt(
