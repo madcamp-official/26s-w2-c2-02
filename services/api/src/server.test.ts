@@ -6,6 +6,7 @@ import { InMemoryRoomStore } from './adapters/storage/in-memory-room-store';
 import { RoomService } from './rooms/room-service';
 import { RoomiOrchestrator, type TextGenerator } from './roomi/roomi-orchestrator';
 import { createApp } from './server';
+import { MlFocusUpstreamError, type MlFocusPredictor } from './focus/ml-focus-client';
 
 describe('POST /rooms/:roomId/goals', () => {
   let httpServer: HttpServer;
@@ -187,5 +188,168 @@ describe('POST /goals/refine', () => {
     expect(response.status).toBe(200);
     expect(body.source).toBe('gemini');
     expect(body.refinedText).toBe('25분 집중: 수학 예제 3문제');
+  });
+});
+
+describe('POST /focus/predict', () => {
+  let httpServer: HttpServer;
+  let baseUrl: string;
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  });
+
+  async function startApp(mlPredictor: MlFocusPredictor) {
+    httpServer = createServer(
+      createApp(new RoomService(new InMemoryRoomStore()), new RoomiOrchestrator(), mlPredictor)
+    );
+    await new Promise<void>((resolve) => httpServer.listen(0, resolve));
+    const { port } = httpServer.address() as AddressInfo;
+    baseUrl = `http://localhost:${port}`;
+  }
+
+  function predict(body: unknown) {
+    return fetch(`${baseUrl}/focus/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  }
+
+  function feedback(body: unknown) {
+    return fetch(`${baseUrl}/focus/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  }
+
+  function resetFeedback(userId: string) {
+    return fetch(`${baseUrl}/focus/feedback/${encodeURIComponent(userId)}`, {
+      method: 'DELETE'
+    });
+  }
+
+  it('forwards a feature window through the configured ML predictor', async () => {
+    const featureWindow = { windowId: 'window-1', durationSec: 20 };
+    const prediction = { modelVersion: 'ml-v1', label: 'focused', score: 0.9 };
+    const received: unknown[] = [];
+    const mlPredictor = {
+      predict: async (input: unknown) => {
+        received.push(input);
+        return prediction;
+      },
+      submitFeedback: async () => ({ ok: true }),
+      resetFeedback: async () => ({ ok: true })
+    };
+
+    await startApp(mlPredictor);
+    const response = await predict(featureWindow);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(prediction);
+    expect(received).toEqual([featureWindow]);
+  });
+
+  it.each([
+    ['unavailable', 502],
+    ['timeout', 504]
+  ] as const)('maps an upstream %s failure to %s', async (kind, status) => {
+    await startApp({
+      predict: async () => {
+        throw new MlFocusUpstreamError(`upstream ${kind}`, kind);
+      },
+      submitFeedback: async () => ({ ok: true }),
+      resetFeedback: async () => ({ ok: true })
+    });
+
+    const response = await predict({ windowId: 'window-1' });
+
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ message: `upstream ${kind}` });
+  });
+
+  it('forwards user feedback through the configured ML predictor', async () => {
+    const userFeedback = {
+      windowId: 'window-1',
+      predictedLabel: 'distracted',
+      actualLabel: 'distracted',
+      wasActuallyFocused: false
+    };
+    const received: unknown[] = [];
+    const mlPredictor = {
+      predict: async () => ({ label: 'focused' }),
+      submitFeedback: async (input: unknown) => {
+        received.push(input);
+        return { ok: true };
+      },
+      resetFeedback: async () => ({ ok: true })
+    };
+
+    await startApp(mlPredictor);
+    const response = await feedback(userFeedback);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    expect(received).toEqual([userFeedback]);
+  });
+
+  it('forwards feedback resets through the configured ML predictor', async () => {
+    const received: string[] = [];
+    const mlPredictor = {
+      predict: async () => ({ label: 'focused' }),
+      submitFeedback: async () => ({ ok: true }),
+      resetFeedback: async (userId: string) => {
+        received.push(userId);
+        return {
+          userId,
+          deletedFeedbackCount: 3,
+          calibrationReset: true
+        };
+      }
+    };
+
+    await startApp(mlPredictor);
+    const response = await resetFeedback('user/1');
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      userId: 'user/1',
+      deletedFeedbackCount: 3,
+      calibrationReset: true
+    });
+    expect(received).toEqual(['user/1']);
+  });
+});
+
+describe('CORS for packaged Electron', () => {
+  let httpServer: HttpServer;
+  let baseUrl: string;
+
+  beforeEach(async () => {
+    httpServer = createServer(
+      createApp(new RoomService(new InMemoryRoomStore()), new RoomiOrchestrator())
+    );
+    await new Promise<void>((resolve) => httpServer.listen(0, resolve));
+    const { port } = httpServer.address() as AddressInfo;
+    baseUrl = `http://localhost:${port}`;
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  });
+
+  it.each(['file://', 'null'])('allows the packaged renderer origin %s', async (origin) => {
+    const response = await fetch(`${baseUrl}/focus/predict`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: origin,
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'content-type'
+      }
+    });
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get('access-control-allow-origin')).toBe(origin);
   });
 });

@@ -7,10 +7,15 @@ import type {
   SessionStartInput
 } from '@roomi/shared';
 import { isAllowedClientOrigin } from './env';
+import { MlFocusUpstreamError, type MlFocusPredictor } from './focus/ml-focus-client';
 import type { RoomService } from './rooms/room-service';
 import type { RoomiOrchestrator } from './roomi/roomi-orchestrator';
 
-export function createApp(roomService: RoomService, roomiOrchestrator: RoomiOrchestrator) {
+export function createApp(
+  roomService: RoomService,
+  roomiOrchestrator: RoomiOrchestrator,
+  mlFocusPredictor?: MlFocusPredictor
+) {
   const app = express();
 
   app.use(
@@ -85,6 +90,57 @@ export function createApp(roomService: RoomService, roomiOrchestrator: RoomiOrch
     const { rawGoal, sessionMinutes } = request.body as GoalRefineInput;
     const refinement = await roomiOrchestrator.refineGoal(rawGoal, sessionMinutes);
     response.json(refinement);
+  });
+
+  app.post('/focus/predict', async (request, response) => {
+    if (!mlFocusPredictor) {
+      response.status(503).json({ message: 'ML focus prediction is not configured' });
+      return;
+    }
+
+    try {
+      response.json(await mlFocusPredictor.predict(request.body));
+    } catch (error) {
+      if (error instanceof MlFocusUpstreamError) {
+        response.status(error.kind === 'timeout' ? 504 : 502).json({ message: error.message });
+        return;
+      }
+      response.status(502).json({ message: 'ML focus prediction failed' });
+    }
+  });
+
+  app.post('/focus/feedback', async (request, response) => {
+    if (!mlFocusPredictor) {
+      response.status(503).json({ message: 'ML focus feedback is not configured' });
+      return;
+    }
+
+    try {
+      response.json(await mlFocusPredictor.submitFeedback(request.body));
+    } catch (error) {
+      if (error instanceof MlFocusUpstreamError) {
+        response.status(error.kind === 'timeout' ? 504 : 502).json({ message: error.message });
+        return;
+      }
+      response.status(502).json({ message: 'ML focus feedback failed' });
+    }
+  });
+
+  app.delete('/focus/feedback/:userId', async (request, response) => {
+    if (!mlFocusPredictor) {
+      response.status(503).json({ message: 'ML focus feedback is not configured' });
+      return;
+    }
+
+    try {
+      response.json(await mlFocusPredictor.resetFeedback(request.params.userId));
+    } catch (error) {
+      if (error instanceof MlFocusUpstreamError) {
+        response.status(error.kind === 'timeout' ? 504 : 502).json({ message: error.message });
+        return;
+      }
+      response.status(502).json({ message: 'ML focus feedback reset failed' });
+    }
   });
 
   app.get('/rooms/:inviteCode', (request, response) => {

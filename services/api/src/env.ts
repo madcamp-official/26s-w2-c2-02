@@ -9,6 +9,7 @@ loadEnv({ path: resolve(repoRoot, '.env') });
 loadEnv({ path: resolve(serviceRoot, '.env'), override: true });
 
 const localRendererOriginPattern = /^http:\/\/(localhost|127\.0\.0\.1):51\d{2}$/;
+const packagedRendererOrigins = new Set(['file://', 'null']);
 
 export function isAllowedClientOrigin(origin: string | undefined) {
   if (!origin) {
@@ -16,6 +17,7 @@ export function isAllowedClientOrigin(origin: string | undefined) {
   }
 
   return (
+    packagedRendererOrigins.has(origin) ||
     localRendererOriginPattern.test(origin) ||
     env.clientOrigins.some((allowedOrigin) => originMatchesAllowedPattern(origin, allowedOrigin))
   );
@@ -62,5 +64,7 @@ export const env = {
     process.env.GEMINI_API_KEY,
     process.env.GEMINI_API_KEY_2,
     process.env.GEMINI_API_KEY_3
-  )
+  ),
+  mlApiUrl: process.env.ROOMI_ML_API_URL ?? 'http://192.168.0.83:8080',
+  mlApiTimeoutMs: Number(process.env.ROOMI_ML_API_TIMEOUT_MS ?? 5000)
 };

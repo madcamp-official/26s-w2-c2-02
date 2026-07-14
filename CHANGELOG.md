@@ -35,12 +35,22 @@
 - Figma 픽셀에서 직접 추출한 색상/타이포/간격을 `styles/tokens.css` 에 design token 으로 정리하고, 공통 `AppBar`·루미 mascot·badge/pill/button 컴포넌트를 추가했습니다.
 - 개발 중 화면을 빠르게 오갈 수 있는 상단 dev 화면 전환 nav 를 추가했습니다(디자인에는 포함되지 않는 개발용 UI).
 - MediaPipe 테스트 화면에서 웹캠 얼굴 landmark 기반 Rule-Based 집중도 label, 점수, feature 지속 시간을 확인할 수 있게 추가했습니다.
+- MediaPipe 테스트 화면에서 Rule-Based 판정과 ML 서버 판정을 토글해 비교할 수 있게 했습니다. ML 서버 모드는 20초 feature window를 중앙 API의 `/focus/predict`로 보내고, 실패 시 로컬 Rule-Based 판정을 계속 표시합니다.
+- 중앙 API가 내부 ML 서버의 `/v1/focus/predict`를 호출하도록 전용 proxy를 추가했습니다. 연결 실패는 `502`, timeout은 `504`로 반환합니다.
+- MediaPipe 테스트 화면에서 ML이 비집중 확인 대상으로 예측하면 “혹시 집중 안하고 있어?” 확인 메시지를 띄우고, 사용자가 인정한 경우 중앙 API를 통해 ML 서버에 feedback을 보냅니다.
+- MediaPipe 테스트 화면에서 현재 테스트 사용자(`mediapipe-test-user`)의 ML feedback과 개인화 값을 초기화할 수 있게 했습니다.
 
 ### Changed
 
 - Gemini 기반 루미 목표 다듬기와 라이브 메시지 생성이 실패하면 API 서버 로그에 생성 종류와 에러 메시지를 남기도록 했습니다. `GEMINI_API_KEY`, `GEMINI_API_KEY_2`, `GEMINI_API_KEY_3` 순서의 key fallback도 지원하며, 사용자 흐름은 기존처럼 템플릿 fallback으로 계속 진행됩니다.
 - `GEMINI_API_KEY=key1,key2,key3`처럼 한 환경변수에 쉼표로 여러 Gemini key를 넣어도 순서대로 fallback 시도하도록 했습니다.
 - Gemini 요청의 기본 8초 abort 제한을 제거해 응답이 늦은 key가 강제로 실패 처리되지 않도록 했습니다.
+- 중앙 API의 기본 ML 서버 주소를 응답 가능한 LAN endpoint `http://192.168.0.83:8080`으로 변경했습니다. 기존 서버 환경에서 별도 주소를 써야 하면 `ROOMI_ML_API_URL`로 override 해야 합니다.
+- Desktop renderer가 내부 ML 서버에 직접 연결하지 않고 기존 `VITE_ROOMI_API_URL` 중앙 API를 통해 집중도 예측을 요청하도록 변경했습니다. 중앙 서버에는 `ROOMI_ML_API_URL=http://192.168.0.83:8080` 설정이 필요합니다.
+- 중앙 API가 내부 ML 서버의 `/v1/focus/feedback`으로 사용자 확인 feedback을 전달하도록 proxy를 확장했습니다.
+- 중앙 API가 내부 ML 서버의 `DELETE /v1/focus/feedback/:userId`를 호출하도록 feedback 초기화 proxy를 추가했습니다.
+- ML 서버 예측 요청의 renderer 기본 abort 제한을 제거해 중앙 API 응답이 늦을 때 `signal is aborted without reason`으로 실패하지 않도록 했습니다.
+- 패키징된 Electron renderer의 `file://` 및 직렬화된 `null` origin을 중앙 API CORS에서 허용해 ML proxy 요청이 브라우저에서 차단되지 않도록 수정했습니다.
 - 스터디룸에서 Daily 카메라를 다시 켤 때 종료된 기존 track을 재사용하지 않고 화상 call을 재생성해, 휴식 후 복귀와 동일하게 새 카메라 track을 획득합니다.
 - 방 생성·입장 성공 또는 방 퇴장 시 요청 잠금을 초기화해, 같은 앱에서 다시 방을 만들거나 입장해도 이전 진행 중 버튼 상태가 남지 않습니다.
 - 방 참가와 스터디룸 참여 상태를 분리해 대기실 참가자는 영상 타일에 나타나지 않고, 실제 스터디룸 참가자는 대기실에서 `공부 중`으로 표시됩니다.

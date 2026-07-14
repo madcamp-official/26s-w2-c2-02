@@ -61,8 +61,10 @@ describe('App screen router', () => {
     fireEvent.click(screen.getByRole('button', { name: '다음' }));
     fireEvent.click(screen.getByRole('button', { name: /MediaPipe 집중도 테스트/ }));
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Rule-Based 집중도 label' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: '집중도 판정 모드 테스트' })).toBeInTheDocument();
     expect(screen.getByLabelText('현재 집중도 판정')).toHaveTextContent('대기');
+    expect(screen.getByLabelText('집중도 판정 모드')).toHaveTextContent('Rule-Based');
+    expect(screen.getByLabelText('집중도 판정 모드')).toHaveTextContent('ML 서버');
 
     fireEvent.click(screen.getByRole('button', { name: '기준 조정' }));
     expect(screen.getByRole('dialog', { name: 'Rule-Based 기준 조정' })).toBeInTheDocument();

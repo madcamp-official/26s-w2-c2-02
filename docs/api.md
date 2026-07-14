@@ -9,6 +9,9 @@
 | `POST` | `/rooms/join` | Join an existing room by invite code and return the caller participant id. |
 | `POST` | `/rooms/:roomId/goals` | Upsert the calling participant's goal (`participantId`, `rawText`) and return the room snapshot. Allowed regardless of room status (late joiners can set goals). |
 | `POST` | `/goals/refine` | Refine a raw goal (`rawGoal`, `sessionMinutes`) via Gemini and return `{ refinedText, reason, source }`. Always `200`; `source` is `template` when the LLM is unavailable. The raw goal is not persisted. |
+| `POST` | `/focus/predict` | Forward a renderer feature window to the internal ML server's `/v1/focus/predict` endpoint. Returns the ML response unchanged, `502` when the upstream is unavailable, and `504` when it times out. |
+| `POST` | `/focus/feedback` | Forward a renderer user correction to the internal ML server's `/v1/focus/feedback` endpoint. Returns the ML response unchanged, `502` when the upstream is unavailable, and `504` when it times out. |
+| `DELETE` | `/focus/feedback/:userId` | Forward a feedback reset request to the internal ML server's `/v1/focus/feedback/:userId` endpoint. Deletes that user's feedback and resets personalization on the ML server. |
 | `POST` | `/sessions` | Host starts the study session (`roomId`, `participantId`) regardless of participants' `isReady` state. Sets `room.status = 'studying'`, creates `currentSession`, and changes the host status to `focused`; other participants remain `online` in the waiting room. Returns the snapshot. `403` for non-host, `409` if not `waiting`, `404` for unknown room. Transition reaches everyone via `room:updated`. |
 | `GET` | `/rooms/:inviteCode` | Read a room snapshot by invite code. |
 
@@ -89,10 +92,12 @@ The API server loads the root `.env` first, then loads `services/api/.env` if it
 | `GEMINI_API_KEY` | Primary Google Gemini API key for Roomi text generation, kept server-side only. |
 | `GEMINI_API_KEY_2` | Optional secondary Gemini API key. Used only when the primary key fails. |
 | `GEMINI_API_KEY_3` | Optional tertiary Gemini API key. Used only when the first two configured keys fail. |
+| `ROOMI_ML_API_URL` | Internal ML server base URL. Defaults to `http://192.168.0.83:8080`; keep this server-side. |
+| `ROOMI_ML_API_TIMEOUT_MS` | Timeout in milliseconds for central API requests to the internal ML server. Defaults to `5000`. |
 
 Multiple Gemini keys can be configured either as `GEMINI_API_KEY=key1,key2,key3` or with the numbered fallback variables. Roomi tries keys in that order. When no Gemini keys are configured, Roomi returns deterministic template text instead of calling the LLM. If a configured key fails, the API logs the failed key slot and tries the next configured key.
 
-During local development, the API also accepts renderer origins on `localhost` and `127.0.0.1` in the `5100-5199` port range. This lets Electron and a browser guest join the same local API during one-machine testing. If another PC serves the renderer from a LAN address, add an exact origin or a narrow wildcard such as `http://192.168.*:5175`.
+During local development, the API also accepts renderer origins on `localhost` and `127.0.0.1` in the `5100-5199` port range. Packaged Electron requests are allowed with the `file://` and serialized `null` origins. This lets Electron and a browser guest join the same central API. If another PC serves the renderer from a LAN address, add an exact origin or a narrow wildcard such as `http://192.168.*:5175`.
 
 Daily credentials belong only in the API server `.env`. The renderer receives a Daily room URL and participant token from `POST /rooms` or `POST /rooms/join`; it must not receive `DAILY_API_KEY`.
 
@@ -122,6 +127,8 @@ API_HOST=0.0.0.0
 CLIENT_ORIGIN=http://localhost:5175,http://127.0.0.1:5175,http://192.168.*:5175
 DAILY_API_KEY=...
 DAILY_DOMAIN=...
+ROOMI_ML_API_URL=http://192.168.0.83:8080
+ROOMI_ML_API_TIMEOUT_MS=5000
 GEMINI_API_KEY=
 GEMINI_API_KEY_2=
 GEMINI_API_KEY_3=
