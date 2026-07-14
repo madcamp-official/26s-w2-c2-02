@@ -135,9 +135,9 @@ export function WaitingRoom({
 
   return (
     <div className="screen screen--app">
+      <p className="waiting__eyebrow">대기실</p>
       <div className="waiting__body">
         <main className="waiting__main">
-          <p className="waiting__eyebrow">대기실</p>
           <InviteCodeCard inviteCode={room.inviteCode} />
           {inProgress ? (
             <>
@@ -174,11 +174,9 @@ export function WaitingRoom({
               setRefinement(null);
               setRefineError(null);
             }}
+            onBlur={submitGoal}
           />
           <div className="waiting__goal-actions">
-            <button type="button" className="btn btn--ghost" onClick={submitGoal}>
-              목표 저장
-            </button>
             <button type="button" className="btn btn--primary" onClick={refineGoal} disabled={isRefining}>
               {isRefining ? '루미가 다듬는 중...' : '루미에게 다듬기'}
             </button>

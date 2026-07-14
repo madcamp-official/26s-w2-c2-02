@@ -297,6 +297,11 @@ p {
   color: var(--green-text);
 }
 
+.badge--blue {
+  background: #e6efff;
+  color: #3d6fe0;
+}
+
 .badge--wait {
   background: var(--purple-100);
   color: var(--purple-700);

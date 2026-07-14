@@ -1,7 +1,7 @@
 .waiting__body {
   display: flex;
   gap: 24px;
-  padding: clamp(24px, 5vw, 48px) clamp(18px, 5vw, 48px);
+  padding: 14px clamp(18px, 5vw, 48px) clamp(24px, 5vw, 48px);
 }
 
 .waiting__main {
@@ -10,13 +10,18 @@
 }
 
 .waiting__eyebrow {
+  padding: clamp(24px, 5vw, 48px) clamp(18px, 5vw, 48px) 0;
   font-size: 13px;
   font-weight: 700;
   color: var(--purple-700);
 }
 
+.waiting__main .badge {
+  margin-top: 18px;
+}
+
 .waiting__title {
-  margin-top: 8px;
+  margin-top: 10px;
   font-size: 28px;
   font-weight: 800;
   color: var(--heading);

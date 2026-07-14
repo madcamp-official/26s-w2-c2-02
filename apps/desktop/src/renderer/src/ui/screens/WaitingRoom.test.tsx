@@ -167,7 +167,7 @@ describe('WaitingRoom', () => {
     fireEvent.change(screen.getByLabelText('내 목표'), {
       target: { value: '미적분 3단원' }
     });
-    fireEvent.click(screen.getByRole('button', { name: '목표 저장' }));
+    fireEvent.blur(screen.getByLabelText('내 목표'));
 
     expect(props.onSubmitGoal).toHaveBeenCalledWith('미적분 3단원');
   });
