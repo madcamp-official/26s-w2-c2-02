@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DailyParticipantMedia,
+  focusLabelToParticipantStatus,
   formatSessionTime,
   participantsInStudyRoom,
   reconcilePendingCameraState,
@@ -59,6 +60,17 @@ describe('StudyRoom session clock', () => {
         Date.parse('2026-07-13T00:02:00.000Z')
       )
     ).toBe(0);
+  });
+});
+
+describe('StudyRoom focus detection status mapping', () => {
+  it('maps MediaPipe and ML labels to session presence statuses', () => {
+    expect(focusLabelToParticipantStatus('focused')).toBe('focused');
+    expect(focusLabelToParticipantStatus('distracted')).toBe('distracted');
+    expect(focusLabelToParticipantStatus('uncertain')).toBe('distracted');
+    expect(focusLabelToParticipantStatus('away')).toBe('away');
+    expect(focusLabelToParticipantStatus('sleepy')).toBe('paused');
+    expect(focusLabelToParticipantStatus('paused')).toBe('paused');
   });
 });
 

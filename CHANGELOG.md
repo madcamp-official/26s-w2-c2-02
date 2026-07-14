@@ -45,6 +45,7 @@
 
 ### Changed
 
+- 스터디룸 세션에서 로컬/Daily 카메라 track을 MediaPipe + ML 집중도 파이프라인에 연결해 참가자 상태가 `focused`/`distracted`/`away`/`paused`로 자동 갱신되도록 했습니다. 감지 상태와 ML window 상태를 스터디룸 패널에서 확인할 수 있습니다.
 - Ollama 기반 루미 목표 다듬기와 라이브 메시지 생성이 실패하면 API 서버 로그에 생성 종류와 에러 메시지를 남기도록 했습니다. 사용자 흐름은 기존처럼 템플릿 fallback으로 계속 진행됩니다.
 - 루미 텍스트 생성 provider를 Gemini에서 자체 Ollama 서버(Gemma 3) 호출로 교체했습니다. `GEMINI_API_KEY` 계열 환경변수는 `OLLAMA_BASE_URL`/`OLLAMA_MODEL`로 대체됩니다.
 - 앱 아이콘(작업표시줄·macOS Dock·Windows/macOS 배포본)을 컬러 윙크 마스코트로 교체했습니다. 이전 `.ico`가 grayscale로 생성되어 흑백으로 보이던 문제를 해결했고, 마스코트 스프라이트에서 `roomi-icon.png/.ico/.icns`를 컬러로 다시 생성하는 `apps/desktop/scripts/generate-app-icons.py`를 추가했습니다.

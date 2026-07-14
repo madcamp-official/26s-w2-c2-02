@@ -1,132 +1,33 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Bot, Camera, CircleStop, Play, RotateCcw, Settings, SlidersHorizontal } from 'lucide-react';
-import { FaceLandmarker } from '@mediapipe/tasks-vision';
 import {
   type FocusFeedback,
-  type FeatureWindowV1,
-  type MlFocusLabel,
-  type PredictResponse,
-  predictFocusWindow,
   resetFocusFeedback,
   sendFocusFeedback
 } from '../../focus-ml-client';
-import faceLandmarkerModel from '../../assets/mediapipe/face_landmarker.task?url';
-import wasmBinaryPath from '../../assets/mediapipe/vision_wasm_internal.wasm?url';
-import wasmLoaderPath from '../../assets/mediapipe/vision_wasm_internal.js?url';
+import {
+  defaultRuleSettings,
+  focusSnapshotFromMl,
+  round,
+  type FocusLabel,
+  type LandmarkPoint,
+  type RuleSettings
+} from '../../focus-pipeline';
+import {
+  useFocusDetection,
+  type FocusDetectionMode,
+  type FocusDetectionStatus,
+  type MlPredictionSnapshot,
+  type MlPredictionStatus
+} from '../../use-focus-detection';
 import type { ScreenProps } from './types';
 
-const wasmFileset = {
-  wasmBinaryPath,
-  wasmLoaderPath
-};
-
 type TestStatus = 'idle' | 'loading' | 'running' | 'stopped' | 'error';
-type FocusDecisionMode = 'rule' | 'ml';
-type MlPredictionStatus = 'idle' | 'collecting' | 'predicting' | 'ready' | 'fallback';
 type MlFeedbackStatus = 'idle' | 'sending' | 'sent' | 'dismissed' | 'error';
 type MlFeedbackResetStatus = 'idle' | 'resetting' | 'reset' | 'error';
-type FocusLabel = 'focused' | 'distracted' | 'away' | 'sleepy' | 'uncertain' | 'paused';
-type FocusSignalName = 'face_missing' | 'eyes_closed' | 'head_turned' | 'head_down';
 
-type LandmarkPoint = {
-  x: number;
-  y: number;
-};
-
-type RuleSettings = {
-  windowSeconds: number;
-  focusedThreshold: number;
-  faceMissingSeconds: number;
-  eyesClosedSeconds: number;
-  headTurnedSeconds: number;
-  headDownSeconds: number;
-  eyeAspectRatioThreshold: number;
-  headTurnRatioThreshold: number;
-  headDownRatioThreshold: number;
-  faceMissingPenalty: number;
-  eyesClosedPenalty: number;
-  headTurnedPenalty: number;
-  headDownPenalty: number;
-};
-
-type FrameSignals = {
-  timestamp: number;
-  facePresent: boolean;
-  eyeAspectRatio: number;
-  headYawRatio: number;
-  headPitchRatio: number;
-  eyesClosed: boolean;
-  headTurned: boolean;
-  headDown: boolean;
-};
-
-type FocusSnapshot = {
-  label: FocusLabel;
-  score: number;
-  activeSignals: FocusSignalName[];
-  durations: Record<FocusSignalName, number>;
-  current: Omit<FrameSignals, 'timestamp'>;
-};
-
-type MlPredictionSnapshot = {
-  featureWindow: FeatureWindowV1;
-  response: PredictResponse;
-  windowId: string;
-  windowEnd: string;
-};
-
-type DetectionSnapshot = {
-  faces: number;
-  landmarks: number;
-  fps: number;
-  lastUpdatedAt: string;
-};
-
-const defaultRuleSettings: RuleSettings = {
-  windowSeconds: 30,
-  focusedThreshold: 70,
-  faceMissingSeconds: 5,
-  eyesClosedSeconds: 3,
-  headTurnedSeconds: 10,
-  headDownSeconds: 10,
-  eyeAspectRatioThreshold: 0.19,
-  headTurnRatioThreshold: 0.18,
-  headDownRatioThreshold: 0.36,
-  faceMissingPenalty: 70,
-  eyesClosedPenalty: 45,
-  headTurnedPenalty: 30,
-  headDownPenalty: 35
-};
 const mediapipeTestUserId = 'mediapipe-test-user';
 const mediapipeTestSessionId = 'mediapipe-test-session';
-
-const emptyDetectionSnapshot: DetectionSnapshot = {
-  faces: 0,
-  landmarks: 0,
-  fps: 0,
-  lastUpdatedAt: '-'
-};
-
-const emptyFocusSnapshot: FocusSnapshot = {
-  label: 'paused',
-  score: 0,
-  activeSignals: ['face_missing'],
-  durations: {
-    face_missing: 0,
-    eyes_closed: 0,
-    head_turned: 0,
-    head_down: 0
-  },
-  current: {
-    facePresent: false,
-    eyeAspectRatio: 0,
-    headYawRatio: 0,
-    headPitchRatio: 0,
-    eyesClosed: false,
-    headTurned: false,
-    headDown: false
-  }
-};
 
 const mlWindowSeconds = 20;
 
@@ -225,91 +126,29 @@ const settingGroups: Array<{
 export function MediaPipeTest({ go }: ScreenProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const landmarkerRef = useRef<FaceLandmarker | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const frameRef = useRef<number | null>(null);
-  const lastFrameAtRef = useRef<number | null>(null);
-  const signalWindowRef = useRef<FrameSignals[]>([]);
-  const previousNoseRef = useRef<LandmarkPoint | null>(null);
-  const settingsRef = useRef<RuleSettings>(defaultRuleSettings);
-  const modeRef = useRef<FocusDecisionMode>('rule');
-  const mlWindowStartRef = useRef<number | null>(null);
-  const mlPredictionRequestRef = useRef(0);
 
-  const [status, setStatus] = useState<TestStatus>('idle');
-  const [error, setError] = useState<string | null>(null);
-  const [detectionSnapshot, setDetectionSnapshot] =
-    useState<DetectionSnapshot>(emptyDetectionSnapshot);
-  const [focusSnapshot, setFocusSnapshot] = useState<FocusSnapshot>(emptyFocusSnapshot);
+  const [cameraStatus, setCameraStatus] = useState<TestStatus>('idle');
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [track, setTrack] = useState<MediaStreamTrack | null>(null);
   const [ruleSettings, setRuleSettings] = useState<RuleSettings>(defaultRuleSettings);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [decisionMode, setDecisionMode] = useState<FocusDecisionMode>('rule');
-  const [mlPredictionStatus, setMlPredictionStatus] = useState<MlPredictionStatus>('idle');
-  const [mlPrediction, setMlPrediction] = useState<MlPredictionSnapshot | null>(null);
-  const [mlError, setMlError] = useState<string | null>(null);
+  const [decisionMode, setDecisionMode] = useState<FocusDetectionMode>('rule');
   const [mlFeedbackStatus, setMlFeedbackStatus] = useState<MlFeedbackStatus>('idle');
   const [mlFeedbackError, setMlFeedbackError] = useState<string | null>(null);
   const [mlFeedbackResetStatus, setMlFeedbackResetStatus] =
     useState<MlFeedbackResetStatus>('idle');
   const [mlFeedbackResetMessage, setMlFeedbackResetMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    settingsRef.current = ruleSettings;
-  }, [ruleSettings]);
-
-  useEffect(() => {
-    modeRef.current = decisionMode;
-    if (decisionMode === 'ml' && status === 'running') {
-      setMlPredictionStatus((current) => (current === 'predicting' ? current : 'collecting'));
-    }
-  }, [decisionMode, status]);
-
-  const stop = (updateStatus = true) => {
-    if (frameRef.current !== null) {
-      cancelAnimationFrame(frameRef.current);
-      frameRef.current = null;
-    }
-
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    lastFrameAtRef.current = null;
-    signalWindowRef.current = [];
-    previousNoseRef.current = null;
-    mlWindowStartRef.current = null;
-
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-
+  const clearOverlay = useCallback(() => {
     const canvas = canvasRef.current;
     const context = canvas?.getContext('2d');
     if (canvas && context) {
       context.clearRect(0, 0, canvas.width, canvas.height);
     }
-
-    if (updateStatus) {
-      setDetectionSnapshot(emptyDetectionSnapshot);
-      setFocusSnapshot(emptyFocusSnapshot);
-      setMlPrediction(null);
-      setMlPredictionStatus('idle');
-      setMlError(null);
-      setMlFeedbackStatus('idle');
-      setMlFeedbackError(null);
-      setMlFeedbackResetStatus('idle');
-      setMlFeedbackResetMessage(null);
-      setStatus((current) => (current === 'error' ? current : 'stopped'));
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      stop(false);
-      landmarkerRef.current?.close();
-      landmarkerRef.current = null;
-    };
   }, []);
 
-  const drawLandmarks = (landmarks: Array<Array<LandmarkPoint>>) => {
+  const drawLandmarks = useCallback((landmarks: LandmarkPoint[][]) => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const context = canvas?.getContext('2d');
@@ -343,94 +182,120 @@ export function MediaPipeTest({ go }: ScreenProps) {
       const height = Math.max(...ys) - top;
       context.strokeRect(left, top, width, height);
     });
+  }, []);
+
+  const identity = useMemo(
+    () => ({ userId: mediapipeTestUserId, sessionId: mediapipeTestSessionId }),
+    []
+  );
+
+  const {
+    status: detectionStatus,
+    error: detectionError,
+    focusSnapshot,
+    detectionSnapshot,
+    mlPrediction,
+    mlStatus: mlPredictionStatus,
+    mlError
+  } = useFocusDetection({
+    track,
+    enabled: track !== null,
+    mode: decisionMode,
+    identity,
+    settings: ruleSettings,
+    mlWindowSeconds,
+    onLandmarks: drawLandmarks
+  });
+
+  const status = mergeTestStatus(cameraStatus, detectionStatus);
+  const error = cameraError ?? detectionError;
+
+  // A fresh window prediction reopens the confirm prompt for that window.
+  useEffect(() => {
+    if (!mlPrediction) {
+      return;
+    }
+
+    setMlFeedbackStatus('idle');
+    setMlFeedbackError(null);
+    setMlFeedbackResetStatus('idle');
+    setMlFeedbackResetMessage(null);
+  }, [mlPrediction?.windowId]);
+
+  const releaseCamera = useCallback(() => {
+    streamRef.current?.getTracks().forEach((mediaTrack) => mediaTrack.stop());
+    streamRef.current = null;
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      releaseCamera();
+    };
+  }, [releaseCamera]);
+
+  // The camera opens before the landmarker loads, so a model failure has to
+  // release it here. Copy the message out first: dropping the track tears the
+  // hook down, which clears its own error.
+  useEffect(() => {
+    if (detectionStatus !== 'error' || !detectionError) {
+      return;
+    }
+
+    setCameraError(detectionError);
+    setCameraStatus('error');
+    releaseCamera();
+    setTrack(null);
+  }, [detectionError, detectionStatus, releaseCamera]);
+
+  const stop = () => {
+    setTrack(null);
+    releaseCamera();
+    clearOverlay();
+    setMlFeedbackStatus('idle');
+    setMlFeedbackError(null);
+    setMlFeedbackResetStatus('idle');
+    setMlFeedbackResetMessage(null);
+    setCameraStatus((current) => (current === 'error' ? current : 'stopped'));
   };
 
-  const detectFrame = () => {
-    const landmarker = landmarkerRef.current;
-    const video = videoRef.current;
-
-    if (!landmarker || !video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-      frameRef.current = requestAnimationFrame(detectFrame);
-      return;
-    }
-
-    const now = performance.now();
-    const result = landmarker.detectForVideo(video, now);
-    const landmarks = result.faceLandmarks as Array<Array<LandmarkPoint>>;
-    const lastFrameAt = lastFrameAtRef.current;
-    const fps = lastFrameAt ? Math.round(1000 / Math.max(1, now - lastFrameAt)) : 0;
-    lastFrameAtRef.current = now;
-
-    drawLandmarks(landmarks);
-
-    const settings = settingsRef.current;
-    const frameSignals = extractFrameSignals(landmarks[0], settings, now, previousNoseRef.current);
-    previousNoseRef.current = landmarks[0]?.[1] ?? previousNoseRef.current;
-    signalWindowRef.current = updateSignalWindow(signalWindowRef.current, frameSignals, settings);
-
-    setDetectionSnapshot({
-      faces: landmarks.length,
-      landmarks: landmarks.reduce((count, face) => count + face.length, 0),
-      fps,
-      lastUpdatedAt: new Date().toLocaleTimeString()
-    });
-    const ruleSnapshot = classifyFocus(signalWindowRef.current, settings);
-    setFocusSnapshot(ruleSnapshot);
-    void maybePredictWithMl(signalWindowRef.current, ruleSnapshot, now);
-
-    frameRef.current = requestAnimationFrame(detectFrame);
-  };
-
-  const maybePredictWithMl = async (
-    windowFrames: FrameSignals[],
-    ruleSnapshot: FocusSnapshot,
-    now: number
-  ) => {
-    if (modeRef.current !== 'ml' || windowFrames.length === 0) {
-      return;
-    }
-
-    mlWindowStartRef.current ??= now;
-
-    if (now - mlWindowStartRef.current < mlWindowSeconds * 1000) {
-      setMlPredictionStatus((current) => (current === 'predicting' ? current : 'collecting'));
-      return;
-    }
-
-    const frameWindow = windowFrames.filter((frame) => frame.timestamp >= mlWindowStartRef.current!);
-    const windowStart = mlWindowStartRef.current;
-    mlWindowStartRef.current = now;
-    const requestId = mlPredictionRequestRef.current + 1;
-    mlPredictionRequestRef.current = requestId;
-    setMlPredictionStatus('predicting');
-    setMlError(null);
+  const start = async () => {
+    setCameraStatus('loading');
+    setCameraError(null);
 
     try {
-      const featureWindow = buildFeatureWindow(frameWindow, ruleSnapshot, windowStart, now);
-      const response = await predictFocusWindow(featureWindow);
+      await window.roomi?.media.ensureAccess();
 
-      if (mlPredictionRequestRef.current !== requestId) {
-        return;
-      }
-
-      setMlPrediction({
-        featureWindow,
-        response,
-        windowId: featureWindow.windowId,
-        windowEnd: new Date().toLocaleTimeString()
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: false
       });
-      setMlPredictionStatus('ready');
-      setMlFeedbackStatus('idle');
-      setMlFeedbackError(null);
-      setMlFeedbackResetStatus('idle');
-      setMlFeedbackResetMessage(null);
-    } catch (reason) {
-      if (mlPredictionRequestRef.current !== requestId) {
-        return;
+
+      streamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
       }
 
-      setMlPredictionStatus('fallback');
-      setMlError(reason instanceof Error ? reason.message : 'ML 서버 예측을 사용할 수 없습니다.');
+      setTrack(stream.getVideoTracks()[0] ?? null);
+      setCameraStatus('running');
+    } catch (reason) {
+      console.error('MediaPipe test failed:', reason);
+      stop();
+      setCameraStatus('error');
+      setCameraError(
+        reason instanceof Error
+          ? reason.message
+          : '카메라 또는 MediaPipe 모델을 초기화하지 못했습니다. 개발자 콘솔의 MediaPipe test failed 로그를 확인해주세요.'
+      );
     }
   };
 
@@ -465,78 +330,6 @@ export function MediaPipeTest({ go }: ScreenProps) {
       setMlFeedbackResetStatus('error');
       setMlFeedbackResetMessage(
         reason instanceof Error ? reason.message : 'ML 피드백을 초기화하지 못했어요.'
-      );
-    }
-  };
-
-  const createFaceLandmarker = async () => {
-    const baseOptions = {
-      modelAssetPath: faceLandmarkerModel
-    };
-
-    try {
-      return await FaceLandmarker.createFromOptions(wasmFileset, {
-        baseOptions: {
-          ...baseOptions,
-          delegate: 'GPU'
-        },
-        outputFaceBlendshapes: true,
-        outputFacialTransformationMatrixes: true,
-        runningMode: 'VIDEO',
-        numFaces: 1
-      });
-    } catch (gpuReason) {
-      console.warn('MediaPipe GPU delegate failed. Falling back to CPU.', gpuReason);
-      return FaceLandmarker.createFromOptions(wasmFileset, {
-        baseOptions: {
-          ...baseOptions,
-          delegate: 'CPU'
-        },
-        outputFaceBlendshapes: true,
-        outputFacialTransformationMatrixes: true,
-        runningMode: 'VIDEO',
-        numFaces: 1
-      });
-    }
-  };
-
-  const start = async () => {
-    setStatus('loading');
-    setError(null);
-
-    try {
-      await window.roomi?.media.ensureAccess();
-
-      const landmarker = landmarkerRef.current ?? (await createFaceLandmarker());
-
-      landmarkerRef.current = landmarker;
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'user',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        },
-        audio: false
-      });
-
-      streamRef.current = stream;
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-
-      setStatus('running');
-      frameRef.current = requestAnimationFrame(detectFrame);
-    } catch (reason) {
-      console.error('MediaPipe test failed:', reason);
-      stop();
-      setStatus('error');
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : '카메라 또는 MediaPipe 모델을 초기화하지 못했습니다. 개발자 콘솔의 MediaPipe test failed 로그를 확인해주세요.'
       );
     }
   };
@@ -904,180 +697,6 @@ function RuleControl({
   );
 }
 
-function extractFrameSignals(
-  face: LandmarkPoint[] | undefined,
-  settings: RuleSettings,
-  timestamp: number,
-  previousNose: LandmarkPoint | null
-): FrameSignals {
-  if (!face) {
-    return {
-      timestamp,
-      facePresent: false,
-      eyeAspectRatio: 0,
-      headYawRatio: 0,
-      headPitchRatio: 0,
-      eyesClosed: false,
-      headTurned: false,
-      headDown: false
-    };
-  }
-
-  const bounds = getBounds(face);
-  const faceWidth = Math.max(0.001, bounds.width);
-  const faceHeight = Math.max(0.001, bounds.height);
-  const nose = face[1] ?? face[Math.floor(face.length / 2)];
-  const leftEar = calculateEyeAspectRatio(face, [33, 160, 158, 133, 153, 144]);
-  const rightEar = calculateEyeAspectRatio(face, [362, 385, 387, 263, 373, 380]);
-  const eyeAspectRatio = (leftEar + rightEar) / 2;
-  const eyeCenterY = averagePoints(face, [33, 133, 362, 263]).y;
-  const faceCenterX = bounds.left + faceWidth / 2;
-  const headYawRatio = (nose.x - faceCenterX) / faceWidth;
-  const headPitchRatio = (nose.y - eyeCenterY) / faceHeight;
-  const motionBoost =
-    previousNose === null
-      ? 0
-      : distance(nose, previousNose) > 0.018
-        ? 0.01
-        : 0;
-
-  return {
-    timestamp,
-    facePresent: true,
-    eyeAspectRatio,
-    headYawRatio,
-    headPitchRatio,
-    eyesClosed: eyeAspectRatio < settings.eyeAspectRatioThreshold,
-    headTurned: Math.abs(headYawRatio) > settings.headTurnRatioThreshold + motionBoost,
-    headDown: headPitchRatio > settings.headDownRatioThreshold
-  };
-}
-
-function updateSignalWindow(
-  windowFrames: FrameSignals[],
-  nextFrame: FrameSignals,
-  settings: RuleSettings
-) {
-  const earliest = nextFrame.timestamp - settings.windowSeconds * 1000;
-  return [...windowFrames, nextFrame].filter((frame) => frame.timestamp >= earliest);
-}
-
-function classifyFocus(windowFrames: FrameSignals[], settings: RuleSettings): FocusSnapshot {
-  const latest = windowFrames.at(-1);
-
-  if (!latest) {
-    return emptyFocusSnapshot;
-  }
-
-  const durations = {
-    face_missing: getLatestDuration(windowFrames, (frame) => !frame.facePresent),
-    eyes_closed: getLatestDuration(windowFrames, (frame) => frame.eyesClosed),
-    head_turned: getLatestDuration(windowFrames, (frame) => frame.headTurned),
-    head_down: getLatestDuration(windowFrames, (frame) => frame.headDown)
-  };
-  const activeSignals: FocusSignalName[] = [];
-  let penalty = 0;
-
-  if (durations.face_missing >= settings.faceMissingSeconds) {
-    activeSignals.push('face_missing');
-    penalty += settings.faceMissingPenalty;
-  }
-  if (durations.eyes_closed >= settings.eyesClosedSeconds) {
-    activeSignals.push('eyes_closed');
-    penalty += settings.eyesClosedPenalty;
-  }
-  if (durations.head_turned >= settings.headTurnedSeconds) {
-    activeSignals.push('head_turned');
-    penalty += settings.headTurnedPenalty;
-  }
-  if (durations.head_down >= settings.headDownSeconds) {
-    activeSignals.push('head_down');
-    penalty += settings.headDownPenalty;
-  }
-
-  const score = clamp(Math.round(100 - penalty), 0, 100);
-  const label = getFocusLabel(score, activeSignals, settings);
-
-  return {
-    label,
-    score,
-    activeSignals,
-    durations,
-    current: {
-      facePresent: latest.facePresent,
-      eyeAspectRatio: latest.eyeAspectRatio,
-      headYawRatio: latest.headYawRatio,
-      headPitchRatio: latest.headPitchRatio,
-      eyesClosed: latest.eyesClosed,
-      headTurned: latest.headTurned,
-      headDown: latest.headDown
-    }
-  };
-}
-
-function buildFeatureWindow(
-  windowFrames: FrameSignals[],
-  ruleSnapshot: FocusSnapshot,
-  windowStart: number,
-  windowEnd: number
-): FeatureWindowV1 {
-  const durationSec = clamp(round((windowEnd - windowStart) / 1000, 1), 5, 60);
-  const frames = windowFrames.length > 0 ? windowFrames : [];
-  const detectedFrames = frames.filter((frame) => frame.facePresent);
-  const facePresenceRatio = ratio(detectedFrames.length, frames.length);
-  const eyeClosedRatio = ratio(
-    detectedFrames.filter((frame) => frame.eyesClosed).length,
-    detectedFrames.length
-  );
-  const headDownRatio = ratio(
-    detectedFrames.filter((frame) => frame.headDown).length,
-    detectedFrames.length
-  );
-  const headTurnedRatio = ratio(
-    detectedFrames.filter((frame) => frame.headTurned).length,
-    detectedFrames.length
-  );
-  const headYawDegrees = detectedFrames.map((frame) => frame.headYawRatio * 90);
-  const headPitchDegrees = detectedFrames.map((frame) => frame.headPitchRatio * 90);
-  const motionAmount = getMotionAmount(detectedFrames);
-  const ruleScore = clamp(ruleSnapshot.score / 100, 0, 1);
-  const windowEndDate = new Date();
-  const windowStartDate = new Date(windowEndDate.getTime() - durationSec * 1000);
-
-  return {
-    windowId: cryptoRandomId(),
-    userId: mediapipeTestUserId,
-    sessionId: mediapipeTestSessionId,
-    windowStart: windowStartDate.toISOString(),
-    windowEnd: windowEndDate.toISOString(),
-    durationSec,
-    features: {
-      facePresenceRatio,
-      avgFaceDetectionConfidence: facePresenceRatio,
-      eyeClosedRatio,
-      headYawMean: round(mean(headYawDegrees), 3),
-      headYawStd: round(populationStd(headYawDegrees), 3),
-      headPitchMean: round(mean(headPitchDegrees), 3),
-      headPitchStd: round(populationStd(headPitchDegrees), 3),
-      headDownRatio,
-      headTurnedRatio,
-      lowConfidenceRatio: round(1 - facePresenceRatio, 3),
-      motionAmount,
-      ruleBasedScoreMean: ruleScore,
-      ruleBasedScoreMin: ruleScore
-    },
-    ruleBasedLabel: toMlFocusLabel(ruleSnapshot.label)
-  };
-}
-
-function focusSnapshotFromMl(response: PredictResponse, fallback: FocusSnapshot): FocusSnapshot {
-  return {
-    ...fallback,
-    label: fromMlFocusLabel(response.label),
-    score: Math.round(clamp(response.score, 0, 1) * 100)
-  };
-}
-
 function buildFocusFeedback(prediction: MlPredictionSnapshot): FocusFeedback {
   const actualLabel = prediction.response.label === 'away' ? 'away' : 'distracted';
 
@@ -1138,171 +757,22 @@ function getMlCardDescription(
   )}, ${promptText}.`;
 }
 
-function toMlFocusLabel(label: FocusLabel): MlFocusLabel {
-  if (label === 'away') {
-    return 'away';
-  }
-
-  if (label === 'sleepy' || label === 'paused') {
-    return 'break_or_paused';
-  }
-
-  if (label === 'distracted' || label === 'uncertain') {
-    return 'distracted';
-  }
-
-  return 'focused';
-}
-
-function fromMlFocusLabel(label: MlFocusLabel): FocusLabel {
-  if (label === 'break_or_paused') {
-    return 'sleepy';
-  }
-
-  return label;
-}
-
-function getMotionAmount(frames: FrameSignals[]) {
-  if (frames.length < 2) {
-    return 0;
-  }
-
-  const deltas = frames.slice(1).map((frame, index) => {
-    const previous = frames[index];
-    return Math.hypot(
-      frame.headYawRatio - previous.headYawRatio,
-      frame.headPitchRatio - previous.headPitchRatio
-    );
-  });
-
-  return round(mean(deltas) * 100, 3);
-}
-
-function mean(values: number[]) {
-  return values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function populationStd(values: number[]) {
-  if (values.length === 0) {
-    return 0;
-  }
-
-  const average = mean(values);
-  return Math.sqrt(mean(values.map((value) => (value - average) ** 2)));
-}
-
-function ratio(numerator: number, denominator: number) {
-  return denominator > 0 ? round(clamp(numerator / denominator, 0, 1), 3) : 0;
-}
-
-function cryptoRandomId() {
-  return globalThis.crypto?.randomUUID?.() ?? `window-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-function getFocusLabel(
-  score: number,
-  activeSignals: FocusSignalName[],
-  settings: RuleSettings
-): FocusLabel {
-  if (activeSignals.includes('face_missing')) {
-    return 'away';
-  }
-
-  if (activeSignals.includes('eyes_closed')) {
-    return 'sleepy';
-  }
-
-  if (
-    activeSignals.includes('head_turned') ||
-    activeSignals.includes('head_down') ||
-    score < settings.focusedThreshold
-  ) {
-    return score >= settings.focusedThreshold - 10 ? 'uncertain' : 'distracted';
-  }
-
-  return 'focused';
-}
-
-function getLatestDuration(
-  windowFrames: FrameSignals[],
-  predicate: (frame: FrameSignals) => boolean
-) {
-  const latest = windowFrames.at(-1);
-
-  if (!latest || !predicate(latest)) {
-    return 0;
-  }
-
-  let start = latest.timestamp;
-
-  for (let index = windowFrames.length - 1; index >= 0; index -= 1) {
-    const frame = windowFrames[index];
-    if (!predicate(frame)) {
-      break;
-    }
-    start = frame.timestamp;
-  }
-
-  return round((latest.timestamp - start) / 1000, 1);
-}
-
-function calculateEyeAspectRatio(face: LandmarkPoint[], indices: [number, number, number, number, number, number]) {
-  const [left, upperLeft, upperRight, right, lowerRight, lowerLeft] = indices.map(
-    (index) => face[index]
-  );
-
-  if (!left || !upperLeft || !upperRight || !right || !lowerRight || !lowerLeft) {
-    return 1;
-  }
-
-  const verticalA = distance(upperLeft, lowerLeft);
-  const verticalB = distance(upperRight, lowerRight);
-  const horizontal = distance(left, right);
-  return (verticalA + verticalB) / (2 * Math.max(0.001, horizontal));
-}
-
-function getBounds(points: LandmarkPoint[]) {
-  const xs = points.map((point) => point.x);
-  const ys = points.map((point) => point.y);
-  const left = Math.min(...xs);
-  const top = Math.min(...ys);
-  const right = Math.max(...xs);
-  const bottom = Math.max(...ys);
-
-  return {
-    left,
-    top,
-    width: right - left,
-    height: bottom - top
-  };
-}
-
-function averagePoints(face: LandmarkPoint[], indices: number[]) {
-  const points = indices.map((index) => face[index]).filter(Boolean);
-
-  if (points.length === 0) {
-    return { x: 0, y: 0 };
-  }
-
-  return {
-    x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
-    y: points.reduce((sum, point) => sum + point.y, 0) / points.length
-  };
-}
-
-function distance(a: LandmarkPoint, b: LandmarkPoint) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function round(value: number, precision: number) {
-  const multiplier = 10 ** precision;
-  return Math.round(value * multiplier) / multiplier;
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+/**
+ * The camera and the landmarker start independently, so the screen stays in
+ * "초기화 중" until both are up.
+ */
+function mergeTestStatus(camera: TestStatus, detection: FocusDetectionStatus): TestStatus {
+  if (camera === 'error' || detection === 'error') {
+    return 'error';
+  }
+
+  if (camera !== 'running') {
+    return camera;
+  }
+
+  return detection === 'running' ? 'running' : 'loading';
 }

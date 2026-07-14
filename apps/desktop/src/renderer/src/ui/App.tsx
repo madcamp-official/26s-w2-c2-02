@@ -4,6 +4,7 @@ import {
   normalizeInviteCode,
   type Goal,
   type Participant,
+  type ParticipantStatus,
   type Room,
   type RoomiMessage,
   type RoomSettings,
@@ -461,7 +462,7 @@ export function App() {
     go('study');
   };
 
-  const setCurrentSessionPresence = (status: 'online' | 'focused') => {
+  const setCurrentSessionPresence = (status: ParticipantStatus) => {
     if (!roomDraft) return;
 
     if (roomDraft.realtime === 'server') {
@@ -568,6 +569,7 @@ export function App() {
             room={activeRoom.room}
             currentSession={activeRoom.currentSession}
             videoJoin={activeRoom.videoJoin}
+            onUpdatePresence={setCurrentSessionPresence}
             go={go}
           />
         )}
