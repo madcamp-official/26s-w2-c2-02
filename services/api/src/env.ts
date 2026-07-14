@@ -9,6 +9,8 @@ loadEnv({ path: resolve(repoRoot, '.env') });
 loadEnv({ path: resolve(serviceRoot, '.env'), override: true });
 
 const localRendererOriginPattern = /^http:\/\/(localhost|127\.0\.0\.1):51\d{2}$/;
+const lanRendererOriginPattern =
+  /^http:\/\/((10\.\d{1,3}\.\d{1,3}\.\d{1,3})|(192\.168\.\d{1,3}\.\d{1,3})|(172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})):51\d{2}$/;
 const packagedRendererOrigins = new Set(['file://', 'null']);
 
 export function isAllowedClientOrigin(origin: string | undefined) {
@@ -19,6 +21,7 @@ export function isAllowedClientOrigin(origin: string | undefined) {
   return (
     packagedRendererOrigins.has(origin) ||
     localRendererOriginPattern.test(origin) ||
+    lanRendererOriginPattern.test(origin) ||
     env.clientOrigins.some((allowedOrigin) => originMatchesAllowedPattern(origin, allowedOrigin))
   );
 }

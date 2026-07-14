@@ -48,6 +48,7 @@
 - 중앙 API가 내부 ML 서버의 `DELETE /v1/focus/feedback/:userId`를 호출하도록 feedback 초기화 proxy를 추가했습니다.
 - ML 서버 예측 요청의 renderer 기본 abort 제한을 제거해 중앙 API 응답이 늦을 때 `signal is aborted without reason`으로 실패하지 않도록 했습니다.
 - 패키징된 Electron renderer의 `file://` 및 직렬화된 `null` origin을 중앙 API CORS에서 허용해 ML proxy 요청이 브라우저에서 차단되지 않도록 수정했습니다.
+- LAN 브라우저 renderer(`http://192.168.*:51xx`, `http://10.*:51xx`, `http://172.16-31.*:51xx`)를 중앙 API CORS에서 기본 허용해 ML feedback 요청이 `Failed to fetch`로 차단되지 않도록 했습니다.
 
 - 스터디룸에서 Daily 카메라를 다시 켤 때 종료된 기존 track을 재사용하지 않고 화상 call을 재생성해, 휴식 후 복귀와 동일하게 새 카메라 track을 획득합니다.
 - 방 생성·입장 성공 또는 방 퇴장 시 요청 잠금을 초기화해, 같은 앱에서 다시 방을 만들거나 입장해도 이전 진행 중 버튼 상태가 남지 않습니다.
