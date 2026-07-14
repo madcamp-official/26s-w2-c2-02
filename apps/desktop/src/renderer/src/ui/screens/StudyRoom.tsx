@@ -8,7 +8,7 @@ import {
   Video,
   VideoOff
 } from 'lucide-react';
-import { RoomiMascot } from '../components/RoomiMascot';
+import { RoomiMascot, type RoomiMood } from '../components/RoomiMascot';
 import { InviteCodeCard } from '../components/InviteCodeCard';
 import {
   type Goal,
@@ -67,6 +67,22 @@ function roomiMessageLabel(message: RoomiMessage | undefined) {
       return '세션 안내';
     default:
       return '루미의 제안';
+  }
+}
+
+/** LIVE 안내 패널에서 루미가 지을 표정. 최근 메시지 종류에 따라 감정을 바꾼다. */
+function moodForRoomiMessage(message: RoomiMessage | undefined): RoomiMood {
+  switch (message?.kind) {
+    case 'break_return':
+      return 'wink'; // 휴식 잘 다녀왔지? 반갑게 윙크
+    case 'focus_recovery':
+      return 'angry'; // 확인을 마친 뒤: "자, 다시 불붙여보자!"
+    case 'goal_refine':
+      return 'curious'; // 목표를 함께 들여다보는 중
+    case 'start':
+    case 'summary':
+    default:
+      return 'smile';
   }
 }
 
@@ -160,6 +176,10 @@ export function StudyRoom({
         message.targetParticipantId === currentParticipantId &&
         message.id !== dismissedFocusMessageId
     );
+  // 집중 흐트러짐을 확인하는 동안엔 걱정스러운 표정, 그 외엔 메시지 종류에 맞춘 표정.
+  const panelMood: RoomiMood = focusRecoveryMessage
+    ? 'sad'
+    : moodForRoomiMessage(latestRoomiMessage);
 
   useEffect(() => {
     const interval = window.setInterval(() => setTimestamp(Date.now()), 1_000);
@@ -319,7 +339,7 @@ export function StudyRoom({
           <InviteCodeCard inviteCode={room.inviteCode} />
           <section className="study-card study-lumi" aria-label="루미의 실시간 안내">
             <div className="study-lumi__head">
-              <RoomiMascot size={30} />
+              <RoomiMascot size={30} mood={panelMood} />
               <div>
                 <strong>루미</strong>
                 <span>AI 스터디 운영자</span>
@@ -344,7 +364,7 @@ export function StudyRoom({
             <section className="confirm" role="dialog" aria-label="집중 확인" aria-modal="false">
               <span className="confirm__label">루미 확인</span>
               <div className="confirm__head">
-                <RoomiMascot size={22} />
+                <RoomiMascot size={22} mood="surprise" />
                 루미의 집중 확인
               </div>
               <p className="confirm__text">{focusRecoveryMessage.text}</p>

@@ -7,6 +7,7 @@
 
 ### Added
 
+- 루미 마스코트가 상황에 맞춰 표정을 바꾸고 짧게 움직입니다. `mascot.png`에서 6가지 감정(미소·윙크·깜짝·슬픔·화남·궁금)을 잘라 투명 스프라이트로 만들고 감정별 idle 루프 애니메이션을 입혔습니다. 온보딩·대기실·휴식·회고에 어울리는 표정을 배치하고, 스터디룸에서는 루미 메시지 종류와 집중 확인 상태에 따라 표정이 실시간으로 바뀝니다. `RoomiMascot`에 `mood` prop을 추가했고 `prefers-reduced-motion`에서는 애니메이션이 멈춥니다.
 - 설치된 Windows 앱이 공개 GitHub Release에서 새 버전을 확인하고 자동 다운로드한 뒤, 재시작 또는 앱 종료 시 기존 설치 위에 업데이트하도록 추가했습니다. `vX.Y.Z` tag는 desktop package 버전과 일치해야 합니다.
 - Windows x64용 NSIS 설치 파일과 SHA-256을 로컬 및 GitHub Actions에서 생성하는 desktop 배포 workflow를 추가했습니다. 현재 산출물은 unsigned이므로 외부 배포 전 코드 서명이 필요합니다.
 - 중앙 Roomi API가 `/v1/models`, `/v1/chat/completions` 같은 OpenAI 호환 LLM 요청을 내부 LLM 서버로 대신 전달하는 proxy를 제공합니다. 다른 로컬 컴퓨터는 LLM 서버에 직접 붙지 않고 Roomi API base URL로 요청할 수 있습니다.
