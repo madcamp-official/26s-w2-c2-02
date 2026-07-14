@@ -8,7 +8,7 @@ import { roomiIconPath, setMacDockIcon } from './app-icon';
 import { configureAutoUpdates } from './auto-update';
 
 /** 스플래시가 너무 빨리 사라져 깜빡이지 않도록 보장하는 최소 노출 시간(ms). */
-const MIN_SPLASH_MS = 900;
+const MIN_SPLASH_MS = 3000;
 
 /**
  * 스플래시 창을 먼저 띄우고, 메인 창이 준비되면 최소 노출 시간을 지킨 뒤
