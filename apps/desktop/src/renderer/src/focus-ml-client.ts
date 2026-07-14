@@ -63,8 +63,10 @@ export async function predictFocusWindow(
   const baseUrl =
     options.baseUrl ?? import.meta.env.VITE_ROOMI_API_URL ?? 'http://localhost:4100';
   const fetcher = options.fetcher ?? fetch;
-  const controller = new AbortController();
-  const timeout = globalThis.setTimeout(() => controller.abort(), options.timeoutMs ?? 6500);
+  const controller = options.timeoutMs ? new AbortController() : undefined;
+  const timeout = controller
+    ? globalThis.setTimeout(() => controller.abort(), options.timeoutMs)
+    : undefined;
 
   try {
     const response = await fetcher(`${baseUrl.replace(/\/$/, '')}/focus/predict`, {
@@ -73,7 +75,7 @@ export async function predictFocusWindow(
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(featureWindow),
-      signal: controller.signal
+      signal: controller?.signal
     });
 
     if (!response.ok) {
@@ -91,7 +93,9 @@ export async function predictFocusWindow(
       reason
     );
   } finally {
-    clearTimeout(timeout);
+    if (timeout) {
+      clearTimeout(timeout);
+    }
   }
 }
 

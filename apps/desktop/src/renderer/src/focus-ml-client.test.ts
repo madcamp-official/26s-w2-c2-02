@@ -81,7 +81,8 @@ describe('focus ML client', () => {
       'http://localhost:8080/focus/predict',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify(featureWindow)
+        body: JSON.stringify(featureWindow),
+        signal: undefined
       })
     );
   });

@@ -42,6 +42,7 @@
 
 - 중앙 API의 기본 ML 서버 주소를 응답 가능한 LAN endpoint `http://192.168.0.83:8080`으로 변경했습니다. 기존 서버 환경에서 별도 주소를 써야 하면 `ROOMI_ML_API_URL`로 override 해야 합니다.
 - Desktop renderer가 내부 ML 서버에 직접 연결하지 않고 기존 `VITE_ROOMI_API_URL` 중앙 API를 통해 집중도 예측을 요청하도록 변경했습니다. 중앙 서버에는 `ROOMI_ML_API_URL=http://192.168.0.83:8080` 설정이 필요합니다.
+- ML 서버 예측 요청의 renderer 기본 abort 제한을 제거해 중앙 API 응답이 늦을 때 `signal is aborted without reason`으로 실패하지 않도록 했습니다.
 
 - 스터디룸에서 Daily 카메라를 다시 켤 때 종료된 기존 track을 재사용하지 않고 화상 call을 재생성해, 휴식 후 복귀와 동일하게 새 카메라 track을 획득합니다.
 - 방 생성·입장 성공 또는 방 퇴장 시 요청 잠금을 초기화해, 같은 앱에서 다시 방을 만들거나 입장해도 이전 진행 중 버튼 상태가 남지 않습니다.
