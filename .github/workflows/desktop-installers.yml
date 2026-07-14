@@ -1,0 +1,138 @@
+name: Desktop installers
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  package-windows:
+    runs-on: windows-latest
+    env:
+      VITE_ROOMI_API_URL: ${{ vars.ROOMI_API_URL || 'https://api.roomi.madcamp-kaist.org' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify API and desktop
+        run: |
+          pnpm --filter @roomi/api test -- --run
+          pnpm --filter @roomi/desktop test -- --run
+          pnpm --filter @roomi/api typecheck
+          pnpm --filter @roomi/desktop typecheck
+
+      - name: Verify release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node apps/desktop/scripts/validate-release-tag.mjs
+
+      - name: Build NSIS installer
+        run: pnpm dist:win
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: roomi-windows-${{ github.run_number }}
+          path: |
+            apps/desktop/release/Roomi-Setup-*.exe
+            apps/desktop/release/Roomi-Setup-*.sha256
+            apps/desktop/release/Roomi-Setup-*.exe.blockmap
+            apps/desktop/release/latest.yml
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            apps/desktop/release/Roomi-Setup-*.exe
+            apps/desktop/release/Roomi-Setup-*.sha256
+            apps/desktop/release/Roomi-Setup-*.exe.blockmap
+            apps/desktop/release/latest.yml
+
+  package-macos:
+    runs-on: macos-latest
+    env:
+      VITE_ROOMI_API_URL: ${{ vars.ROOMI_API_URL || 'https://api.roomi.madcamp-kaist.org' }}
+      # 서명용 Apple Developer 인증서가 준비되면 아래 secret들을 채워 넣는다.
+      # 비어있으면 electron-builder가 ad-hoc 서명으로 넘어가고, Gatekeeper 경고가 뜬다(배포용 아님).
+      CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify API and desktop
+        run: |
+          pnpm --filter @roomi/api test -- --run
+          pnpm --filter @roomi/desktop test -- --run
+          pnpm --filter @roomi/api typecheck
+          pnpm --filter @roomi/desktop typecheck
+
+      - name: Verify release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node apps/desktop/scripts/validate-release-tag.mjs
+
+      - name: Build dmg/zip
+        run: pnpm dist:mac
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: roomi-macos-${{ github.run_number }}
+          path: |
+            apps/desktop/release/Roomi-*.dmg
+            apps/desktop/release/Roomi-*.zip
+            apps/desktop/release/Roomi-*.sha256
+            apps/desktop/release/latest-mac.yml
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            apps/desktop/release/Roomi-*.dmg
+            apps/desktop/release/Roomi-*.zip
+            apps/desktop/release/Roomi-*.sha256
+            apps/desktop/release/latest-mac.yml

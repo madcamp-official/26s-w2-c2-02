@@ -19,13 +19,13 @@ function createUpdater() {
 }
 
 describe('Roomi auto updater', () => {
-  it('checks for updates only in an installed Windows app', () => {
+  it.each(['win32', 'darwin'] as const)('checks for updates in an installed %s app', (platform) => {
     const { updater } = createUpdater();
 
     expect(
       configureAutoUpdates({
         isPackaged: true,
-        platform: 'win32',
+        platform,
         updater,
         showMessageBox: vi.fn(),
         logger: { info: vi.fn(), error: vi.fn() }
@@ -39,7 +39,8 @@ describe('Roomi auto updater', () => {
 
   it.each([
     { isPackaged: false, platform: 'win32' as const },
-    { isPackaged: true, platform: 'darwin' as const }
+    { isPackaged: false, platform: 'darwin' as const },
+    { isPackaged: true, platform: 'linux' as const }
   ])('skips update checks for $platform packaged=$isPackaged', ({ isPackaged, platform }) => {
     const { updater } = createUpdater();
 

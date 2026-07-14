@@ -30,7 +30,9 @@ type ConfigureAutoUpdatesOptions = {
   logger?: Logger;
 };
 
-/** 설치된 Windows 앱에서 GitHub Releases를 확인하고 새 버전을 자동 다운로드한다. */
+const SUPPORTED_PLATFORMS: NodeJS.Platform[] = ['win32', 'darwin'];
+
+/** 설치된 Windows/macOS 앱에서 GitHub Releases를 확인하고 새 버전을 자동 다운로드한다. */
 export function configureAutoUpdates({
   isPackaged,
   platform,
@@ -38,7 +40,7 @@ export function configureAutoUpdates({
   showMessageBox,
   logger = console
 }: ConfigureAutoUpdatesOptions): boolean {
-  if (!isPackaged || platform !== 'win32') {
+  if (!isPackaged || !SUPPORTED_PLATFORMS.includes(platform)) {
     return false;
   }
 

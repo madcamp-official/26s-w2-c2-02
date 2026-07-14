@@ -13,6 +13,8 @@
     "build:release": "node scripts/validate-release-env.mjs && electron-vite build",
     "dist:win": "pnpm build:release && electron-builder --win nsis --x64 --publish never && node scripts/write-release-checksum.mjs",
     "dist:win:dir": "pnpm build:release && electron-builder --win dir --x64",
+    "dist:mac": "pnpm build:release && electron-builder --mac dmg zip --x64 --arm64 --publish never && node scripts/write-release-checksum.mjs",
+    "dist:mac:dir": "pnpm build:release && electron-builder --mac dir --arm64",
     "test": "vitest run",
     "test:e2e": "pnpm test:e2e:linux",
     "test:e2e:linux": "env -u ELECTRON_RUN_AS_NODE electron-vite build && xvfb-run -a env -u ELECTRON_RUN_AS_NODE playwright test -c playwright.e2e.config.ts",

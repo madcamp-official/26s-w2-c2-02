@@ -1,6 +1,6 @@
 # 개발 확인과 배포
 
-이 문서는 Roomi를 로컬에서 확인하는 방법과 Windows production 설치 파일을 만드는 방법을 함께 설명합니다.
+이 문서는 Roomi를 로컬에서 확인하는 방법과 Windows·macOS production 설치 파일을 만드는 방법을 함께 설명합니다.
 
 ## 1. 로컬 개발 및 확인
 
@@ -37,7 +37,7 @@ pnpm dev
 
 ## 2. Windows production 배포
 
-Roomi production 앱은 `electron-builder`로 Windows x64 NSIS 설치 파일을 만듭니다. 설치 파일에는 API 서버가 포함되지 않으며, 빌드 시 지정한 중앙 Roomi API에 연결합니다.
+Roomi production 앱은 `electron-builder`로 Windows x64 NSIS 설치 파일을 만듭니다. 설치 파일에는 API 서버가 포함되지 않으며, 빌드 시 지정한 중앙 Roomi API에 연결합니다. macOS 배포는 [3. macOS production 배포](#3-macos-production-배포)를 참고합니다.
 
 ### production API 설정
 
@@ -76,14 +76,14 @@ pnpm dist:win
 
 ### GitHub Actions에서 생성
 
-`.github/workflows/windows-installer.yml`의 `Windows installer` workflow는 다음 경우 실행됩니다.
+`.github/workflows/desktop-installers.yml`의 `Desktop installers` workflow는 다음 경우 실행됩니다.
 
 - GitHub Actions 화면에서 수동 실행
 - `v*` 형식의 tag push
 
-workflow가 성공하면 실행 결과의 Artifacts에서 Windows installer와 SHA-256 파일을 받을 수 있습니다. 저장소 변수 `ROOMI_API_URL`을 설정하면 기본 production API 주소를 대체합니다.
+`package-windows` job이 성공하면 실행 결과의 Artifacts에서 Windows installer와 SHA-256 파일을 받을 수 있습니다. 저장소 변수 `ROOMI_API_URL`을 설정하면 기본 production API 주소를 대체합니다.
 
-`v*` tag로 실행된 경우에는 installer, blockmap, `latest.yml`, SHA-256 파일을 같은 이름의 공개 GitHub Release에도 게시합니다. 설치된 앱은 이 Release를 새 버전 공급원으로 사용합니다.
+`v*` tag로 실행된 경우에는 installer, blockmap, `latest.yml`, SHA-256 파일을 같은 이름의 공개 GitHub Release에도 게시합니다. 설치된 앱은 이 Release를 새 버전 공급원으로 사용합니다. 같은 workflow의 `package-macos` job은 macOS 설치 파일을 같은 Release에 함께 게시합니다.
 
 ### 새 버전 출시와 자동 업데이트
 
@@ -98,16 +98,16 @@ workflow가 성공하면 실행 결과의 Artifacts에서 Windows installer와 S
    git push origin v0.1.1
    ```
 
-4. `Windows installer` workflow와 GitHub Release 생성이 성공했는지 확인합니다.
+4. `Desktop installers` workflow와 GitHub Release 생성이 성공했는지 확인합니다.
 
 tag와 package 버전이 다르면 workflow가 release 생성 전에 실패합니다. 기존 tag와 버전은 다시 사용하지 않습니다.
 
-이미 설치된 Roomi는 실행할 때 공개 GitHub Release의 `latest.yml`을 확인합니다. 더 높은 버전이 있으면 installer를 백그라운드에서 내려받고 다음 중 하나를 선택할 수 있습니다.
+이미 설치된 Roomi(Windows, macOS 모두)는 실행할 때 공개 GitHub Release의 `latest.yml`(Windows) 또는 `latest-mac.yml`(macOS)을 확인합니다. 더 높은 버전이 있으면 installer를 백그라운드에서 내려받고 다음 중 하나를 선택할 수 있습니다.
 
 - `지금 재시작`: 앱을 종료하고 새 버전을 기존 설치 위에 즉시 적용합니다.
 - `나중에`: 현재 작업을 계속하고 앱을 종료할 때 내려받은 버전을 적용합니다.
 
-따라서 사용자가 기존 버전을 제거하거나 매번 installer를 직접 받을 필요는 없습니다. 개발 실행과 macOS에서는 자동 업데이트를 확인하지 않습니다.
+따라서 사용자가 기존 버전을 제거하거나 매번 installer를 직접 받을 필요는 없습니다. 개발 실행(패키징되지 않은 상태)에서는 자동 업데이트를 확인하지 않습니다.
 
 ### 출시 전 확인
 
@@ -124,6 +124,38 @@ Get-AuthenticodeSignature apps/desktop/release/Roomi-Setup-0.1.0.exe
 
 현재 installer는 unsigned입니다. 코드 서명 전 파일은 Windows SmartScreen 또는 알 수 없는 게시자 경고가 표시될 수 있으므로 내부 확인용으로만 사용합니다. 외부 배포와 자동 업데이트 운영 전에는 코드 서명 인증서를 CI secret에 연결해야 합니다.
 
-## 3. macOS 참고
+## 3. macOS production 배포
 
-macOS 개발 실행에서는 Windows 앱과 같은 Roomi 아이콘이 Dock에 표시됩니다. macOS 설치 파일 배포는 아직 자동화하지 않았으며, 현재 production 배포 대상은 Windows x64입니다.
+Roomi production 앱은 `electron-builder`로 macOS `dmg`(배포용)와 `zip`(자동 업데이트용) 파일을 x64·arm64 각각 만듭니다. Windows와 마찬가지로 API 서버는 포함하지 않고, 빌드 시 지정한 중앙 Roomi API에 연결합니다. production API 설정과 배포 전 API 상태 확인은 Windows 섹션과 동일합니다.
+
+### 코드 서명과 공증
+
+macOS는 Gatekeeper 때문에 서명·공증 없는 앱을 실행하면 "확인되지 않은 개발자" 경고가 뜹니다. Apple Developer Program 계정(유료)이 있어야 아래 CI secret을 채워 서명된 installer를 만들 수 있습니다.
+
+- `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`: Developer ID Application 인증서(p12)와 비밀번호
+- `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`: 공증(notarization)용 Apple 계정 정보
+
+secret이 비어 있으면 electron-builder가 ad-hoc 서명으로 빌드합니다. 로컬 확인용으로는 동작하지만 외부 배포·자동 업데이트 운영에는 쓰지 않습니다.
+
+### 로컬에서 설치 파일 생성
+
+저장소 루트에서 실행합니다.
+
+```bash
+pnpm install --frozen-lockfile
+pnpm dist:mac
+```
+
+생성되는 주요 파일은 다음과 같습니다.
+
+- `apps/desktop/release/Roomi-<version>-<arch>.dmg`: 사용자에게 전달할 설치 파일
+- `apps/desktop/release/Roomi-<version>-<arch>.zip`: 자동 업데이트가 참조하는 배포본
+- `apps/desktop/release/Roomi-<version>-<arch>.dmg.sha256`, `.zip.sha256`: 무결성 확인값
+
+### GitHub Actions에서 생성
+
+같은 `.github/workflows/desktop-installers.yml`의 `package-macos` job이 `package-windows`와 동일한 트리거(수동 실행, `v*` tag push)로 실행되어 dmg·zip·`latest-mac.yml`을 만들고, `v*` tag push 시 같은 GitHub Release에 게시합니다.
+
+### 개발 실행 시 참고
+
+macOS 개발 실행에서는 Windows 앱과 같은 Roomi 아이콘이 Dock에 표시되고, 카메라·마이크는 시스템 권한 다이얼로그를 통해 개별 허용합니다.

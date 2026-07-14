@@ -34,8 +34,27 @@ nsis:
   uninstallDisplayName: Roomi
 
 mac:
-  icon: resources/roomi-icon.png
+  icon: resources/roomi-icon.icns
   category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
+  extendInfo:
+    NSCameraUsageDescription: Roomi가 스터디룸 화상 통화를 위해 카메라를 사용합니다.
+    NSMicrophoneUsageDescription: Roomi가 스터디룸 화상 통화를 위해 마이크를 사용합니다.
+
+dmg:
   artifactName: ${productName}-${version}-${arch}.${ext}
 
 publish:
