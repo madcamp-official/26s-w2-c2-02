@@ -149,5 +149,5 @@ export type SessionStartInput = {
 export type GoalRefinement = {
   refinedText: string;
   reason: string;
-  source: 'gemini' | 'template';
+  source: 'ollama' | 'template';
 };

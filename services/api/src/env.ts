@@ -51,5 +51,6 @@ export const env = {
   clientOrigins: parseClientOrigins(process.env.CLIENT_ORIGIN),
   dailyApiKey: process.env.DAILY_API_KEY,
   dailyDomain: process.env.DAILY_DOMAIN,
-  geminiApiKey: process.env.GEMINI_API_KEY
+  ollamaBaseUrl: process.env.OLLAMA_BASE_URL,
+  ollamaModel: process.env.OLLAMA_MODEL
 };

@@ -1,5 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, session, shell, systemPreferences } from 'electron';
-import { autoUpdater } from 'electron-updater';
+import electronUpdater from 'electron-updater';
+
+const { autoUpdater } = electronUpdater;
 import { createMainWindow } from './create-window';
 import { roomiIconPath, setMacDockIcon } from './app-icon';
 import { configureAutoUpdates } from './auto-update';

@@ -5,13 +5,15 @@ import { registerRealtimeGateway } from './realtime/gateway';
 import { InMemoryRoomStore } from './adapters/storage/in-memory-room-store';
 import { RoomService } from './rooms/room-service';
 import { DailyVideoProvider } from './video/daily-video-provider';
-import { GeminiClient } from './roomi/gemini-client';
+import { OllamaClient } from './roomi/ollama-client';
 import { RoomiOrchestrator } from './roomi/roomi-orchestrator';
 
 const store = new InMemoryRoomStore();
 const roomService = new RoomService(store, new DailyVideoProvider());
-// Set GEMINI_API_KEY to go live; without it the orchestrator falls back to templates.
-const roomiOrchestrator = new RoomiOrchestrator(new GeminiClient({ apiKey: env.geminiApiKey }));
+// Set OLLAMA_BASE_URL to go live; without it the orchestrator falls back to templates.
+const roomiOrchestrator = new RoomiOrchestrator(
+  new OllamaClient({ baseUrl: env.ollamaBaseUrl, model: env.ollamaModel })
+);
 const app = createApp(roomService, roomiOrchestrator);
 const httpServer = createServer(app);
 

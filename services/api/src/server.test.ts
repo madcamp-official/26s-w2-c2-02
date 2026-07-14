@@ -185,7 +185,7 @@ describe('POST /goals/refine', () => {
     const body = (await response.json()) as { refinedText: string; source: string };
 
     expect(response.status).toBe(200);
-    expect(body.source).toBe('gemini');
+    expect(body.source).toBe('ollama');
     expect(body.refinedText).toBe('25분 집중: 수학 예제 3문제');
   });
 });

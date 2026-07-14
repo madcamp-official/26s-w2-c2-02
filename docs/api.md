@@ -8,7 +8,7 @@
 | `POST` | `/rooms` | Create a room with a host participant and return the caller participant id. |
 | `POST` | `/rooms/join` | Join an existing room by invite code and return the caller participant id. |
 | `POST` | `/rooms/:roomId/goals` | Upsert the calling participant's goal (`participantId`, `rawText`) and return the room snapshot. Allowed regardless of room status (late joiners can set goals). |
-| `POST` | `/goals/refine` | Refine a raw goal (`rawGoal`, `sessionMinutes`) via Gemini and return `{ refinedText, reason, source }`. Always `200`; `source` is `template` when the LLM is unavailable. The raw goal is not persisted. |
+| `POST` | `/goals/refine` | Refine a raw goal (`rawGoal`, `sessionMinutes`) via Ollama and return `{ refinedText, reason, source }`. Always `200`; `source` is `template` when the LLM is unavailable. The raw goal is not persisted. |
 | `POST` | `/sessions` | Host starts the study session (`roomId`, `participantId`) regardless of participants' `isReady` state. Sets `room.status = 'studying'`, creates `currentSession`, and changes the host status to `focused`; other participants remain `online` in the waiting room. Returns the snapshot. `403` for non-host, `409` if not `waiting`, `404` for unknown room. Transition reaches everyone via `room:updated`. |
 | `GET` | `/rooms/:inviteCode` | Read a room snapshot by invite code. |
 
@@ -35,7 +35,7 @@ When Daily credentials are configured, `videoJoin` contains a Daily room URL and
 
 - The waiting room uses `room.status` as its route contract: `waiting` shows readiness and the host-only start action; `studying`/`break` lets a late participant submit a goal and join without interrupting the active session; the study-room `나가기` control returns there without removing the participant, while the waiting-room `방 나가기` control sends `room:leave` and returns to onboarding; `ended` opens the retrospective screen instead of a joinable waiting room.
 - The study-room timer is calculated on each client from `currentSession.startedAt` and `currentSession.plannedMinutes`, so it keeps the server session's remaining time when a participant joins late.
-- The waiting room calls `POST /goals/refine` only after the participant enters a goal. Choosing **이 목표로 저장** submits the suggested text through the normal goal-upsert API. Gemini is optional: a `template` response is displayed and can be accepted in the same way.
+- The waiting room calls `POST /goals/refine` only after the participant enters a goal. Choosing **이 목표로 저장** submits the suggested text through the normal goal-upsert API. Ollama is optional: a `template` response is displayed and can be accepted in the same way.
 
 Join failures return JSON error messages:
 
@@ -63,7 +63,7 @@ Client events are defined in `packages/shared/src/realtime-events.ts`.
 
 ## Live-session Roomi messages
 
-- A successful `POST /sessions` generates a `start` message through Gemini and broadcasts it to every subscribed participant. If Gemini is unavailable, Roomi sends a deterministic template instead.
+- A successful `POST /sessions` generates a `start` message through Ollama and broadcasts it to every subscribed participant. If Ollama is unavailable, Roomi sends a deterministic template instead.
 - During a `studying` session, a `distracted` or `away` status update can generate a private `focus_recovery` message for that participant. The server limits this to one message per participant per five minutes.
 - The renderer listens for `roomi:message` and displays the latest message in the StudyRoom Roomi panel. Focus-recovery text never travels through `room:updated` snapshots.
 
@@ -86,7 +86,8 @@ The API server loads the root `.env` first, then loads `services/api/.env` if it
 | `CLIENT_ORIGIN` | Comma-separated allowlist of renderer/browser origins allowed by REST CORS and Socket.IO CORS. Supports `*` inside an origin pattern, but a bare `*` is ignored. |
 | `DAILY_API_KEY` | Daily API key for room/token creation. |
 | `DAILY_DOMAIN` | Daily domain used by the video provider. |
-| `GEMINI_API_KEY` | Google Gemini API key for goal refinement, kept server-side only. When unset, `POST /goals/refine` returns a deterministic template instead of calling the LLM. |
+| `OLLAMA_BASE_URL` | Base URL of the Ollama server used for goal refinement (e.g. the Cloudflare Tunnel URL for the ML server), kept server-side only. When unset, `POST /goals/refine` returns a deterministic template instead of calling the LLM. |
+| `OLLAMA_MODEL` | Ollama model name to request (e.g. `gemma3`). Defaults to `gemma3` when unset. |
 
 During local development, the API also accepts renderer origins on `localhost` and `127.0.0.1` in the `5100-5199` port range. This lets Electron and a browser guest join the same local API during one-machine testing. If another PC serves the renderer from a LAN address, add an exact origin or a narrow wildcard such as `http://192.168.*:5175`.
 
@@ -118,7 +119,7 @@ API_HOST=0.0.0.0
 CLIENT_ORIGIN=http://localhost:5175,http://127.0.0.1:5175,http://192.168.*:5175
 DAILY_API_KEY=...
 DAILY_DOMAIN=...
-GEMINI_API_KEY=
+OLLAMA_BASE_URL=
 ```
 
 Start the API:
@@ -159,7 +160,7 @@ API_HOST=127.0.0.1
 CLIENT_ORIGIN=http://localhost:5175,http://127.0.0.1:5175,http://192.168.*:5175
 DAILY_API_KEY=...
 DAILY_DOMAIN=...
-GEMINI_API_KEY=
+OLLAMA_BASE_URL=
 ```
 
 Run Roomi API locally on the internal server:

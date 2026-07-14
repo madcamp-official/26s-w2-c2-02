@@ -47,7 +47,7 @@ Roomi production 앱은 `electron-builder`로 Windows x64 NSIS 설치 파일을 
 VITE_ROOMI_API_URL=https://api.roomi.madcamp-kaist.org
 ```
 
-release 빌드는 이 값이 비어 있거나 `localhost` 또는 HTTP 주소이면 실패합니다. Daily와 Gemini secret은 데스크톱 앱에 넣지 않고 API 서버 환경변수로만 관리합니다.
+release 빌드는 이 값이 비어 있거나 `localhost` 또는 HTTP 주소이면 실패합니다. Daily와 Ollama secret은 데스크톱 앱에 넣지 않고 API 서버 환경변수로만 관리합니다.
 
 배포 전에 API 상태를 확인합니다.
 
