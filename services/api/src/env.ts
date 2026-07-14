@@ -51,5 +51,9 @@ export const env = {
   clientOrigins: parseClientOrigins(process.env.CLIENT_ORIGIN),
   dailyApiKey: process.env.DAILY_API_KEY,
   dailyDomain: process.env.DAILY_DOMAIN,
-  geminiApiKey: process.env.GEMINI_API_KEY
+  geminiApiKeys: [
+    process.env.GEMINI_API_KEY,
+    process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI_API_KEY_3
+  ].filter((apiKey): apiKey is string => Boolean(apiKey))
 };

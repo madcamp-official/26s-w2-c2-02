@@ -5,7 +5,8 @@ const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 const DEFAULT_TIMEOUT_MS = 8000;
 
 export type GeminiClientOptions = {
-  apiKey: string | undefined;
+  apiKey?: string;
+  apiKeys?: string[];
   model?: string;
   timeoutMs?: number;
 };
@@ -15,19 +16,41 @@ type GeminiResponse = {
 };
 
 export class GeminiClient implements TextGenerator {
-  private readonly apiKey: string | undefined;
+  private readonly apiKeys: string[];
   private readonly model: string;
   private readonly timeoutMs: number;
 
   constructor(options: GeminiClientOptions) {
-    this.apiKey = options.apiKey;
+    this.apiKeys = (options.apiKeys ?? [options.apiKey]).filter(
+      (apiKey): apiKey is string => Boolean(apiKey)
+    );
     this.model = options.model ?? DEFAULT_MODEL;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
   async generateText(prompt: string): Promise<string> {
-    if (!this.apiKey) {
+    if (this.apiKeys.length === 0) {
       throw new Error('GEMINI_API_KEY is not configured');
+    }
+
+    let lastError: unknown;
+
+    for (let index = 0; index < this.apiKeys.length; index += 1) {
+      try {
+        return await this.generateTextWithKey(prompt, this.apiKeys[index], index + 1);
+      } catch (error) {
+        lastError = error;
+        this.logKeyFailure(index + 1, error, index < this.apiKeys.length - 1);
+      }
+    }
+
+    const message = lastError instanceof Error ? lastError.message : String(lastError);
+    throw new Error(`All configured Gemini API keys failed: ${message}`);
+  }
+
+  private async generateTextWithKey(prompt: string, apiKey: string, keyNumber: number): Promise<string> {
+    if (!apiKey) {
+      throw new Error(`GEMINI_API_KEY_${keyNumber} is not configured`);
     }
 
     const controller = new AbortController();
@@ -35,7 +58,7 @@ export class GeminiClient implements TextGenerator {
 
     try {
       const response = await fetch(
-        `${ENDPOINT}/${this.model}:generateContent?key=${this.apiKey}`,
+        `${ENDPOINT}/${this.model}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -45,7 +68,10 @@ export class GeminiClient implements TextGenerator {
       );
 
       if (!response.ok) {
-        throw new Error(`Gemini request failed: ${response.status}`);
+        const body = await this.safeReadErrorBody(response);
+        throw new Error(
+          `Gemini key #${keyNumber} request failed: ${response.status}${body ? ` - ${body}` : ''}`
+        );
       }
 
       const data = (await response.json()) as GeminiResponse;
@@ -58,6 +84,23 @@ export class GeminiClient implements TextGenerator {
       return text;
     } finally {
       clearTimeout(timeout);
+    }
+  }
+
+  private logKeyFailure(keyNumber: number, error: unknown, willRetry: boolean): void {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(
+      `[GeminiClient] Gemini key #${keyNumber} failed: ${message}${
+        willRetry ? ' Trying next configured key.' : ''
+      }`
+    );
+  }
+
+  private async safeReadErrorBody(response: Response): Promise<string> {
+    try {
+      return (await response.text()).slice(0, 500);
+    } catch {
+      return '';
     }
   }
 }

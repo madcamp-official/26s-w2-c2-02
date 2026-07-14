@@ -44,9 +44,10 @@ export class RoomiOrchestrator {
             source: 'gemini'
           };
         }
-      } catch {
+      } catch (error) {
         // Any failure (no key, network, rate limit, timeout) falls through to the
         // deterministic template so the waiting-room flow never blocks on the LLM.
+        this.logGeneratorFailure('goal_refine', error);
       }
     }
 
@@ -106,9 +107,15 @@ export class RoomiOrchestrator {
     try {
       const text = (await this.generator.generateText(this.buildLivePrompt(kind, context))).trim();
       return text || fallback;
-    } catch {
+    } catch (error) {
+      this.logGeneratorFailure(kind, error);
       return fallback;
     }
+  }
+
+  private logGeneratorFailure(kind: RoomiPromptKind, error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[RoomiOrchestrator] Gemini ${kind} generation failed: ${message}`);
   }
 
   private buildLivePrompt(

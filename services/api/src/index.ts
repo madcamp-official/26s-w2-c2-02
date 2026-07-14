@@ -10,8 +10,9 @@ import { RoomiOrchestrator } from './roomi/roomi-orchestrator';
 
 const store = new InMemoryRoomStore();
 const roomService = new RoomService(store, new DailyVideoProvider());
-// Set GEMINI_API_KEY to go live; without it the orchestrator falls back to templates.
-const roomiOrchestrator = new RoomiOrchestrator(new GeminiClient({ apiKey: env.geminiApiKey }));
+// Set GEMINI_API_KEY, then optionally GEMINI_API_KEY_2/_3, to go live.
+// Without configured keys the orchestrator falls back to templates.
+const roomiOrchestrator = new RoomiOrchestrator(new GeminiClient({ apiKeys: env.geminiApiKeys }));
 const app = createApp(roomService, roomiOrchestrator);
 const httpServer = createServer(app);
 

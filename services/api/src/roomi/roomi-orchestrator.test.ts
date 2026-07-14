@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RoomiOrchestrator, type TextGenerator } from './roomi-orchestrator';
 
 function generatorReturning(text: string): TextGenerator {
@@ -10,6 +10,10 @@ const failingGenerator: TextGenerator = {
     throw new Error('gemini unavailable');
   }
 };
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('RoomiOrchestrator.refineGoal', () => {
   it('uses the text generator when it succeeds', async () => {
@@ -23,6 +27,7 @@ describe('RoomiOrchestrator.refineGoal', () => {
   });
 
   it('falls back to a template when the generator throws', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const orchestrator = new RoomiOrchestrator(failingGenerator);
 
     const result = await orchestrator.refineGoal('미적분', 25);
@@ -30,6 +35,9 @@ describe('RoomiOrchestrator.refineGoal', () => {
     expect(result.source).toBe('template');
     expect(result.refinedText).toContain('미적분');
     expect(result.refinedText).toContain('25');
+    expect(consoleError).toHaveBeenCalledWith(
+      '[RoomiOrchestrator] Gemini goal_refine generation failed: gemini unavailable'
+    );
   });
 
   it('falls back to a template when no generator is configured', async () => {

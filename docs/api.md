@@ -86,7 +86,11 @@ The API server loads the root `.env` first, then loads `services/api/.env` if it
 | `CLIENT_ORIGIN` | Comma-separated allowlist of renderer/browser origins allowed by REST CORS and Socket.IO CORS. Supports `*` inside an origin pattern, but a bare `*` is ignored. |
 | `DAILY_API_KEY` | Daily API key for room/token creation. |
 | `DAILY_DOMAIN` | Daily domain used by the video provider. |
-| `GEMINI_API_KEY` | Google Gemini API key for goal refinement, kept server-side only. When unset, `POST /goals/refine` returns a deterministic template instead of calling the LLM. |
+| `GEMINI_API_KEY` | Primary Google Gemini API key for Roomi text generation, kept server-side only. |
+| `GEMINI_API_KEY_2` | Optional secondary Gemini API key. Used only when the primary key fails. |
+| `GEMINI_API_KEY_3` | Optional tertiary Gemini API key. Used only when the first two configured keys fail. |
+
+When no Gemini keys are configured, Roomi returns deterministic template text instead of calling the LLM. If a configured key fails, the API logs the failed key slot and tries the next configured key.
 
 During local development, the API also accepts renderer origins on `localhost` and `127.0.0.1` in the `5100-5199` port range. This lets Electron and a browser guest join the same local API during one-machine testing. If another PC serves the renderer from a LAN address, add an exact origin or a narrow wildcard such as `http://192.168.*:5175`.
 
@@ -119,6 +123,8 @@ CLIENT_ORIGIN=http://localhost:5175,http://127.0.0.1:5175,http://192.168.*:5175
 DAILY_API_KEY=...
 DAILY_DOMAIN=...
 GEMINI_API_KEY=
+GEMINI_API_KEY_2=
+GEMINI_API_KEY_3=
 ```
 
 Start the API:
@@ -160,6 +166,8 @@ CLIENT_ORIGIN=http://localhost:5175,http://127.0.0.1:5175,http://192.168.*:5175
 DAILY_API_KEY=...
 DAILY_DOMAIN=...
 GEMINI_API_KEY=
+GEMINI_API_KEY_2=
+GEMINI_API_KEY_3=
 ```
 
 Run Roomi API locally on the internal server:
