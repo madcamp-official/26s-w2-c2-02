@@ -145,6 +145,7 @@
 }
 
 .study__panel .invite-card {
+  width: 100%;
   grid-template-columns: minmax(0, 1fr);
 }
 
