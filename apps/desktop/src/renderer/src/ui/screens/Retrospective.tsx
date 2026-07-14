@@ -47,7 +47,7 @@ export function Retrospective({
         <div className="retro__doc">
           {/* Header */}
           <div className="retro__head">
-            <RoomiMascot size={84} />
+            <RoomiMascot size={84} mood="wink" />
             <div className="retro__head-text">
               <span className="retro__badge">세션 회고</span>
               <h1 className="retro__title">오늘 세션, 잘 마쳤어요!</h1>

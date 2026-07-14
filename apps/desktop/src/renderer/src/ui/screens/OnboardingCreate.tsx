@@ -49,7 +49,7 @@ export function OnboardingCreate({ nickname, go }: OnboardingCreateProps) {
         </button>
         <span className="pill pill--purple onb-card__step">STEP 2 / 4 · 방</span>
         <div className="onb-card__mascot">
-          <RoomiMascot size={64} />
+          <RoomiMascot size={96} />
         </div>
         <h1 className="onb-card__title">어떻게 시작할까요?</h1>
         <p className="onb-card__subtitle">

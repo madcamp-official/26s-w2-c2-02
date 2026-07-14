@@ -1,0 +1,155 @@
+/* ---------- Roomi mascot · 감정별 짧은 루프 애니메이션 ----------
+ * 각 표정은 mascot.png에서 잘라낸 투명 스프라이트이며, 감정에 맞는
+ * 짧은 idle 루프를 CSS transform으로 준다. prefers-reduced-motion 환경에서는
+ * styles.css의 전역 규칙이 애니메이션을 멈춘다. */
+
+.roomi-mascot {
+  display: inline-block;
+  flex: none;
+  line-height: 0;
+  /* 회전/튐이 이웃 레이아웃을 밀지 않도록 여유를 준다. */
+  overflow: visible;
+}
+
+.roomi-mascot__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  -webkit-user-drag: none;
+  user-select: none;
+  transform-origin: 50% 82%;
+  will-change: transform;
+  animation-duration: 2.8s;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+/* 미소 — 잔잔하게 위아래로 */
+.roomi-mascot--smile .roomi-mascot__img {
+  transform-origin: 50% 50%;
+  animation-name: roomi-bob;
+  animation-duration: 2.8s;
+}
+
+/* 윙크 — 장난스러운 두 번 튐 + 살짝 기울임 */
+.roomi-mascot--wink .roomi-mascot__img {
+  transform-origin: 50% 82%;
+  animation-name: roomi-wink;
+  animation-duration: 2.4s;
+}
+
+/* 깜짝 — 주기적으로 놀라 튀어오름 */
+.roomi-mascot--surprise .roomi-mascot__img {
+  transform-origin: 50% 70%;
+  animation-name: roomi-pop;
+  animation-duration: 2.6s;
+  animation-timing-function: cubic-bezier(0.18, 1.5, 0.4, 1);
+}
+
+/* 슬픔 — 힘없이 가라앉으며 천천히 흔들 */
+.roomi-mascot--sad .roomi-mascot__img {
+  transform-origin: 50% 90%;
+  animation-name: roomi-droop;
+  animation-duration: 3.6s;
+}
+
+/* 화남 — 불타는 의욕, 빠르게 부르르 */
+.roomi-mascot--angry .roomi-mascot__img {
+  transform-origin: 50% 82%;
+  animation-name: roomi-shake;
+  animation-duration: 0.5s;
+  animation-timing-function: ease-in-out;
+}
+
+/* 궁금 — 갸웃갸웃 고개 기울임 */
+.roomi-mascot--curious .roomi-mascot__img {
+  transform-origin: 50% 86%;
+  animation-name: roomi-tilt;
+  animation-duration: 3s;
+}
+
+@keyframes roomi-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6%);
+  }
+}
+
+@keyframes roomi-wink {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  20% {
+    transform: translateY(-8%) rotate(-4deg);
+  }
+  40% {
+    transform: translateY(0) rotate(0deg);
+  }
+  60% {
+    transform: translateY(-5%) rotate(4deg);
+  }
+  80% {
+    transform: translateY(0) rotate(0deg);
+  }
+}
+
+@keyframes roomi-pop {
+  0%,
+  62%,
+  100% {
+    transform: scale(1) translateY(0);
+  }
+  70% {
+    transform: scale(1.13) translateY(-7%);
+  }
+  80% {
+    transform: scale(0.95) translateY(0);
+  }
+  90% {
+    transform: scale(1.04);
+  }
+}
+
+@keyframes roomi-droop {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2.5deg);
+  }
+  50% {
+    transform: translateY(4%) rotate(2.5deg);
+  }
+}
+
+@keyframes roomi-shake {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+  20% {
+    transform: translateX(-3%) rotate(-3.5deg);
+  }
+  40% {
+    transform: translateX(3%) rotate(3.5deg);
+  }
+  60% {
+    transform: translateX(-2%) rotate(-2.5deg);
+  }
+  80% {
+    transform: translateX(2%) rotate(2.5deg);
+  }
+}
+
+@keyframes roomi-tilt {
+  0%,
+  100% {
+    transform: rotate(-6deg);
+  }
+  50% {
+    transform: rotate(6deg);
+  }
+}

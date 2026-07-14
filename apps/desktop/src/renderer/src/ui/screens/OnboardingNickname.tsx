@@ -31,7 +31,7 @@ export function OnboardingNickname({ nickname, onNicknameChange, go }: Onboardin
       >
         <span className="pill pill--purple onb-card__step">STEP 1 / 4 · 닉네임</span>
         <div className="onb-card__mascot">
-          <RoomiMascot size={64} />
+          <RoomiMascot size={96} mood="wink" />
         </div>
         <h1 className="onb-card__title">어떻게 부르면 될까요?</h1>
         <p className="onb-card__subtitle">방에서 보여줄 닉네임을 정해주세요.</p>
