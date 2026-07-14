@@ -7,7 +7,7 @@ function generatorReturning(text: string): TextGenerator {
 
 const failingGenerator: TextGenerator = {
   generateText: async () => {
-    throw new Error('gemini unavailable');
+    throw new Error('ollama unavailable');
   }
 };
 
@@ -21,7 +21,7 @@ describe('RoomiOrchestrator.refineGoal', () => {
 
     const result = await orchestrator.refineGoal('미적분', 25);
 
-    expect(result.source).toBe('gemini');
+    expect(result.source).toBe('ollama');
     expect(result.refinedText).toBe('25분 집중: 미적분 예제 3문제');
     expect(result.reason).toBeTruthy();
   });
@@ -36,7 +36,7 @@ describe('RoomiOrchestrator.refineGoal', () => {
     expect(result.refinedText).toContain('미적분');
     expect(result.refinedText).toContain('25');
     expect(consoleError).toHaveBeenCalledWith(
-      '[RoomiOrchestrator] Gemini goal_refine generation failed: gemini unavailable'
+      '[RoomiOrchestrator] LLM goal_refine generation failed: ollama unavailable'
     );
   });
 

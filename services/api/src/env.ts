@@ -30,13 +30,6 @@ function parseClientOrigins(value: string | undefined) {
     .filter(Boolean);
 }
 
-export function parseGeminiApiKeys(...values: Array<string | undefined>) {
-  return values
-    .flatMap((value) => value?.split(',') ?? [])
-    .map((apiKey) => apiKey.trim())
-    .filter(Boolean);
-}
-
 function originMatchesAllowedPattern(origin: string, allowedOrigin: string) {
   if (!allowedOrigin.includes('*')) {
     return origin === allowedOrigin;
@@ -60,11 +53,8 @@ export const env = {
   clientOrigins: parseClientOrigins(process.env.CLIENT_ORIGIN),
   dailyApiKey: process.env.DAILY_API_KEY,
   dailyDomain: process.env.DAILY_DOMAIN,
-  geminiApiKeys: parseGeminiApiKeys(
-    process.env.GEMINI_API_KEY,
-    process.env.GEMINI_API_KEY_2,
-    process.env.GEMINI_API_KEY_3
-  ),
   mlApiUrl: process.env.ROOMI_ML_API_URL ?? 'http://192.168.0.83:8080',
-  mlApiTimeoutMs: Number(process.env.ROOMI_ML_API_TIMEOUT_MS ?? 5000)
+  mlApiTimeoutMs: Number(process.env.ROOMI_ML_API_TIMEOUT_MS ?? 5000),
+  ollamaBaseUrl: process.env.OLLAMA_BASE_URL,
+  ollamaModel: process.env.OLLAMA_MODEL
 };
