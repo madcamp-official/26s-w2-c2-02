@@ -1,52 +1,51 @@
+import smileUrl from '../../assets/mascot/smile.png';
+import winkUrl from '../../assets/mascot/wink.png';
+import surpriseUrl from '../../assets/mascot/surprise.png';
+import sadUrl from '../../assets/mascot/sad.png';
+import angryUrl from '../../assets/mascot/angry.png';
+import curiousUrl from '../../assets/mascot/curious.png';
+
+/** 루미가 지을 수 있는 6가지 표정. mascot.png에서 잘라낸 스프라이트와 1:1로 대응한다. */
+export type RoomiMood = 'smile' | 'wink' | 'surprise' | 'sad' | 'angry' | 'curious';
+
+const MOOD_SRC: Record<RoomiMood, string> = {
+  smile: smileUrl,
+  wink: winkUrl,
+  surprise: surpriseUrl,
+  sad: sadUrl,
+  angry: angryUrl,
+  curious: curiousUrl
+};
+
+const MOOD_LABEL: Record<RoomiMood, string> = {
+  smile: '미소 짓는 루미',
+  wink: '윙크하는 루미',
+  surprise: '놀란 루미',
+  sad: '시무룩한 루미',
+  angry: '기운이 넘치는 루미',
+  curious: '궁금해하는 루미'
+};
+
 interface RoomiMascotProps {
   size?: number;
-  /** 'smile' (default) or 'wink' — matches the break-screen expression. */
-  mood?: 'smile' | 'wink';
+  /** 표정(감정). 각 표정마다 짧게 반복되는 idle 애니메이션이 붙는다. 기본값 'smile'. */
+  mood?: RoomiMood;
 }
 
 /**
- * Roomi(루미) mascot — a friendly purple robot.
- * Hand-built SVG approximation of the Figma mascot (the original asset could
- * not be exported because the Figma export quota was exhausted).
+ * Roomi(루미) 마스코트 — 친근한 보라색 로봇.
+ * mascot.png에서 감정별로 잘라낸 투명 스프라이트를 표시하고, mascot.css에서
+ * 감정에 맞는 짧은 루프 애니메이션을 입힌다. (prefers-reduced-motion 시 정지)
  */
 export function RoomiMascot({ size = 84, mood = 'smile' }: RoomiMascotProps) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 84 84"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
+    <span
+      className={`roomi-mascot roomi-mascot--${mood}`}
+      style={{ width: size, height: size }}
       role="img"
-      aria-label="루미"
+      aria-label={MOOD_LABEL[mood]}
     >
-      {/* antenna */}
-      <line x1="42" y1="10" x2="42" y2="20" stroke="#8a7df0" strokeWidth="3" strokeLinecap="round" />
-      <circle cx="42" cy="8" r="4" fill="#8a7df0" />
-      {/* side ears */}
-      <rect x="10" y="40" width="7" height="16" rx="3.5" fill="#b7abf6" />
-      <rect x="67" y="40" width="7" height="16" rx="3.5" fill="#b7abf6" />
-      {/* head */}
-      <rect x="16" y="20" width="52" height="50" rx="20" fill="#b7abf6" />
-      {/* face plate */}
-      <rect x="22" y="27" width="40" height="36" rx="16" fill="#ffffff" />
-      {/* eyes */}
-      {mood === 'wink' ? (
-        <>
-          <circle cx="34" cy="43" r="3.6" fill="#3a2f7a" />
-          <path d="M46 43q3.4 -4 6.8 0" stroke="#3a2f7a" strokeWidth="3" strokeLinecap="round" fill="none" />
-        </>
-      ) : (
-        <>
-          <circle cx="34" cy="43" r="3.6" fill="#3a2f7a" />
-          <circle cx="50" cy="43" r="3.6" fill="#3a2f7a" />
-        </>
-      )}
-      {/* cheeks */}
-      <circle cx="30" cy="50" r="2.6" fill="#f7b8cf" opacity="0.75" />
-      <circle cx="54" cy="50" r="2.6" fill="#f7b8cf" opacity="0.75" />
-      {/* smile */}
-      <path d="M37 50q5 5 10 0" stroke="#3a2f7a" strokeWidth="3" strokeLinecap="round" fill="none" />
-    </svg>
+      <img className="roomi-mascot__img" src={MOOD_SRC[mood]} alt="" draggable={false} />
+    </span>
   );
 }
