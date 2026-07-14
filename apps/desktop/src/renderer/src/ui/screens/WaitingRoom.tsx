@@ -138,23 +138,20 @@ export function WaitingRoom({
       <p className="waiting__eyebrow">대기실</p>
       <div className="waiting__body">
         <main className="waiting__main">
-          <InviteCodeCard inviteCode={room.inviteCode} />
-          {inProgress ? (
-            <>
-              <span className="badge badge--blue">진행 중</span>
-              <h1 className="waiting__title">이미 공부 중이에요</h1>
-              <p className="waiting__subtitle">
-                목표만 정하면 진행 중인 세션에 바로 합류할 수 있어요.
-              </p>
-            </>
-          ) : (
-            <>
-              <h1 className="waiting__title">다 같이 목표를 정해볼까요?</h1>
-              <p className="waiting__subtitle">
-                각자 목표를 적으면 루미가 세션 안에 끝낼 수 있는 크기로 다듬어줘요.
-              </p>
-            </>
-          )}
+          <div className="waiting__head">
+            <div className="waiting__head-title">
+              {inProgress && <span className="badge badge--blue">진행 중</span>}
+              <h1 className="waiting__title">
+                {inProgress ? '이미 공부 중이에요' : '다 같이 목표를 정해볼까요?'}
+              </h1>
+            </div>
+            <InviteCodeCard inviteCode={room.inviteCode} />
+          </div>
+          <p className="waiting__subtitle">
+            {inProgress
+              ? '목표만 정하면 진행 중인 세션에 바로 합류할 수 있어요.'
+              : '각자 목표를 적으면 루미가 세션 안에 끝낼 수 있는 크기로 다듬어줘요.'}
+          </p>
           {sessionActionError && (
             <p className="onb-hint onb-hint--error" role="alert">
               {sessionActionError}

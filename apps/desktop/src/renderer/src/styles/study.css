@@ -146,7 +146,11 @@
 
 .study__panel .invite-card {
   width: 100%;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.study__panel .invite-card__label {
+  grid-column: 1;
 }
 
 .study__panel .invite-card__code {
@@ -156,9 +160,9 @@
 }
 
 .study__panel .invite-card__copy {
-  grid-column: 1;
-  grid-row: auto;
-  width: 100%;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  width: auto;
 }
 
 .study-card {

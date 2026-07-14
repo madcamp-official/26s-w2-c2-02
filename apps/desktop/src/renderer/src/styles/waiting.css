@@ -16,12 +16,23 @@
   color: var(--purple-700);
 }
 
-.waiting__main .badge {
-  margin-top: 18px;
+.waiting__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  margin-top: 8px;
+}
+
+.waiting__head-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 .waiting__title {
-  margin-top: 10px;
   font-size: 28px;
   font-weight: 800;
   color: var(--heading);

@@ -20,7 +20,7 @@ export function InviteCodeCard({ inviteCode }: { inviteCode: string }) {
       <span className="invite-card__label">초대 코드</span>
       <strong className="invite-card__code">{formatInviteCode(inviteCode)}</strong>
       <button type="button" className="btn btn--soft invite-card__copy" onClick={() => void copyCode()}>
-        {copied ? <Check size={16} /> : <Copy size={16} />}
+        {copied ? <Check size={14} /> : <Copy size={14} />}
         {copied ? '복사됨' : '코드 복사'}
       </button>
     </section>
