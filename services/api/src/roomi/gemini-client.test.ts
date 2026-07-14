@@ -32,6 +32,34 @@ describe('GeminiClient', () => {
     expect(calledUrl).toContain('key=test-key');
   });
 
+  it('skips reasoning parts from thinking models', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    { text: '생각하는 중...', thought: true },
+                    { text: '실제 답변' }
+                  ]
+                }
+              }
+            ]
+          }),
+          { status: 200 }
+        )
+      )
+    );
+    const client = new GeminiClient({ apiKey: 'test-key' });
+
+    const text = await client.generateText('프롬프트');
+
+    expect(text).toBe('실제 답변');
+  });
+
   it('throws when the response is not ok', async () => {
     vi.stubGlobal(
       'fetch',

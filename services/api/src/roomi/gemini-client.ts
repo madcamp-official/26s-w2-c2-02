@@ -1,6 +1,6 @@
 import type { TextGenerator } from './roomi-orchestrator';
 
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+const DEFAULT_MODEL = 'gemma-3-27b-it';
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 const DEFAULT_TIMEOUT_MS = 8000;
 
@@ -11,7 +11,7 @@ export type GeminiClientOptions = {
 };
 
 type GeminiResponse = {
-  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>;
 };
 
 export class GeminiClient implements TextGenerator {
@@ -49,7 +49,13 @@ export class GeminiClient implements TextGenerator {
       }
 
       const data = (await response.json()) as GeminiResponse;
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      // Thinking models (e.g. Gemini 2.5+) emit a reasoning part with
+      // thought: true ahead of the actual answer part; skip it.
+      const text = data.candidates?.[0]?.content?.parts
+        ?.filter((part) => !part.thought)
+        .map((part) => part.text ?? '')
+        .join('')
+        .trim();
 
       if (!text) {
         throw new Error('Gemini returned no text');
