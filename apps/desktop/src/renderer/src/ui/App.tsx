@@ -29,10 +29,12 @@ import type { ScreenId } from './screens/types';
 import {
   createRoomSession,
   createRoomSocket,
+  endSession,
   joinRoomSession,
   leaveRoom,
   refineGoal,
   RoomApiError,
+  setGoalAchieved,
   startSession,
   submitGoal,
   subscribeToRoom,
@@ -497,6 +499,76 @@ export function App() {
     go('waiting');
   };
 
+  const endCurrentSession = () => {
+    if (!roomDraft) {
+      go('retrospective');
+      return;
+    }
+
+    if (roomDraft.realtime === 'server') {
+      // Navigate immediately; the summary (goal feedback, Lumi's comment) streams in
+      // once the request resolves so the host isn't stuck waiting on the network.
+      endSession({ roomId: roomDraft.room.id, participantId: roomDraft.currentParticipantId })
+        .then((snapshot) => {
+          setRoomDraft((current) =>
+            current
+              ? {
+                  ...current,
+                  room: snapshot.room,
+                  participants: snapshot.participants,
+                  goals: snapshot.goals,
+                  roomiMessages: snapshot.roomiMessages,
+                  currentSession: snapshot.currentSession
+                }
+              : current
+          );
+        })
+        .catch((error) => {
+          console.warn(error instanceof Error ? error.message : 'Session end failed');
+        });
+      go('retrospective');
+      return;
+    }
+
+    setRoomDraft((current) =>
+      current
+        ? {
+            ...current,
+            room: { ...current.room, status: 'ended' },
+            currentSession: current.currentSession
+              ? { ...current.currentSession, endedAt: now(), mode: 'ended' }
+              : current.currentSession
+          }
+        : current
+    );
+    go('retrospective');
+  };
+
+  const toggleCurrentGoalAchieved = (achieved: boolean) => {
+    if (!roomDraft) return;
+    const participantId = roomDraft.currentParticipantId;
+
+    if (roomDraft.realtime === 'server') {
+      setGoalAchieved({ roomId: roomDraft.room.id, participantId, achieved })
+        .then((snapshot) => {
+          setRoomDraft((current) => (current ? { ...current, goals: snapshot.goals } : current));
+        })
+        .catch(() => {});
+      return;
+    }
+
+    setRoomDraft((current) =>
+      current
+        ? {
+            ...current,
+            goals: current.goals.map((goal) =>
+              goal.participantId === participantId ? { ...goal, achieved } : goal
+            )
+          }
+        : current
+    );
+  };
+
   return (
     <div className="app-root">
       <WindowTitleBar />
@@ -561,8 +633,9 @@ export function App() {
           <StudyRoom
             currentParticipantId={activeRoom.currentParticipantId}
             isHost={isHost}
-            onEndSession={() => go('retrospective')}
+            onEndSession={endCurrentSession}
             onLeaveRoom={leaveCurrentSession}
+            onToggleGoalAchieved={toggleCurrentGoalAchieved}
             participants={activeRoom.participants}
             goals={activeRoom.goals}
             roomiMessages={activeRoom.roomiMessages}
@@ -574,7 +647,15 @@ export function App() {
           />
         )}
         {screen === 'break' && <BreakReturn go={go} />}
-        {screen === 'retrospective' && <Retrospective go={go} />}
+        {screen === 'retrospective' && (
+          <Retrospective
+            session={activeRoom.currentSession}
+            goals={activeRoom.goals}
+            participants={activeRoom.participants}
+            currentParticipantId={activeRoom.currentParticipantId}
+            go={go}
+          />
+        )}
       </main>
     </div>
   );

@@ -1,7 +1,7 @@
 import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { RoomiMessage, RoomSnapshot } from '@roomi/shared';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryRoomStore } from './adapters/storage/in-memory-room-store';
 import { RoomService } from './rooms/room-service';
 import { RoomiOrchestrator, type TextGenerator } from './roomi/roomi-orchestrator';
@@ -140,6 +140,152 @@ describe('POST /sessions', () => {
 
   it('returns 404 for an unknown room', async () => {
     const response = await startSession({ roomId: 'missing', participantId: 'x' });
+
+    expect(response.status).toBe(404);
+  });
+});
+
+describe('POST /sessions/end', () => {
+  let httpServer: HttpServer;
+  let roomService: RoomService;
+  let baseUrl: string;
+
+  async function startApp(orchestrator: RoomiOrchestrator) {
+    roomService = new RoomService(new InMemoryRoomStore());
+    httpServer = createServer(createApp(roomService, orchestrator));
+    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
+    const { port } = httpServer.address() as AddressInfo;
+    baseUrl = `http://localhost:${port}`;
+  }
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  });
+
+  function endSession(body: unknown) {
+    return fetch(`${baseUrl}/sessions/end`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  }
+
+  it('ends the session and returns a snapshot with an attached summary', async () => {
+    await startApp(new RoomiOrchestrator());
+    const created = roomService.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    roomService.startSession(created.room.id, host.id);
+    const messages: RoomiMessage[] = [];
+    roomService.onRoomiMessage((message) => messages.push(message));
+
+    const response = await endSession({ roomId: created.room.id, participantId: host.id });
+    const snapshot = (await response.json()) as RoomSnapshot;
+
+    expect(response.status).toBe(200);
+    expect(snapshot.room.status).toBe('ended');
+    expect(snapshot.currentSession?.summary).toBeTruthy();
+    expect(snapshot.currentSession?.summary?.lumiComment).toBeTruthy();
+    expect(messages.some((message) => message.kind === 'summary')).toBe(true);
+  });
+
+  it('returns 403 when a non-host tries to end the session', async () => {
+    await startApp(new RoomiOrchestrator());
+    const created = roomService.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    roomService.startSession(created.room.id, host.id);
+    const joined = roomService.joinRoom({
+      nickname: 'member',
+      inviteCode: created.room.inviteCode
+    });
+    const member = joined.participants.at(-1)!;
+
+    const response = await endSession({ roomId: created.room.id, participantId: member.id });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('includes a focus-time ranking sorted from most to least focused', async () => {
+    // Only fake Date: the HTTP round trip below needs real timers/event loop to resolve.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-07-13T00:00:00.000Z'));
+    try {
+      await startApp(new RoomiOrchestrator());
+      const created = roomService.createRoom({ nickname: 'host' });
+      const host = created.participants[0];
+      const joined = roomService.joinRoom({
+        nickname: 'member',
+        inviteCode: created.room.inviteCode
+      });
+      const member = joined.participants.at(-1)!;
+      roomService.startSession(created.room.id, host.id);
+
+      vi.setSystemTime(new Date('2026-07-13T00:05:00.000Z'));
+      roomService.updateParticipantStatus(created.room.id, member.id, 'focused');
+
+      vi.setSystemTime(new Date('2026-07-13T00:10:00.000Z'));
+      const response = await endSession({ roomId: created.room.id, participantId: host.id });
+      const snapshot = (await response.json()) as RoomSnapshot;
+
+      expect(snapshot.currentSession?.summary?.ranking).toEqual([
+        { participantId: host.id, focusMinutes: 10 },
+        { participantId: member.id, focusMinutes: 5 }
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('returns 404 for an unknown room', async () => {
+    await startApp(new RoomiOrchestrator());
+
+    const response = await endSession({ roomId: 'missing', participantId: 'x' });
+
+    expect(response.status).toBe(404);
+  });
+});
+
+describe('POST /rooms/:roomId/goals/achieved', () => {
+  let httpServer: HttpServer;
+  let roomService: RoomService;
+  let baseUrl: string;
+
+  beforeEach(async () => {
+    roomService = new RoomService(new InMemoryRoomStore());
+    httpServer = createServer(createApp(roomService, new RoomiOrchestrator()));
+    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
+    const { port } = httpServer.address() as AddressInfo;
+    baseUrl = `http://localhost:${port}`;
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  });
+
+  function setAchieved(roomId: string, body: unknown) {
+    return fetch(`${baseUrl}/rooms/${roomId}/goals/achieved`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  }
+
+  it('marks a goal achieved and returns the snapshot', async () => {
+    const created = roomService.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    roomService.submitGoal(created.room.id, host.id, '수학 3단원');
+
+    const response = await setAchieved(created.room.id, { participantId: host.id, achieved: true });
+    const snapshot = (await response.json()) as RoomSnapshot;
+
+    expect(response.status).toBe(200);
+    expect(snapshot.goals[0]?.achieved).toBe(true);
+  });
+
+  it('returns 404 when the participant has no goal', async () => {
+    const created = roomService.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+
+    const response = await setAchieved(created.room.id, { participantId: host.id, achieved: true });
 
     expect(response.status).toBe(404);
   });
