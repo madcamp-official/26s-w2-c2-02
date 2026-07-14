@@ -63,7 +63,7 @@ export function OnboardingPermission({
         </button>
         <span className="pill pill--purple onb-card__step">STEP 4 / 4 · 권한</span>
         <div className="onb-card__mascot">
-          <RoomiMascot size={64} mood="curious" />
+          <RoomiMascot size={96} mood="curious" />
         </div>
         <h1 className="onb-card__title">카메라와 마이크를 확인할게요</h1>
         <p className="onb-card__subtitle">집중 상태를 함께 나누려면 권한이 필요해요.</p>

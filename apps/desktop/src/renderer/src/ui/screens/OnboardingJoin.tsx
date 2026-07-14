@@ -59,7 +59,7 @@ export function OnboardingJoin({
         </button>
         <span className="pill pill--purple onb-card__step">STEP 3 / 4 · 입장</span>
         <div className="onb-card__mascot">
-          <RoomiMascot size={64} mood="curious" />
+          <RoomiMascot size={96} mood="curious" />
         </div>
         <h1 className="onb-card__title">방 코드를 입력해주세요</h1>
         <p className="onb-card__subtitle">친구에게 받은 6자리 코드를 넣으면 바로 입장해요.</p>
