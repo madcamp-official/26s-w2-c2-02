@@ -11,6 +11,7 @@
 | `POST` | `/goals/refine` | Refine a raw goal (`rawGoal`, `sessionMinutes`) via Gemini and return `{ refinedText, reason, source }`. Always `200`; `source` is `template` when the LLM is unavailable. The raw goal is not persisted. |
 | `POST` | `/focus/predict` | Forward a renderer feature window to the internal ML server's `/v1/focus/predict` endpoint. Returns the ML response unchanged, `502` when the upstream is unavailable, and `504` when it times out. |
 | `POST` | `/focus/feedback` | Forward a renderer user correction to the internal ML server's `/v1/focus/feedback` endpoint. Returns the ML response unchanged, `502` when the upstream is unavailable, and `504` when it times out. |
+| `DELETE` | `/focus/feedback/:userId` | Forward a feedback reset request to the internal ML server's `/v1/focus/feedback/:userId` endpoint. Deletes that user's feedback and resets personalization on the ML server. |
 | `POST` | `/sessions` | Host starts the study session (`roomId`, `participantId`) regardless of participants' `isReady` state. Sets `room.status = 'studying'`, creates `currentSession`, and changes the host status to `focused`; other participants remain `online` in the waiting room. Returns the snapshot. `403` for non-host, `409` if not `waiting`, `404` for unknown room. Transition reaches everyone via `room:updated`. |
 | `GET` | `/rooms/:inviteCode` | Read a room snapshot by invite code. |
 

@@ -5,6 +5,7 @@ import {
   MlFocusClientError,
   parsePredictResponse,
   predictFocusWindow,
+  resetFocusFeedback,
   sendFocusFeedback
 } from './focus-ml-client';
 
@@ -115,6 +116,53 @@ describe('focus ML client', () => {
         body: JSON.stringify(feedback)
       })
     );
+  });
+
+  it('wraps feedback network failures with central API context', async () => {
+    const feedback: FocusFeedback = {
+      windowId: 'window-1',
+      userId: 'user-1',
+      sessionId: 'session-1',
+      predictedLabel: 'distracted',
+      actualLabel: 'distracted',
+      wasActuallyFocused: false,
+      promptKind: 'correction',
+      source: 'mediapipe-test',
+      createdAt: '2026-07-14T00:00:20.000Z'
+    };
+
+    await expect(
+      sendFocusFeedback(feedback, {
+        baseUrl: 'https://api.roomi.madcamp-kaist.org',
+        fetcher: vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+      })
+    ).rejects.toThrow(/ML feedback proxy.*Failed to fetch/);
+  });
+
+  it('resets user feedback through the central API', async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        userId: 'user/1',
+        deletedFeedbackCount: 3,
+        calibrationReset: true
+      })
+    });
+
+    await expect(
+      resetFocusFeedback('user/1', {
+        baseUrl: 'http://localhost:4100',
+        fetcher
+      })
+    ).resolves.toEqual({
+      userId: 'user/1',
+      deletedFeedbackCount: 3,
+      calibrationReset: true
+    });
+
+    expect(fetcher).toHaveBeenCalledWith('http://localhost:4100/focus/feedback/user%2F1', {
+      method: 'DELETE'
+    });
   });
 
   it('turns invalid response shapes into client errors', () => {

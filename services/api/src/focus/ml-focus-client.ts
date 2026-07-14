@@ -1,6 +1,7 @@
 export interface MlFocusPredictor {
   predict(featureWindow: unknown): Promise<unknown>;
   submitFeedback(feedback: unknown): Promise<unknown>;
+  resetFeedback(userId: string): Promise<unknown>;
 }
 
 export class MlFocusUpstreamError extends Error {
@@ -30,7 +31,24 @@ export class MlFocusClient implements MlFocusPredictor {
     return this.postToMlServer('/v1/focus/feedback', feedback);
   }
 
+  async resetFeedback(userId: string): Promise<unknown> {
+    return this.requestMlServer(
+      `/v1/focus/feedback/${encodeURIComponent(userId)}`,
+      { method: 'DELETE' }
+    );
+  }
+
   private async postToMlServer(path: string, body: unknown): Promise<unknown> {
+    return this.requestMlServer(path, {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+  }
+
+  private async requestMlServer(
+    path: string,
+    init: { method: 'POST' | 'DELETE'; body?: string }
+  ): Promise<unknown> {
     const controller = new AbortController();
     const timeout = globalThis.setTimeout(() => controller.abort(), this.options.timeoutMs ?? 5000);
 
@@ -38,9 +56,9 @@ export class MlFocusClient implements MlFocusPredictor {
       const response = await (this.options.fetcher ?? fetch)(
         `${this.options.baseUrl.replace(/\/$/, '')}${path}`,
         {
-          method: 'POST',
+          method: init.method,
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
+          body: init.body,
           signal: controller.signal
         }
       );

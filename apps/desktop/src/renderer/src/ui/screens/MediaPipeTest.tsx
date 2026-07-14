@@ -7,6 +7,7 @@ import {
   type MlFocusLabel,
   type PredictResponse,
   predictFocusWindow,
+  resetFocusFeedback,
   sendFocusFeedback
 } from '../../focus-ml-client';
 import faceLandmarkerModel from '../../assets/mediapipe/face_landmarker.task?url';
@@ -23,6 +24,7 @@ type TestStatus = 'idle' | 'loading' | 'running' | 'stopped' | 'error';
 type FocusDecisionMode = 'rule' | 'ml';
 type MlPredictionStatus = 'idle' | 'collecting' | 'predicting' | 'ready' | 'fallback';
 type MlFeedbackStatus = 'idle' | 'sending' | 'sent' | 'dismissed' | 'error';
+type MlFeedbackResetStatus = 'idle' | 'resetting' | 'reset' | 'error';
 type FocusLabel = 'focused' | 'distracted' | 'away' | 'sleepy' | 'uncertain' | 'paused';
 type FocusSignalName = 'face_missing' | 'eyes_closed' | 'head_turned' | 'head_down';
 
@@ -95,6 +97,8 @@ const defaultRuleSettings: RuleSettings = {
   headTurnedPenalty: 30,
   headDownPenalty: 35
 };
+const mediapipeTestUserId = 'mediapipe-test-user';
+const mediapipeTestSessionId = 'mediapipe-test-session';
 
 const emptyDetectionSnapshot: DetectionSnapshot = {
   faces: 0,
@@ -245,6 +249,9 @@ export function MediaPipeTest({ go }: ScreenProps) {
   const [mlError, setMlError] = useState<string | null>(null);
   const [mlFeedbackStatus, setMlFeedbackStatus] = useState<MlFeedbackStatus>('idle');
   const [mlFeedbackError, setMlFeedbackError] = useState<string | null>(null);
+  const [mlFeedbackResetStatus, setMlFeedbackResetStatus] =
+    useState<MlFeedbackResetStatus>('idle');
+  const [mlFeedbackResetMessage, setMlFeedbackResetMessage] = useState<string | null>(null);
 
   useEffect(() => {
     settingsRef.current = ruleSettings;
@@ -288,6 +295,8 @@ export function MediaPipeTest({ go }: ScreenProps) {
       setMlError(null);
       setMlFeedbackStatus('idle');
       setMlFeedbackError(null);
+      setMlFeedbackResetStatus('idle');
+      setMlFeedbackResetMessage(null);
       setStatus((current) => (current === 'error' ? current : 'stopped'));
     }
   };
@@ -413,6 +422,8 @@ export function MediaPipeTest({ go }: ScreenProps) {
       setMlPredictionStatus('ready');
       setMlFeedbackStatus('idle');
       setMlFeedbackError(null);
+      setMlFeedbackResetStatus('idle');
+      setMlFeedbackResetMessage(null);
     } catch (reason) {
       if (mlPredictionRequestRef.current !== requestId) {
         return;
@@ -436,6 +447,24 @@ export function MediaPipeTest({ go }: ScreenProps) {
       setMlFeedbackStatus('error');
       setMlFeedbackError(
         reason instanceof Error ? reason.message : 'ML 서버에 피드백을 보내지 못했어요.'
+      );
+    }
+  };
+
+  const resetMlFeedback = async () => {
+    setMlFeedbackResetStatus('resetting');
+    setMlFeedbackResetMessage(null);
+    setMlFeedbackError(null);
+
+    try {
+      const result = await resetFocusFeedback(mediapipeTestUserId);
+      setMlFeedbackStatus('idle');
+      setMlFeedbackResetStatus('reset');
+      setMlFeedbackResetMessage(formatFeedbackResetMessage(result));
+    } catch (reason) {
+      setMlFeedbackResetStatus('error');
+      setMlFeedbackResetMessage(
+        reason instanceof Error ? reason.message : 'ML 피드백을 초기화하지 못했어요.'
       );
     }
   };
@@ -600,6 +629,14 @@ export function MediaPipeTest({ go }: ScreenProps) {
               <Settings size={16} />
               기준 조정
             </button>
+            <button
+              type="button"
+              className="btn btn--ghost"
+              disabled={decisionMode !== 'ml' || mlFeedbackResetStatus === 'resetting'}
+              onClick={resetMlFeedback}
+            >
+              {mlFeedbackResetStatus === 'resetting' ? '초기화 중...' : '피드백 초기화'}
+            </button>
           </div>
 
           <div className="decision-mode" aria-label="집중도 판정 모드">
@@ -625,6 +662,17 @@ export function MediaPipeTest({ go }: ScreenProps) {
           {mlError && decisionMode === 'ml' ? <p className="mediapipe-test__error">{mlError}</p> : null}
           {mlFeedbackError && decisionMode === 'ml' ? (
             <p className="mediapipe-test__error">{mlFeedbackError}</p>
+          ) : null}
+          {mlFeedbackResetMessage && decisionMode === 'ml' ? (
+            <p
+              className={
+                mlFeedbackResetStatus === 'error'
+                  ? 'mediapipe-test__error'
+                  : 'ml-feedback__sent'
+              }
+            >
+              {mlFeedbackResetMessage}
+            </p>
           ) : null}
 
           {shouldShowMlFeedback ? (
@@ -998,8 +1046,8 @@ function buildFeatureWindow(
 
   return {
     windowId: cryptoRandomId(),
-    userId: 'mediapipe-test-user',
-    sessionId: 'mediapipe-test-session',
+    userId: mediapipeTestUserId,
+    sessionId: mediapipeTestSessionId,
     windowStart: windowStartDate.toISOString(),
     windowEnd: windowEndDate.toISOString(),
     durationSec,
@@ -1044,6 +1092,28 @@ function buildFocusFeedback(prediction: MlPredictionSnapshot): FocusFeedback {
     source: 'mediapipe-test',
     createdAt: new Date().toISOString()
   };
+}
+
+function formatFeedbackResetMessage(result: unknown): string {
+  if (!isRecord(result)) {
+    return 'ML 피드백을 초기화했어요.';
+  }
+
+  const deletedFeedbackCount =
+    typeof result.deletedFeedbackCount === 'number' ? result.deletedFeedbackCount : null;
+  const calibrationReset =
+    typeof result.calibrationReset === 'boolean' ? result.calibrationReset : null;
+
+  if (deletedFeedbackCount === null && calibrationReset === null) {
+    return 'ML 피드백을 초기화했어요.';
+  }
+
+  const countText =
+    deletedFeedbackCount === null ? '피드백 기록' : `피드백 ${deletedFeedbackCount}건`;
+  const calibrationText =
+    calibrationReset === false ? '개인화 값은 유지됐어요.' : '개인화 값도 초기화됐어요.';
+
+  return `${countText}을 삭제했고, ${calibrationText}`;
 }
 
 function getMlCardDescription(
@@ -1231,4 +1301,8 @@ function clamp(value: number, min: number, max: number) {
 function round(value: number, precision: number) {
   const multiplier = 10 ** precision;
   return Math.round(value * multiplier) / multiplier;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }

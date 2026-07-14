@@ -121,16 +121,68 @@ export async function sendFocusFeedback(
   const baseUrl =
     options.baseUrl ?? import.meta.env.VITE_ROOMI_API_URL ?? 'http://localhost:4100';
   const fetcher = options.fetcher ?? fetch;
-  const response = await fetcher(`${baseUrl.replace(/\/$/, '')}/focus/feedback`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(feedback)
-  });
+  try {
+    const response = await fetcher(`${baseUrl.replace(/\/$/, '')}/focus/feedback`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(feedback)
+    });
 
-  if (!response.ok) {
-    throw new MlFocusClientError(`ML focus feedback failed with ${response.status} from ${baseUrl}`);
+    if (!response.ok) {
+      throw new MlFocusClientError(`ML focus feedback failed with ${response.status} from ${baseUrl}`);
+    }
+  } catch (reason) {
+    if (reason instanceof MlFocusClientError) {
+      throw reason;
+    }
+    const detail = reason instanceof Error ? reason.message : 'ML focus feedback failed';
+    throw new MlFocusClientError(
+      `중앙 API를 통해 ML 피드백을 보낼 수 없습니다. VITE_ROOMI_API_URL=${baseUrl} 중앙 API와 ML feedback proxy 상태를 확인해주세요. (${detail})`,
+      reason
+    );
+  }
+}
+
+export async function resetFocusFeedback(
+  userId: string,
+  options: {
+    baseUrl?: string;
+    fetcher?: typeof fetch;
+  } = {}
+): Promise<unknown> {
+  const baseUrl =
+    options.baseUrl ?? import.meta.env.VITE_ROOMI_API_URL ?? 'http://localhost:4100';
+  const fetcher = options.fetcher ?? fetch;
+  try {
+    const response = await fetcher(
+      `${baseUrl.replace(/\/$/, '')}/focus/feedback/${encodeURIComponent(userId)}`,
+      {
+        method: 'DELETE'
+      }
+    );
+
+    if (!response.ok) {
+      throw new MlFocusClientError(
+        `ML focus feedback reset failed with ${response.status} from ${baseUrl}`
+      );
+    }
+
+    if (response.status === 204) {
+      return { ok: true };
+    }
+
+    return response.json();
+  } catch (reason) {
+    if (reason instanceof MlFocusClientError) {
+      throw reason;
+    }
+    const detail = reason instanceof Error ? reason.message : 'ML focus feedback reset failed';
+    throw new MlFocusClientError(
+      `중앙 API를 통해 ML 피드백을 초기화할 수 없습니다. VITE_ROOMI_API_URL=${baseUrl} 중앙 API와 ML feedback proxy 상태를 확인해주세요. (${detail})`,
+      reason
+    );
   }
 }
 

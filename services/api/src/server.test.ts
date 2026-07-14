@@ -224,6 +224,12 @@ describe('POST /focus/predict', () => {
     });
   }
 
+  function resetFeedback(userId: string) {
+    return fetch(`${baseUrl}/focus/feedback/${encodeURIComponent(userId)}`, {
+      method: 'DELETE'
+    });
+  }
+
   it('forwards a feature window through the configured ML predictor', async () => {
     const featureWindow = { windowId: 'window-1', durationSec: 20 };
     const prediction = { modelVersion: 'ml-v1', label: 'focused', score: 0.9 };
@@ -233,7 +239,8 @@ describe('POST /focus/predict', () => {
         received.push(input);
         return prediction;
       },
-      submitFeedback: async () => ({ ok: true })
+      submitFeedback: async () => ({ ok: true }),
+      resetFeedback: async () => ({ ok: true })
     };
 
     await startApp(mlPredictor);
@@ -252,7 +259,8 @@ describe('POST /focus/predict', () => {
       predict: async () => {
         throw new MlFocusUpstreamError(`upstream ${kind}`, kind);
       },
-      submitFeedback: async () => ({ ok: true })
+      submitFeedback: async () => ({ ok: true }),
+      resetFeedback: async () => ({ ok: true })
     });
 
     const response = await predict({ windowId: 'window-1' });
@@ -274,7 +282,8 @@ describe('POST /focus/predict', () => {
       submitFeedback: async (input: unknown) => {
         received.push(input);
         return { ok: true };
-      }
+      },
+      resetFeedback: async () => ({ ok: true })
     };
 
     await startApp(mlPredictor);
@@ -283,5 +292,32 @@ describe('POST /focus/predict', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true });
     expect(received).toEqual([userFeedback]);
+  });
+
+  it('forwards feedback resets through the configured ML predictor', async () => {
+    const received: string[] = [];
+    const mlPredictor = {
+      predict: async () => ({ label: 'focused' }),
+      submitFeedback: async () => ({ ok: true }),
+      resetFeedback: async (userId: string) => {
+        received.push(userId);
+        return {
+          userId,
+          deletedFeedbackCount: 3,
+          calibrationReset: true
+        };
+      }
+    };
+
+    await startApp(mlPredictor);
+    const response = await resetFeedback('user/1');
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      userId: 'user/1',
+      deletedFeedbackCount: 3,
+      calibrationReset: true
+    });
+    expect(received).toEqual(['user/1']);
   });
 });

@@ -57,6 +57,31 @@ describe('MlFocusClient', () => {
     await expect(client.submitFeedback({ windowId: 'window-1' })).resolves.toEqual({ ok: true });
   });
 
+  it('deletes feedback and calibration for one user through the internal ML endpoint', async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        userId: 'user/1',
+        deletedFeedbackCount: 3,
+        calibrationReset: true
+      })
+    });
+    const client = new MlFocusClient({
+      baseUrl: 'http://192.168.0.83:8080/',
+      fetcher
+    });
+
+    await expect(client.resetFeedback('user/1')).resolves.toEqual({
+      userId: 'user/1',
+      deletedFeedbackCount: 3,
+      calibrationReset: true
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://192.168.0.83:8080/v1/focus/feedback/user%2F1',
+      expect.objectContaining({ method: 'DELETE' })
+    );
+  });
+
   it('classifies an aborted upstream request as a timeout', async () => {
     const fetcher = vi.fn((_url: string, init?: RequestInit) => {
       return new Promise((_resolve, reject) => {
