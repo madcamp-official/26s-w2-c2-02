@@ -3,8 +3,39 @@ import electronUpdater from 'electron-updater';
 
 const { autoUpdater } = electronUpdater;
 import { createMainWindow } from './create-window';
+import { createSplashWindow } from './splash-window';
 import { roomiIconPath, setMacDockIcon } from './app-icon';
 import { configureAutoUpdates } from './auto-update';
+
+/** 스플래시가 너무 빨리 사라져 깜빡이지 않도록 보장하는 최소 노출 시간(ms). */
+const MIN_SPLASH_MS = 3000;
+
+/**
+ * 스플래시 창을 먼저 띄우고, 메인 창이 준비되면 최소 노출 시간을 지킨 뒤
+ * 스플래시를 닫고 메인 창을 보여준다. (디스코드 로딩 창과 같은 흐름)
+ */
+function launchWithSplash(iconPath: string) {
+  const splash = createSplashWindow();
+  const shownAt = Date.now();
+  const mainWindow = createMainWindow({ iconPath });
+
+  const revealMain = () => {
+    const wait = Math.max(0, MIN_SPLASH_MS - (Date.now() - shownAt));
+    setTimeout(() => {
+      if (!splash.isDestroyed()) {
+        splash.close();
+      }
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    }, wait);
+  };
+
+  mainWindow.once('ready-to-show', revealMain);
+
+  return mainWindow;
+}
 
 type MediaAccessResult = { camera: boolean; microphone: boolean };
 
@@ -86,7 +117,7 @@ app.whenReady().then(() => {
   });
   setMacDockIcon(process.platform, app.dock, iconPath);
   enableMediaPermissions();
-  createMainWindow({ iconPath });
+  launchWithSplash(iconPath);
   configureAutoUpdates({
     isPackaged: app.isPackaged,
     platform: process.platform,
@@ -96,7 +127,7 @@ app.whenReady().then(() => {
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow({ iconPath });
+      launchWithSplash(iconPath);
     }
   });
 });

@@ -393,6 +393,16 @@ p {
   color: #ffffff;
 }
 
+/* 키보드 포커스 시 브라우저 기본(주황) 아웃라인 대신 앱 보라색 링을 쓴다. */
+.btn:focus {
+  outline: none;
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(138, 125, 240, 0.5);
+}
+
 /* ---------- Onboarding card shell ---------- */
 .onb-card {
   position: relative;
