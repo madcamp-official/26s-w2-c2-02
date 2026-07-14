@@ -1,26 +1,29 @@
 import type { TextGenerator } from './roomi-orchestrator';
 
-const DEFAULT_MODEL = 'gemma3';
+const DEFAULT_MODEL = 'gemma3:4b';
 const DEFAULT_TIMEOUT_MS = 8000;
 
 export type OllamaClientOptions = {
   baseUrl: string | undefined;
   model?: string;
+  temperature?: number;
   timeoutMs?: number;
 };
 
-type OllamaResponse = {
-  response?: string;
+type ChatCompletionsResponse = {
+  choices?: Array<{ message?: { content?: string } }>;
 };
 
 export class OllamaClient implements TextGenerator {
   private readonly baseUrl: string | undefined;
   private readonly model: string;
+  private readonly temperature: number;
   private readonly timeoutMs: number;
 
   constructor(options: OllamaClientOptions) {
     this.baseUrl = options.baseUrl;
     this.model = options.model ?? DEFAULT_MODEL;
+    this.temperature = options.temperature ?? 0.7;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
@@ -33,10 +36,14 @@ export class OllamaClient implements TextGenerator {
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
-      const response = await fetch(`${this.baseUrl}/api/generate`, {
+      const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: this.model, prompt, stream: false }),
+        body: JSON.stringify({
+          model: this.model,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: this.temperature
+        }),
         signal: controller.signal
       });
 
@@ -44,13 +51,14 @@ export class OllamaClient implements TextGenerator {
         throw new Error(`Ollama request failed: ${response.status}`);
       }
 
-      const data = (await response.json()) as OllamaResponse;
+      const data = (await response.json()) as ChatCompletionsResponse;
+      const text = data.choices?.[0]?.message?.content;
 
-      if (!data.response) {
+      if (!text) {
         throw new Error('Ollama returned no text');
       }
 
-      return data.response;
+      return text;
     } finally {
       clearTimeout(timeout);
     }

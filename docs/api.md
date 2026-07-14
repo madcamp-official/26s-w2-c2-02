@@ -89,8 +89,8 @@ The API server loads the root `.env` first, then loads `services/api/.env` if it
 | `CLIENT_ORIGIN` | Comma-separated allowlist of renderer/browser origins allowed by REST CORS and Socket.IO CORS. Supports `*` inside an origin pattern, but a bare `*` is ignored. |
 | `DAILY_API_KEY` | Daily API key for room/token creation. |
 | `DAILY_DOMAIN` | Daily domain used by the video provider. |
-| `OLLAMA_BASE_URL` | Base URL of the Ollama server used for goal refinement (e.g. the Cloudflare Tunnel URL for the ML server), kept server-side only. When unset, `POST /goals/refine` returns a deterministic template instead of calling the LLM. |
-| `OLLAMA_MODEL` | Ollama model name to request (e.g. `gemma3`). Defaults to `gemma3` when unset. |
+| `OLLAMA_BASE_URL` | Base URL that exposes the Ollama OpenAI-compatible `/v1/chat/completions` endpoint (currently the central Roomi API's own Cloudflare Tunnel domain, `https://api.roomi.madcamp-kaist.org`), kept server-side only. When unset, `POST /goals/refine` returns a deterministic template instead of calling the LLM. |
+| `OLLAMA_MODEL` | Ollama model name to request (e.g. `gemma3:4b`). Defaults to `gemma3:4b` when unset. |
 | `ROOMI_ML_API_URL` | Internal ML server base URL. Defaults to `http://192.168.0.83:8080`; keep this server-side. |
 | `ROOMI_ML_API_TIMEOUT_MS` | Timeout in milliseconds for central API requests to the internal ML server. Defaults to `5000`. |
 
