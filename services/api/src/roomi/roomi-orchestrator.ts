@@ -8,7 +8,7 @@ export type RoomiPromptKind =
   | 'summary';
 
 /**
- * Single seam between the app and any LLM text provider. GeminiClient implements
+ * Single seam between the app and any LLM text provider. OllamaClient implements
  * this; tests inject a fake. Everything that needs generated text goes through
  * RoomiOrchestrator, which owns per-kind prompts and template fallbacks.
  */
@@ -41,7 +41,7 @@ export class RoomiOrchestrator {
           return {
             refinedText,
             reason: '루미가 목표를 구체적인 실행 계획으로 다듬었어요.',
-            source: 'gemini'
+            source: 'ollama'
           };
         }
       } catch (error) {
