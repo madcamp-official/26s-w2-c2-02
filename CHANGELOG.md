@@ -43,6 +43,11 @@
 - MediaPipe 테스트 화면에서 ML이 비집중 확인 대상으로 예측하면 “혹시 집중 안하고 있어?” 확인 메시지를 띄우고, 사용자가 인정한 경우 중앙 API를 통해 ML 서버에 feedback을 보냅니다.
 - MediaPipe 테스트 화면에서 현재 테스트 사용자(`mediapipe-test-user`)의 ML feedback과 개인화 값을 초기화할 수 있게 했습니다.
 
+### Fixed
+
+- MP 페이지에서 "집중 안하고 있어?"에 확인을 눌러도 피드백이 전송되지 않고 "중앙 API를 통해 ML 서버에 연결할 수 없습니다 (Failed to fetch)"가 뜨던 문제를 고쳤습니다. renderer가 ML 서버 필수 필드인 `correctedLabel` 대신 `actualLabel`을 보내 ML 서버가 `422`로 거절하고 있었습니다. 실제로는 중앙 API·ML 서버 연결과 CORS 모두 정상이었고, 메시지만 원인을 잘못 가리키고 있었습니다.
+- 중앙 API가 ML 서버의 `4xx` 응답을 `502`로 뭉뚱그리지 않고 원래 status와 upstream 사유를 그대로 전달하도록 했습니다. Cloudflare가 origin의 `5xx` 응답을 자체 에러 페이지로 대체하면서 CORS 헤더를 제거하는 탓에, renderer에는 진짜 원인 대신 `Failed to fetch`만 보이고 있었습니다. 이제 잘못된 payload는 renderer에서 `422`와 함께 사유가 보입니다.
+
 ### Changed
 
 - 중앙 API의 기본 ML 서버 주소를 응답 가능한 LAN endpoint `http://192.168.0.83:8080`으로 변경했습니다. 기존 서버 환경에서 별도 주소를 써야 하면 `ROOMI_ML_API_URL`로 override 해야 합니다.
@@ -126,6 +131,7 @@
 ### Notes
 ### Manual Steps
 
+- MP 페이지의 "피드백 초기화" 기능을 쓰려면 ML 서버(`192.168.0.83:8080`)를 재시작해야 합니다. renderer와 중앙 API의 `DELETE /v1/focus/feedback/:userId` 호출은 이미 준비되어 있으나, 현재 실행 중인 ML 서버 프로세스의 `/openapi.json`에는 해당 route가 없어 구현이 아직 반영되지 않은 상태입니다.
 - 자동 업데이트를 실제 출시하기 전에 이전 버전 설치 PC에서 새 GitHub Release 감지·다운로드·재시작 설치를 확인하고, 외부 배포용 코드 서명을 적용해야 합니다.
 - 생성된 Windows installer는 깨끗한 PC에서 설치·카메라/마이크 권한·두 사용자 Daily 연결·재설치·제거를 수동 확인해야 합니다.
 - Windows installer를 외부 배포하기 전 코드 서명 인증서를 CI에 연결해야 합니다. 현재 unsigned 산출물은 SmartScreen 경고가 표시될 수 있습니다.

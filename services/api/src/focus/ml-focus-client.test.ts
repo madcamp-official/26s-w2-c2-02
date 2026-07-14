@@ -25,9 +25,9 @@ describe('MlFocusClient', () => {
   it('posts user feedback to the internal ML feedback endpoint', async () => {
     const feedback = {
       windowId: 'window-1',
-      predictedLabel: 'distracted',
-      actualLabel: 'distracted',
-      wasActuallyFocused: false
+      userId: 'user-1',
+      correctedLabel: 'distracted',
+      predictedLabel: 'distracted'
     };
     const fetcher = vi.fn().mockResolvedValue({
       ok: true,
@@ -80,6 +80,40 @@ describe('MlFocusClient', () => {
       'http://192.168.0.83:8080/v1/focus/feedback/user%2F1',
       expect.objectContaining({ method: 'DELETE' })
     );
+  });
+
+  it('classifies an upstream validation failure as rejected and keeps its status', async () => {
+    const detail = { detail: [{ loc: ['body', 'correctedLabel'], msg: 'Field required' }] };
+    const client = new MlFocusClient({
+      baseUrl: 'http://192.168.0.83:8080',
+      fetcher: vi.fn().mockResolvedValue({
+        ok: false,
+        status: 422,
+        json: async () => detail
+      })
+    });
+
+    await expect(client.submitFeedback({ windowId: 'window-1' })).rejects.toMatchObject({
+      kind: 'rejected',
+      status: 422,
+      detail
+    } satisfies Partial<MlFocusUpstreamError>);
+  });
+
+  it('classifies an upstream server error as unavailable', async () => {
+    const client = new MlFocusClient({
+      baseUrl: 'http://192.168.0.83:8080',
+      fetcher: vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: async () => ({})
+      })
+    });
+
+    await expect(client.predict({ windowId: 'window-1' })).rejects.toMatchObject({
+      kind: 'unavailable',
+      status: 500
+    } satisfies Partial<MlFocusUpstreamError>);
   });
 
   it('classifies an aborted upstream request as a timeout', async () => {

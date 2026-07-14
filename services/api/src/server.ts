@@ -1,5 +1,5 @@
 import cors from 'cors';
-import express from 'express';
+import express, { type Response } from 'express';
 import type {
   CreateRoomInput,
   GoalRefineInput,
@@ -128,11 +128,7 @@ export function createApp(
     try {
       response.json(await mlFocusPredictor.predict(request.body));
     } catch (error) {
-      if (error instanceof MlFocusUpstreamError) {
-        response.status(error.kind === 'timeout' ? 504 : 502).json({ message: error.message });
-        return;
-      }
-      response.status(502).json({ message: 'ML focus prediction failed' });
+      respondToMlFocusError(error, response, 'ML focus prediction failed');
     }
   });
 
@@ -145,11 +141,7 @@ export function createApp(
     try {
       response.json(await mlFocusPredictor.submitFeedback(request.body));
     } catch (error) {
-      if (error instanceof MlFocusUpstreamError) {
-        response.status(error.kind === 'timeout' ? 504 : 502).json({ message: error.message });
-        return;
-      }
-      response.status(502).json({ message: 'ML focus feedback failed' });
+      respondToMlFocusError(error, response, 'ML focus feedback failed');
     }
   });
 
@@ -162,11 +154,7 @@ export function createApp(
     try {
       response.json(await mlFocusPredictor.resetFeedback(request.params.userId));
     } catch (error) {
-      if (error instanceof MlFocusUpstreamError) {
-        response.status(error.kind === 'timeout' ? 504 : 502).json({ message: error.message });
-        return;
-      }
-      response.status(502).json({ message: 'ML focus feedback reset failed' });
+      respondToMlFocusError(error, response, 'ML focus feedback reset failed');
     }
   });
 
@@ -182,6 +170,23 @@ export function createApp(
   });
 
   return app;
+}
+
+function respondToMlFocusError(error: unknown, response: Response, fallbackMessage: string) {
+  if (!(error instanceof MlFocusUpstreamError)) {
+    response.status(502).json({ message: fallbackMessage });
+    return;
+  }
+
+  // Cloudflare replaces an origin 5xx body with its own error page, which strips the
+  // CORS headers and leaves the renderer with an opaque "Failed to fetch". Upstream
+  // 4xx means the payload was wrong, so pass the real status through instead.
+  if (error.kind === 'rejected' && error.status) {
+    response.status(error.status).json({ message: error.message, detail: error.detail });
+    return;
+  }
+
+  response.status(error.kind === 'timeout' ? 504 : 502).json({ message: error.message });
 }
 
 function hasRequestBody(method: string) {

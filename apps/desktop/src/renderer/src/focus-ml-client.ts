@@ -40,15 +40,14 @@ export type PredictResponse = {
   reasons: string[];
 };
 
+// Mirrors the ML server's FeedbackRequest schema. Fields the ML server does not
+// declare are silently dropped, so keep this aligned with /v1/focus/feedback.
 export type FocusFeedback = {
   windowId: string;
   userId: string;
-  sessionId: string;
-  predictedLabel: MlFocusLabel;
-  actualLabel: MlFocusLabel;
-  wasActuallyFocused: boolean;
-  promptKind: PromptKind | null;
-  source: 'mediapipe-test';
+  correctedLabel: MlFocusLabel;
+  predictedLabel?: MlFocusLabel | null;
+  comment?: string;
   createdAt: string;
 };
 

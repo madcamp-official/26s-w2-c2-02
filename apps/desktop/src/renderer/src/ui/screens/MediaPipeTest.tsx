@@ -1079,17 +1079,14 @@ function focusSnapshotFromMl(response: PredictResponse, fallback: FocusSnapshot)
 }
 
 function buildFocusFeedback(prediction: MlPredictionSnapshot): FocusFeedback {
-  const actualLabel = prediction.response.label === 'away' ? 'away' : 'distracted';
+  // Confirming the prompt means the user really was not focused.
+  const correctedLabel = prediction.response.label === 'away' ? 'away' : 'distracted';
 
   return {
     windowId: prediction.windowId,
     userId: prediction.featureWindow.userId,
-    sessionId: prediction.featureWindow.sessionId,
+    correctedLabel,
     predictedLabel: prediction.response.label,
-    actualLabel,
-    wasActuallyFocused: false,
-    promptKind: prediction.response.promptKind,
-    source: 'mediapipe-test',
     createdAt: new Date().toISOString()
   };
 }

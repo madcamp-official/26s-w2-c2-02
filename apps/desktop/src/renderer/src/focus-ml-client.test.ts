@@ -94,12 +94,8 @@ describe('focus ML client', () => {
     const feedback: FocusFeedback = {
       windowId: 'window-1',
       userId: 'user-1',
-      sessionId: 'session-1',
+      correctedLabel: 'distracted',
       predictedLabel: 'distracted',
-      actualLabel: 'distracted',
-      wasActuallyFocused: false,
-      promptKind: 'correction',
-      source: 'mediapipe-test',
       createdAt: '2026-07-14T00:00:20.000Z'
     };
     const fetcher = vi.fn().mockResolvedValue({ ok: true });
@@ -122,12 +118,8 @@ describe('focus ML client', () => {
     const feedback: FocusFeedback = {
       windowId: 'window-1',
       userId: 'user-1',
-      sessionId: 'session-1',
+      correctedLabel: 'distracted',
       predictedLabel: 'distracted',
-      actualLabel: 'distracted',
-      wasActuallyFocused: false,
-      promptKind: 'correction',
-      source: 'mediapipe-test',
       createdAt: '2026-07-14T00:00:20.000Z'
     };
 

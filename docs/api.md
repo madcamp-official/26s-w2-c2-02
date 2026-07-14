@@ -11,8 +11,8 @@
 | `POST` | `/goals/refine` | Refine a raw goal (`rawGoal`, `sessionMinutes`) via Ollama and return `{ refinedText, reason, source }`. Always `200`; `source` is `template` when the LLM is unavailable. The raw goal is not persisted. |
 | `GET` | `/v1/models` | Forward an OpenAI-compatible model list request to the configured internal LLM server. |
 | `POST` | `/v1/chat/completions` | Forward an OpenAI-compatible chat completion request to the configured internal LLM server. |
-| `POST` | `/focus/predict` | Forward a renderer feature window to the internal ML server's `/v1/focus/predict` endpoint. Returns the ML response unchanged, `502` when the upstream is unavailable, and `504` when it times out. |
-| `POST` | `/focus/feedback` | Forward a renderer user correction to the internal ML server's `/v1/focus/feedback` endpoint. Returns the ML response unchanged, `502` when the upstream is unavailable, and `504` when it times out. |
+| `POST` | `/focus/predict` | Forward a renderer feature window to the internal ML server's `/v1/focus/predict` endpoint. Returns the ML response unchanged, the upstream status when the ML server rejects the payload (`4xx`), `502` when the upstream is unavailable, and `504` when it times out. |
+| `POST` | `/focus/feedback` | Forward a renderer user correction to the internal ML server's `/v1/focus/feedback` endpoint. Returns the ML response unchanged, the upstream status when the ML server rejects the payload (`4xx`), `502` when the upstream is unavailable, and `504` when it times out. |
 | `DELETE` | `/focus/feedback/:userId` | Forward a feedback reset request to the internal ML server's `/v1/focus/feedback/:userId` endpoint. Deletes that user's feedback and resets personalization on the ML server. |
 | `POST` | `/sessions` | Host starts the study session (`roomId`, `participantId`) regardless of participants' `isReady` state. Sets `room.status = 'studying'`, creates `currentSession`, and changes the host status to `focused`; other participants remain `online` in the waiting room. Returns the snapshot. `403` for non-host, `409` if not `waiting`, `404` for unknown room. Transition reaches everyone via `room:updated`. |
 | `GET` | `/rooms/:inviteCode` | Read a room snapshot by invite code. |
@@ -35,6 +35,12 @@ Invite codes are 6-character uppercase alphanumeric strings. Roomi excludes ambi
 
 The renderer uses `currentParticipantId` to mark the local participant, drive camera/mic controls, and decide whether host-only actions should be visible.
 When Daily credentials are configured, `videoJoin` contains a Daily room URL and participant meeting token. The API creates one private Daily room per Roomi room and issues a token per participant with the Roomi participant id as Daily `user_id`. If Daily room or token creation fails, the REST request returns `503` and rolls back the participant instead of returning a local-only video session.
+
+### ML focus proxy contract
+
+`POST /focus/feedback` forwards the body to the ML server unchanged, so the renderer payload must match the ML server's `FeedbackRequest` schema. `windowId`, `userId`, and `correctedLabel` are required; `predictedLabel`, `comment`, and `createdAt` are optional. The ML server silently drops fields it does not declare, so a renamed or missing field surfaces only as a `422`. Check the ML server's `/openapi.json` before changing this payload.
+
+The proxy passes an upstream `4xx` through with its own status instead of collapsing it into `502`. This matters in production: Cloudflare replaces an origin `5xx` body with its own error page, which drops the CORS headers and leaves the renderer with an opaque `Failed to fetch` instead of the real reason.
 
 ## Renderer session behavior
 

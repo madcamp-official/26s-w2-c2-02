@@ -270,12 +270,28 @@ describe('POST /focus/predict', () => {
     expect(await response.json()).toEqual({ message: `upstream ${kind}` });
   });
 
+  it('passes an upstream rejection through with its own status instead of a 502', async () => {
+    const detail = { detail: [{ loc: ['body', 'correctedLabel'], msg: 'Field required' }] };
+    await startApp({
+      predict: async () => ({ label: 'focused' }),
+      submitFeedback: async () => {
+        throw new MlFocusUpstreamError('upstream rejected', 'rejected', 422, detail);
+      },
+      resetFeedback: async () => ({ ok: true })
+    });
+
+    const response = await feedback({ windowId: 'window-1' });
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ message: 'upstream rejected', detail });
+  });
+
   it('forwards user feedback through the configured ML predictor', async () => {
     const userFeedback = {
       windowId: 'window-1',
-      predictedLabel: 'distracted',
-      actualLabel: 'distracted',
-      wasActuallyFocused: false
+      userId: 'user-1',
+      correctedLabel: 'distracted',
+      predictedLabel: 'distracted'
     };
     const received: unknown[] = [];
     const mlPredictor = {

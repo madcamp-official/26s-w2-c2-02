@@ -7,7 +7,9 @@ export interface MlFocusPredictor {
 export class MlFocusUpstreamError extends Error {
   constructor(
     message: string,
-    readonly kind: 'unavailable' | 'timeout'
+    readonly kind: 'unavailable' | 'timeout' | 'rejected',
+    readonly status?: number,
+    readonly detail?: unknown
   ) {
     super(message);
     this.name = 'MlFocusUpstreamError';
@@ -64,9 +66,21 @@ export class MlFocusClient implements MlFocusPredictor {
       );
 
       if (!response.ok) {
+        // A 4xx means the ML server understood the request and refused it, so the
+        // caller sent a bad payload. Keep it distinct from a gateway failure.
+        if (response.status < 500) {
+          throw new MlFocusUpstreamError(
+            `ML focus server rejected the request with ${response.status}`,
+            'rejected',
+            response.status,
+            await readUpstreamDetail(response)
+          );
+        }
+
         throw new MlFocusUpstreamError(
           `ML focus server returned ${response.status}`,
-          'unavailable'
+          'unavailable',
+          response.status
         );
       }
 
@@ -86,5 +100,13 @@ export class MlFocusClient implements MlFocusPredictor {
     } finally {
       clearTimeout(timeout);
     }
+  }
+}
+
+async function readUpstreamDetail(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return undefined;
   }
 }
