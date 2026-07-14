@@ -115,6 +115,49 @@ export function createApp(
     }
   });
 
+  app.post('/sessions/break/start', (request, response) => {
+    try {
+      const { roomId, participantId } = request.body as SessionStartInput;
+      roomService.startBreak(roomId, participantId);
+      response.json(roomService.snapshotForParticipant(roomId, participantId));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Break start failed';
+      response.status(statusForRoomError(message, 404)).json({ message });
+    }
+  });
+
+  app.post('/sessions/break/end', async (request, response) => {
+    try {
+      const { roomId, participantId } = request.body as SessionEndInput;
+      const snapshot = roomService.endBreak(roomId, participantId);
+      const text = await roomiOrchestrator.generateBreakReturnMessage({
+        breakMinutes: snapshot.room.settings.breakMinutes
+      });
+      roomService.addRoomiMessage({
+        roomId: snapshot.room.id,
+        kind: 'break_return',
+        text
+      });
+      response.json(roomService.snapshotForParticipant(roomId, participantId));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Break end failed';
+      response.status(statusForRoomError(message, 404)).json({ message });
+    }
+  });
+
+  app.post('/sessions/break/extend', (request, response) => {
+    try {
+      const { roomId, participantId, minutes } = request.body as SessionStartInput & {
+        minutes?: number;
+      };
+      roomService.extendBreak(roomId, participantId, minutes ?? 5);
+      response.json(roomService.snapshotForParticipant(roomId, participantId));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Break extend failed';
+      response.status(statusForRoomError(message, 404)).json({ message });
+    }
+  });
+
   app.post('/sessions/end', async (request, response) => {
     try {
       const { roomId, participantId } = request.body as SessionEndInput;
@@ -242,7 +285,14 @@ function hasRequestBody(method: string) {
 }
 
 function statusForRoomError(message: string, fallback: number) {
-  if (message === 'Room is full' || message === 'Session already started') {
+  if (
+    message === 'Room is full' ||
+    message === 'Session already started' ||
+    message === 'Break mode is not room-wide' ||
+    message === 'No active study session to pause' ||
+    message === 'No active break to end' ||
+    message === 'No active break to extend'
+  ) {
     return 409;
   }
 

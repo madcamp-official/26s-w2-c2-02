@@ -275,6 +275,114 @@ describe('RoomService.startSession', () => {
   });
 });
 
+describe('RoomService.startBreak', () => {
+  it('starts a room-wide break and sets breakEndsAt from breakMinutes', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    service.startSession(created.room.id, host.id);
+
+    const before = Date.now();
+    const snapshot = service.startBreak(created.room.id, host.id);
+    const after = Date.now();
+
+    expect(snapshot.room.status).toBe('break');
+    expect(snapshot.currentSession?.mode).toBe('break');
+    expect(snapshot.participants.every((participant) => participant.status === 'break')).toBe(true);
+    const breakEndsAt = Date.parse(snapshot.currentSession!.breakEndsAt!);
+    const breakMs = created.room.settings.breakMinutes * 60_000;
+    expect(breakEndsAt).toBeGreaterThanOrEqual(before + breakMs);
+    expect(breakEndsAt).toBeLessThanOrEqual(after + breakMs);
+  });
+
+  it('rejects a non-host participant', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    service.startSession(created.room.id, created.participants[0].id);
+    const joined = service.joinRoom({ nickname: 'member', inviteCode: created.room.inviteCode });
+    const member = joined.participants.at(-1)!;
+
+    expect(() => service.startBreak(created.room.id, member.id)).toThrow('Only the host');
+  });
+
+  it('rejects starting a break when breakMode is individual', () => {
+    const service = createService();
+    const created = service.createRoom({
+      nickname: 'host',
+      settings: { breakMode: 'individual' }
+    });
+    const host = created.participants[0];
+    service.startSession(created.room.id, host.id);
+
+    expect(() => service.startBreak(created.room.id, host.id)).toThrow(
+      'Break mode is not room-wide'
+    );
+  });
+
+  it('rejects starting a break with no active study session', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+
+    expect(() => service.startBreak(created.room.id, created.participants[0].id)).toThrow(
+      'No active study session to pause'
+    );
+  });
+});
+
+describe('RoomService.endBreak', () => {
+  it('returns the room to studying and resets participants to focused', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    service.startSession(created.room.id, host.id);
+    service.startBreak(created.room.id, host.id);
+
+    const snapshot = service.endBreak(created.room.id, host.id);
+
+    expect(snapshot.room.status).toBe('studying');
+    expect(snapshot.currentSession?.mode).toBe('study');
+    expect(snapshot.currentSession?.breakEndsAt).toBeUndefined();
+    expect(snapshot.participants.every((participant) => participant.status === 'focused')).toBe(
+      true
+    );
+  });
+
+  it('rejects ending a break when there is none active', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    service.startSession(created.room.id, created.participants[0].id);
+
+    expect(() => service.endBreak(created.room.id, created.participants[0].id)).toThrow(
+      'No active break to end'
+    );
+  });
+});
+
+describe('RoomService.extendBreak', () => {
+  it('pushes breakEndsAt out by the given minutes', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    service.startSession(created.room.id, host.id);
+    const started = service.startBreak(created.room.id, host.id);
+    const originalEndsAt = Date.parse(started.currentSession!.breakEndsAt!);
+
+    const extended = service.extendBreak(created.room.id, host.id, 5);
+
+    expect(Date.parse(extended.currentSession!.breakEndsAt!)).toBe(originalEndsAt + 5 * 60_000);
+  });
+
+  it('rejects extending when there is no active break', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    service.startSession(created.room.id, created.participants[0].id);
+
+    expect(() => service.extendBreak(created.room.id, created.participants[0].id, 5)).toThrow(
+      'No active break to extend'
+    );
+  });
+});
+
 describe('RoomService.endSession', () => {
   it('ends the session for the host and marks the room ended', () => {
     const service = createService();

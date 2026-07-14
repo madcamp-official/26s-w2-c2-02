@@ -145,6 +145,122 @@ describe('POST /sessions', () => {
   });
 });
 
+describe('POST /sessions/break/start, /end, /extend', () => {
+  let httpServer: HttpServer;
+  let roomService: RoomService;
+  let baseUrl: string;
+
+  async function startApp(orchestrator: RoomiOrchestrator) {
+    roomService = new RoomService(new InMemoryRoomStore());
+    httpServer = createServer(createApp(roomService, orchestrator));
+    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
+    const { port } = httpServer.address() as AddressInfo;
+    baseUrl = `http://localhost:${port}`;
+  }
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  });
+
+  function post(path: string, body: unknown) {
+    return fetch(`${baseUrl}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  }
+
+  it('starts a room-wide break for the host', async () => {
+    await startApp(new RoomiOrchestrator());
+    const created = roomService.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    roomService.startSession(created.room.id, host.id);
+
+    const response = await post('/sessions/break/start', {
+      roomId: created.room.id,
+      participantId: host.id
+    });
+    const snapshot = (await response.json()) as RoomSnapshot;
+
+    expect(response.status).toBe(200);
+    expect(snapshot.room.status).toBe('break');
+    expect(snapshot.currentSession?.breakEndsAt).toBeTruthy();
+  });
+
+  it('returns 403 when a non-host tries to start a break', async () => {
+    await startApp(new RoomiOrchestrator());
+    const created = roomService.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    roomService.startSession(created.room.id, host.id);
+    const joined = roomService.joinRoom({
+      nickname: 'member',
+      inviteCode: created.room.inviteCode
+    });
+    const member = joined.participants.at(-1)!;
+
+    const response = await post('/sessions/break/start', {
+      roomId: created.room.id,
+      participantId: member.id
+    });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('ends the break, returns the room to studying, and sends a break_return message', async () => {
+    await startApp(new RoomiOrchestrator());
+    const created = roomService.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    roomService.startSession(created.room.id, host.id);
+    roomService.startBreak(created.room.id, host.id);
+    const messages: RoomiMessage[] = [];
+    roomService.onRoomiMessage((message) => messages.push(message));
+
+    const response = await post('/sessions/break/end', {
+      roomId: created.room.id,
+      participantId: host.id
+    });
+    const snapshot = (await response.json()) as RoomSnapshot;
+
+    expect(response.status).toBe(200);
+    expect(snapshot.room.status).toBe('studying');
+    expect(snapshot.currentSession?.mode).toBe('study');
+    expect(messages.some((message) => message.kind === 'break_return')).toBe(true);
+  });
+
+  it('extends the break end time', async () => {
+    await startApp(new RoomiOrchestrator());
+    const created = roomService.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    roomService.startSession(created.room.id, host.id);
+    const started = roomService.startBreak(created.room.id, host.id);
+    const originalEndsAt = Date.parse(started.currentSession!.breakEndsAt!);
+
+    const response = await post('/sessions/break/extend', {
+      roomId: created.room.id,
+      participantId: host.id,
+      minutes: 5
+    });
+    const snapshot = (await response.json()) as RoomSnapshot;
+
+    expect(response.status).toBe(200);
+    expect(Date.parse(snapshot.currentSession!.breakEndsAt!)).toBe(originalEndsAt + 5 * 60_000);
+  });
+
+  it('returns 409 when ending a break that is not active', async () => {
+    await startApp(new RoomiOrchestrator());
+    const created = roomService.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    roomService.startSession(created.room.id, host.id);
+
+    const response = await post('/sessions/break/end', {
+      roomId: created.room.id,
+      participantId: host.id
+    });
+
+    expect(response.status).toBe(409);
+  });
+});
+
 describe('POST /sessions/end', () => {
   let httpServer: HttpServer;
   let roomService: RoomService;

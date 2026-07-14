@@ -29,12 +29,15 @@ import type { ScreenId } from './screens/types';
 import {
   createRoomSession,
   createRoomSocket,
+  endBreak,
   endSession,
+  extendBreak,
   joinRoomSession,
   leaveRoom,
   refineGoal,
   RoomApiError,
   setGoalAchieved,
+  startBreak,
   startSession,
   submitGoal,
   subscribeToRoom,
@@ -59,6 +62,7 @@ const now = () => new Date().toISOString();
 const defaultRoomSettings: RoomSettings = {
   sessionMinutes: 50,
   breakMode: 'room',
+  breakMinutes: 10,
   defaultScoreVisibility: 'public',
   maxParticipants: 4,
   authMode: 'nickname_code',
@@ -294,6 +298,24 @@ export function App() {
     }
   }, [screen, activeRoom.room.status]);
 
+  // Room-wide breaks (breakMode 'room') are host-driven and broadcast to everyone via
+  // room:updated. Members follow the room's status instead of clicking their own CTA.
+  // Individual breaks never change room.status, so they never trigger this effect.
+  useEffect(() => {
+    if (activeRoom.room.status === 'break' && screen === 'study') {
+      go('break');
+      return;
+    }
+
+    if (
+      activeRoom.room.status === 'studying' &&
+      screen === 'break' &&
+      activeRoom.room.settings.breakMode === 'room'
+    ) {
+      go('study');
+    }
+  }, [screen, activeRoom.room.status, activeRoom.room.settings.breakMode]);
+
   useEffect(() => {
     if (createError) setIsCreatingRoom(false);
   }, [createError]);
@@ -499,6 +521,140 @@ export function App() {
     go('waiting');
   };
 
+  const startCurrentBreak = async () => {
+    if (!roomDraft) return;
+
+    if (roomDraft.room.settings.breakMode === 'individual') {
+      setCurrentSessionPresence('break');
+      go('break');
+      return;
+    }
+
+    if (!isHost) return;
+
+    if (roomDraft.realtime === 'server') {
+      try {
+        const snapshot = await startBreak({
+          roomId: roomDraft.room.id,
+          participantId: roomDraft.currentParticipantId
+        });
+        setRoomDraft((current) =>
+          current
+            ? {
+                ...current,
+                room: snapshot.room,
+                participants: snapshot.participants,
+                goals: snapshot.goals,
+                roomiMessages: snapshot.roomiMessages,
+                currentSession: snapshot.currentSession
+              }
+            : current
+        );
+        go('break');
+      } catch (error) {
+        console.warn(error instanceof Error ? error.message : 'Break start failed');
+      }
+      return;
+    }
+
+    setRoomDraft((current) => {
+      if (!current?.currentSession) return current;
+      const nowMs = Date.now();
+      const breakEndsAt = new Date(
+        nowMs + current.room.settings.breakMinutes * 60_000
+      ).toISOString();
+      return {
+        ...current,
+        room: { ...current.room, status: 'break' },
+        currentSession: { ...current.currentSession, mode: 'break', breakEndsAt },
+        participants: current.participants.map((participant) => ({
+          ...participant,
+          status: 'break'
+        }))
+      };
+    });
+    go('break');
+  };
+
+  const endCurrentBreak = async () => {
+    if (!roomDraft) return;
+
+    if (roomDraft.room.settings.breakMode === 'individual') {
+      setCurrentSessionPresence('focused');
+      go('study');
+      return;
+    }
+
+    if (!isHost) return;
+
+    if (roomDraft.realtime === 'server') {
+      try {
+        const snapshot = await endBreak({
+          roomId: roomDraft.room.id,
+          participantId: roomDraft.currentParticipantId
+        });
+        setRoomDraft((current) =>
+          current
+            ? {
+                ...current,
+                room: snapshot.room,
+                participants: snapshot.participants,
+                goals: snapshot.goals,
+                roomiMessages: snapshot.roomiMessages,
+                currentSession: snapshot.currentSession
+              }
+            : current
+        );
+        go('study');
+      } catch (error) {
+        console.warn(error instanceof Error ? error.message : 'Break end failed');
+      }
+      return;
+    }
+
+    setRoomDraft((current) => {
+      if (!current?.currentSession) return current;
+      return {
+        ...current,
+        room: { ...current.room, status: 'studying' },
+        currentSession: { ...current.currentSession, mode: 'study', breakEndsAt: undefined },
+        participants: current.participants.map((participant) => ({
+          ...participant,
+          status: 'focused'
+        }))
+      };
+    });
+    go('study');
+  };
+
+  const extendCurrentBreak = async () => {
+    if (!roomDraft || roomDraft.room.settings.breakMode !== 'room' || !isHost) return;
+
+    if (roomDraft.realtime === 'server') {
+      try {
+        const snapshot = await extendBreak({
+          roomId: roomDraft.room.id,
+          participantId: roomDraft.currentParticipantId,
+          minutes: 5
+        });
+        setRoomDraft((current) =>
+          current ? { ...current, currentSession: snapshot.currentSession } : current
+        );
+      } catch (error) {
+        console.warn(error instanceof Error ? error.message : 'Break extend failed');
+      }
+      return;
+    }
+
+    setRoomDraft((current) => {
+      if (!current?.currentSession?.breakEndsAt) return current;
+      const breakEndsAt = new Date(
+        Date.parse(current.currentSession.breakEndsAt) + 5 * 60_000
+      ).toISOString();
+      return { ...current, currentSession: { ...current.currentSession, breakEndsAt } };
+    });
+  };
+
   const endCurrentSession = () => {
     if (!roomDraft) {
       go('retrospective');
@@ -643,10 +799,20 @@ export function App() {
             currentSession={activeRoom.currentSession}
             videoJoin={activeRoom.videoJoin}
             onUpdatePresence={setCurrentSessionPresence}
+            onStartBreak={startCurrentBreak}
             go={go}
           />
         )}
-        {screen === 'break' && <BreakReturn go={go} />}
+        {screen === 'break' && (
+          <BreakReturn
+            room={activeRoom.room}
+            currentSession={activeRoom.currentSession}
+            isHost={isHost}
+            onReturnToStudy={endCurrentBreak}
+            onExtendBreak={extendCurrentBreak}
+            go={go}
+          />
+        )}
         {screen === 'retrospective' && (
           <Retrospective
             session={activeRoom.currentSession}

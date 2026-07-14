@@ -18,6 +18,7 @@ interface CreateRoomProps extends ScreenProps {
 export function CreateRoom({ error, isCreating = false, onCreateRoom, go }: CreateRoomProps) {
   const [minutes, setMinutes] = useState(50);
   const [breakMode, setBreakMode] = useState<'room' | 'individual'>('room');
+  const [breakMinutes, setBreakMinutes] = useState(10);
   const [scorePublic, setScorePublic] = useState(true);
   const [allowHide, setAllowHide] = useState(true);
 
@@ -25,6 +26,7 @@ export function CreateRoom({ error, isCreating = false, onCreateRoom, go }: Crea
     onCreateRoom({
       sessionMinutes: minutes,
       breakMode,
+      breakMinutes,
       defaultScoreVisibility: scorePublic ? 'public' : 'private',
       maxParticipants: 4,
       authMode: 'nickname_code',
@@ -90,6 +92,20 @@ export function CreateRoom({ error, isCreating = false, onCreateRoom, go }: Crea
                 <div className="create-opt__desc">각자 원할 때 쉬고 자유롭게 복귀해요.</div>
               </button>
             </div>
+            {breakMode === 'room' && (
+              <div className="create__chips">
+                {[5, 10, 15].map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className={`chip${breakMinutes === m ? ' chip--active' : ''}`}
+                    onClick={() => setBreakMinutes(m)}
+                  >
+                    {m}분
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="create__section">

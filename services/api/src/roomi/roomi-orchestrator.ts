@@ -76,6 +76,14 @@ export class RoomiOrchestrator {
     );
   }
 
+  async generateBreakReturnMessage(input: { breakMinutes: number }): Promise<string> {
+    return this.generateLiveMessage(
+      'break_return',
+      `방금 ${input.breakMinutes}분 휴식이 끝났어.`,
+      '다들 잘 쉬었지? 다시 모여서 남은 시간 마저 달려보자.'
+    );
+  }
+
   async generateFocusRecoveryMessage(input: FocusRecoveryInput): Promise<string> {
     const statusLabel = input.status === 'away' ? '자리 비움' : '집중 흐트러짐';
     return this.generateLiveMessage(
@@ -182,7 +190,7 @@ export class RoomiOrchestrator {
   }
 
   private async generateLiveMessage(
-    kind: Extract<RoomiPromptKind, 'start' | 'focus_recovery'>,
+    kind: Extract<RoomiPromptKind, 'start' | 'focus_recovery' | 'break_return'>,
     context: string,
     fallback: string
   ): Promise<string> {
@@ -203,13 +211,15 @@ export class RoomiOrchestrator {
   }
 
   private buildLivePrompt(
-    kind: Extract<RoomiPromptKind, 'start' | 'focus_recovery'>,
+    kind: Extract<RoomiPromptKind, 'start' | 'focus_recovery' | 'break_return'>,
     context: string
   ): string {
     const instruction =
       kind === 'start'
         ? '방 전체에 보낼 시작 멘트를 작성해줘.'
-        : '해당 참가자에게만 보낼 집중 회복 멘트를 작성해줘.';
+        : kind === 'break_return'
+          ? '휴식이 끝나고 다시 모인 방 전체에 보낼 복귀 안내 멘트를 작성해줘.'
+          : '해당 참가자에게만 보낼 집중 회복 멘트를 작성해줘.';
 
     return [
       '너는 친구 말투의 스터디룸 운영자 "루미"야.',

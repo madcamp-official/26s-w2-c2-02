@@ -11,6 +11,7 @@ function room(status: RoomStatus = 'waiting'): Room {
     settings: {
       sessionMinutes: 50,
       breakMode: 'room',
+      breakMinutes: 10,
       defaultScoreVisibility: 'public',
       maxParticipants: 4,
       authMode: 'nickname_code',
@@ -49,7 +50,10 @@ function baseProps() {
       participant({ id: 'p-2', nickname: '채훈', isReady: true }),
       participant({ id: 'p-3', nickname: '민지', isReady: false })
     ] as Participant[],
-    goals: [] as Goal[],
+    goals: [
+      { id: 'goal-host', roomId: 'room-1', participantId: 'p-host', rawText: '수학 문제집 3단원', createdAt: new Date().toISOString() },
+      { id: 'goal-3', roomId: 'room-1', participantId: 'p-3', rawText: '영어 단어 100개', createdAt: new Date().toISOString() }
+    ] as Goal[],
     currentParticipantId: 'p-host',
     isHost: true,
     onSubmitGoal: vi.fn(),
@@ -82,6 +86,32 @@ describe('WaitingRoom', () => {
 
     expect(props.onStartSession).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('button', { name: /준비/ })).not.toBeInTheDocument();
+  });
+
+  it('blocks starting the session until the host has a goal', () => {
+    const props = { ...baseProps(), goals: [] as Goal[] };
+    render(<WaitingRoom {...props} />);
+
+    const startButton = screen.getByRole('button', { name: '세션 시작하기' });
+    expect(startButton).toBeDisabled();
+    expect(screen.getByText('먼저 목표를 적어야 시작할 수 있어요.')).toBeInTheDocument();
+    expect(props.onStartSession).not.toHaveBeenCalled();
+  });
+
+  it('blocks joining an in-progress session until the member has a goal', () => {
+    const props = {
+      ...baseProps(),
+      goals: [] as Goal[],
+      isHost: false,
+      currentParticipantId: 'p-3',
+      room: room('studying')
+    };
+    render(<WaitingRoom {...props} />);
+
+    const joinButton = screen.getByRole('button', { name: '스터디룸 참여하기' });
+    expect(joinButton).toBeDisabled();
+    expect(screen.getByText('먼저 목표를 적어야 참여할 수 있어요.')).toBeInTheDocument();
+    expect(props.onJoinSession).not.toHaveBeenCalled();
   });
 
   it('locks the start action synchronously to prevent duplicate requests', () => {
