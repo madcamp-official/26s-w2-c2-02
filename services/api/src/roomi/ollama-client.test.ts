@@ -22,7 +22,7 @@ describe('OllamaClient', () => {
       )
     );
     vi.stubGlobal('fetch', fetchMock);
-    const client = new OllamaClient({ baseUrl: 'https://api.roomi.madcamp-kaist.org', model: 'gemma3:4b' });
+    const client = new OllamaClient({ baseUrl: 'https://api.roomi.madcamp-kaist.org', model: 'gemma3:12b' });
 
     const text = await client.generateText('원본 목표');
 
@@ -31,7 +31,7 @@ describe('OllamaClient', () => {
     expect(calledUrl).toBe('https://api.roomi.madcamp-kaist.org/v1/chat/completions');
     const body = JSON.parse((calledInit as RequestInit).body as string);
     expect(body).toEqual({
-      model: 'gemma3:4b',
+      model: 'gemma3:12b',
       messages: [{ role: 'user', content: '원본 목표' }],
       temperature: 0.7
     });

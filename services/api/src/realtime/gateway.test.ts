@@ -42,7 +42,7 @@ describe('realtime gateway', () => {
     registerRealtimeGateway(httpServer, roomService, new RoomiOrchestrator(), {
       focusRecoveryDelayMs: 0
     });
-    await new Promise<void>((resolve) => httpServer.listen(0, resolve));
+    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
     port = (httpServer.address() as AddressInfo).port;
   });
 

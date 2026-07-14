@@ -9,6 +9,8 @@ loadEnv({ path: resolve(repoRoot, '.env') });
 loadEnv({ path: resolve(serviceRoot, '.env'), override: true });
 
 const localRendererOriginPattern = /^http:\/\/(localhost|127\.0\.0\.1):51\d{2}$/;
+const lanRendererOriginPattern =
+  /^http:\/\/((10\.\d{1,3}\.\d{1,3}\.\d{1,3})|(192\.168\.\d{1,3}\.\d{1,3})|(172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})):51\d{2}$/;
 const packagedRendererOrigins = new Set(['file://', 'null']);
 
 export function isAllowedClientOrigin(origin: string | undefined) {
@@ -19,6 +21,7 @@ export function isAllowedClientOrigin(origin: string | undefined) {
   return (
     packagedRendererOrigins.has(origin) ||
     localRendererOriginPattern.test(origin) ||
+    lanRendererOriginPattern.test(origin) ||
     env.clientOrigins.some((allowedOrigin) => originMatchesAllowedPattern(origin, allowedOrigin))
   );
 }
@@ -53,9 +56,11 @@ export const env = {
   clientOrigins: parseClientOrigins(process.env.CLIENT_ORIGIN),
   dailyApiKey: process.env.DAILY_API_KEY,
   dailyDomain: process.env.DAILY_DOMAIN,
+  mlApiUrl: process.env.ROOMI_ML_API_URL ?? 'http://192.168.0.83:8080',
+  mlApiTimeoutMs: Number(process.env.ROOMI_ML_API_TIMEOUT_MS ?? 5000),
   ollamaBaseUrl: process.env.OLLAMA_BASE_URL,
   ollamaModel: process.env.OLLAMA_MODEL,
   ollamaTimeoutMs: Number(process.env.OLLAMA_TIMEOUT_MS ?? 20000),
-  mlApiUrl: process.env.ROOMI_ML_API_URL ?? 'http://192.168.0.83:8080',
-  mlApiTimeoutMs: Number(process.env.ROOMI_ML_API_TIMEOUT_MS ?? 5000)
+  llmApiUrl: process.env.ROOMI_LLM_API_URL ?? 'http://192.168.0.83:8081',
+  llmApiTimeoutMs: Number(process.env.ROOMI_LLM_API_TIMEOUT_MS ?? 30000)
 };

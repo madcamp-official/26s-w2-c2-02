@@ -1,6 +1,6 @@
 import type { TextGenerator } from './roomi-orchestrator';
 
-const DEFAULT_MODEL = 'gemma3:4b';
+const DEFAULT_MODEL = 'gemma3:12b';
 const DEFAULT_TIMEOUT_MS = 8000;
 
 export type OllamaClientOptions = {

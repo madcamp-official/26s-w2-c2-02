@@ -7,6 +7,9 @@
 
 ### Added
 
+- 설치된 Windows 앱이 공개 GitHub Release에서 새 버전을 확인하고 자동 다운로드한 뒤, 재시작 또는 앱 종료 시 기존 설치 위에 업데이트하도록 추가했습니다. `vX.Y.Z` tag는 desktop package 버전과 일치해야 합니다.
+- Windows x64용 NSIS 설치 파일과 SHA-256을 로컬 및 GitHub Actions에서 생성하는 desktop 배포 workflow를 추가했습니다. 현재 산출물은 unsigned이므로 외부 배포 전 코드 서명이 필요합니다.
+- 중앙 Roomi API가 `/v1/models`, `/v1/chat/completions` 같은 OpenAI 호환 LLM 요청을 내부 LLM 서버로 대신 전달하는 proxy를 제공합니다. 다른 로컬 컴퓨터는 LLM 서버에 직접 붙지 않고 Roomi API base URL로 요청할 수 있습니다.
 - 루미 메시지를 방 상태에 저장하고 실시간으로 전달하도록 연결했습니다. 자리 비움이 60초 이상 이어진 경우에만 해당 참가자에게 집중 회복 메시지를 보내며, 같은 참가자에게는 5분 cooldown을 적용합니다.
 - 스터디 라이브 세션을 시작하면 루미가 Ollama(Gemma 3) 기반 시작 멘트를 실시간으로 안내하고, 집중 이탈·자리 비움 상태에는 해당 참가자에게만 회복 메시지를 보냅니다. Ollama를 사용할 수 없을 때도 템플릿 문구로 세션이 계속 진행됩니다.
 - 대기실에서 루미에게 목표를 다듬어 달라고 요청하고, 제안을 확인한 뒤 바로 내 목표로 저장할 수 있게 했습니다. Ollama 서버에 연결할 수 없을 때의 템플릿 제안도 같은 흐름으로 사용할 수 있습니다.
@@ -50,6 +53,9 @@
 - 중앙 API가 내부 ML 서버의 `DELETE /v1/focus/feedback/:userId`를 호출하도록 feedback 초기화 proxy를 추가했습니다.
 - ML 서버 예측 요청의 renderer 기본 abort 제한을 제거해 중앙 API 응답이 늦을 때 `signal is aborted without reason`으로 실패하지 않도록 했습니다.
 - 패키징된 Electron renderer의 `file://` 및 직렬화된 `null` origin을 중앙 API CORS에서 허용해 ML proxy 요청이 브라우저에서 차단되지 않도록 수정했습니다.
+- 로컬 확인과 Windows production 배포 절차를 하나의 문서로 통합하고, 일반 개발 확인은 `pnpm dev` 중심으로 단순화했습니다.
+- macOS 개발·패키징 실행에서도 Dock에 Windows와 같은 Roomi 앱 아이콘을 표시합니다.
+- LAN 브라우저 renderer(`http://192.168.*:51xx`, `http://10.*:51xx`, `http://172.16-31.*:51xx`)를 중앙 API CORS에서 기본 허용해 ML feedback 요청이 `Failed to fetch`로 차단되지 않도록 했습니다.
 - 스터디룸에서 Daily 카메라를 다시 켤 때 종료된 기존 track을 재사용하지 않고 화상 call을 재생성해, 휴식 후 복귀와 동일하게 새 카메라 track을 획득합니다.
 - 방 생성·입장 성공 또는 방 퇴장 시 요청 잠금을 초기화해, 같은 앱에서 다시 방을 만들거나 입장해도 이전 진행 중 버튼 상태가 남지 않습니다.
 - 방 참가와 스터디룸 참여 상태를 분리해 대기실 참가자는 영상 타일에 나타나지 않고, 실제 스터디룸 참가자는 대기실에서 `공부 중`으로 표시됩니다.
@@ -122,7 +128,11 @@
 ### Notes
 ### Manual Steps
 
+- 자동 업데이트를 실제 출시하기 전에 이전 버전 설치 PC에서 새 GitHub Release 감지·다운로드·재시작 설치를 확인하고, 외부 배포용 코드 서명을 적용해야 합니다.
+- 생성된 Windows installer는 깨끗한 PC에서 설치·카메라/마이크 권한·두 사용자 Daily 연결·재설치·제거를 수동 확인해야 합니다.
+- Windows installer를 외부 배포하기 전 코드 서명 인증서를 CI에 연결해야 합니다. 현재 unsigned 산출물은 SmartScreen 경고가 표시될 수 있습니다.
 - 라이브 LLM 메시지를 사용하려면 API 서버의 `services/api/.env`에 `OLLAMA_BASE_URL`(필요 시 `OLLAMA_MODEL`)을 설정해야 합니다. 값이 없으면 템플릿 fallback이 자동 적용됩니다.
+- LLM proxy를 사용하려면 중앙 API 서버에서 `ROOMI_LLM_API_URL`을 내부 LLM 서버 주소로 설정하세요. 외부 클라이언트는 별도 LLM hostname 없이 기존 Roomi API base URL의 `/v1/*` 경로를 호출하면 됩니다.
 - `@roomi/*` workspace package scope 로 변경된 뒤에는 `pnpm install` 을 다시 실행해 로컬 workspace link 를 갱신해야 합니다.
 - 새 workspace script 를 사용하기 전에 `pnpm install` 을 실행해야 합니다.
 - MediaPipe 테스트 화면을 사용하려면 `pnpm install` 로 `@mediapipe/tasks-vision` dependency 를 설치해야 합니다.
