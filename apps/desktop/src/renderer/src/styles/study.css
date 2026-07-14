@@ -226,8 +226,20 @@
 }
 
 .goal__text {
+  flex: 1;
   font-size: 13px;
   color: var(--text);
+}
+
+.goal__achieved {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--purple-700);
+  white-space: nowrap;
+  cursor: pointer;
 }
 
 .study-lumi {

@@ -27,6 +27,17 @@ type FocusRecoveryInput = {
   status: 'distracted' | 'away';
 };
 
+type RetrospectiveInput = {
+  sessionMinutes: number;
+  focusMinutes: number;
+  goalCompletionRate: number;
+};
+
+export type RetrospectiveText = {
+  goalFeedback: string;
+  lumiComment: string;
+};
+
 export class RoomiOrchestrator {
   constructor(private readonly generator?: TextGenerator) {}
 
@@ -76,6 +87,60 @@ export class RoomiOrchestrator {
       ].join('\n'),
       `${input.nickname}, 잠깐 흐름이 끊긴 것 같아. 돌아오면 목표의 다음 한 단계만 바로 시작해보자.`
     );
+  }
+
+  async generateRetrospective(input: RetrospectiveInput): Promise<RetrospectiveText> {
+    const fallback = this.templateRetrospective(input);
+
+    if (!this.generator) return fallback;
+
+    try {
+      const raw = await this.generator.generateText(this.buildRetrospectivePrompt(input));
+      const parsed = this.parseRetrospectiveOutput(raw);
+      return parsed ?? fallback;
+    } catch (error) {
+      this.logGeneratorFailure('summary', error);
+      return fallback;
+    }
+  }
+
+  private templateRetrospective(input: RetrospectiveInput): RetrospectiveText {
+    const goalFeedback =
+      input.goalCompletionRate >= 1
+        ? '오늘 목표를 끝까지 달성했어요.'
+        : input.goalCompletionRate > 0
+          ? '목표 중 일부만 끝내고 세션이 끝났어요.'
+          : '목표까지 도달하기엔 시간이 부족했어요.';
+
+    const lumiComment =
+      input.goalCompletionRate >= 1
+        ? '오늘 목표까지 완료했어! 다음 세션도 이 흐름 이어가보자.'
+        : '오늘도 수고했어. 다음엔 시작 5분을 워밍업으로 써보면 더 부드럽게 몰입할 수 있을 거야.';
+
+    return { goalFeedback, lumiComment };
+  }
+
+  private buildRetrospectivePrompt(input: RetrospectiveInput): string {
+    return [
+      '너는 스터디룸 운영자 "루미"야. 방금 끝난 집중 세션의 목표 달성 결과를 회고해줘.',
+      `계획한 세션 길이: ${input.sessionMinutes}분`,
+      `실제 집중 시간: ${input.focusMinutes}분`,
+      `목표 달성률: ${Math.round(input.goalCompletionRate * 100)}%`,
+      '아래 형식 그대로 정확히 두 줄만 출력해. 다른 설명이나 마크다운은 붙이지 마:',
+      'FEEDBACK: <목표 달성 결과에 대한 피드백 한 문장>',
+      'LUMI: <참가자에게 보내는 따뜻한 한 줄 코멘트, 반말, 이모지 없이>'
+    ].join('\n');
+  }
+
+  private parseRetrospectiveOutput(rawOutput: string): RetrospectiveText | null {
+    const feedback = /FEEDBACK:\s*(.+)/i.exec(rawOutput)?.[1]?.trim();
+    const lumi = /LUMI:\s*(.+)/i.exec(rawOutput)?.[1]?.trim();
+
+    if (!feedback || !lumi) {
+      return null;
+    }
+
+    return { goalFeedback: feedback, lumiComment: lumi };
   }
 
   private templateRefinement(rawGoal: string, sessionMinutes: number): GoalRefinement {

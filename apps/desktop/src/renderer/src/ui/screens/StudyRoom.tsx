@@ -32,6 +32,7 @@ interface StudyRoomProps extends ScreenProps {
   isHost: boolean;
   onEndSession: () => void;
   onLeaveRoom: () => void;
+  onToggleGoalAchieved: (achieved: boolean) => void;
   participants: Participant[];
   goals: Goal[];
   roomiMessages: RoomiMessage[];
@@ -112,6 +113,7 @@ export function StudyRoom({
   isHost,
   onEndSession,
   onLeaveRoom,
+  onToggleGoalAchieved,
   participants,
   goals,
   roomiMessages,
@@ -374,15 +376,29 @@ export function StudyRoom({
 
           <div className="study-card">
             <div className="study-card__title">오늘 목표</div>
-            {participants.map((participant) => (
-              <div className="goal" key={participant.id}>
-                <span className="goal__who">{participant.nickname}</span>
-                <span className="goal__text">
-                  {goals.find((goal) => goal.participantId === participant.id)?.rawText ??
-                    '아직 목표를 입력하지 않았어요.'}
-                </span>
-              </div>
-            ))}
+            {participants.map((participant) => {
+              const goal = goals.find((item) => item.participantId === participant.id);
+              const isSelf = participant.id === currentParticipantId;
+
+              return (
+                <div className="goal" key={participant.id}>
+                  <span className="goal__who">{participant.nickname}</span>
+                  <span className="goal__text">
+                    {goal?.rawText ?? '아직 목표를 입력하지 않았어요.'}
+                  </span>
+                  {isSelf && goal && (
+                    <label className="goal__achieved">
+                      <input
+                        type="checkbox"
+                        checked={goal.achieved ?? false}
+                        onChange={(event) => onToggleGoalAchieved(event.target.checked)}
+                      />
+                      달성
+                    </label>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
         </aside>

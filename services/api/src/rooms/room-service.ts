@@ -1,5 +1,6 @@
 import type {
   CreateRoomInput,
+  FocusRankingEntry,
   Goal,
   JoinRoomInput,
   Participant,
@@ -24,10 +25,20 @@ type RoomUpdatedListener = (snapshot: RoomSnapshot) => void;
 type RoomiMessageListener = (message: RoomiMessage) => void;
 type AddRoomiMessageInput = Omit<RoomiMessage, 'id' | 'createdAt'>;
 
+type FocusTrackerEntry = {
+  focusedSeconds: number;
+  lastStatusChangeAt: number;
+  status: ParticipantStatus;
+};
+
 export class RoomService {
   private readonly dailyRooms = new Map<string, { name: string; roomUrl: string }>();
   private readonly roomUpdatedListeners = new Set<RoomUpdatedListener>();
   private readonly roomiMessageListeners = new Set<RoomiMessageListener>();
+  // Keyed by roomId, then participantId. Every ParticipantStatus transition funnels through
+  // updateParticipantStatus, so this is the single seam a future focus-detection integration
+  // (MediaPipe, ML) needs to call into — no other ranking code has to change.
+  private readonly focusTrackers = new Map<string, Map<string, FocusTrackerEntry>>();
 
   constructor(
     private readonly store: RoomStore,
@@ -146,6 +157,8 @@ export class RoomService {
       throw new Error('Room not found');
     }
 
+    this.touchFocusTracker(roomId, participantId, status, Date.now());
+
     snapshot.participants = snapshot.participants.map((participant) =>
       participant.id === participantId
         ? { ...participant, status, lastSeenAt: new Date().toISOString() }
@@ -247,6 +260,104 @@ export class RoomService {
       participant.id === participantId
         ? { ...participant, status: 'focused', lastSeenAt: now }
         : participant
+    );
+
+    const nowMs = Date.now();
+    const tracker = new Map<string, FocusTrackerEntry>();
+    this.focusTrackers.set(roomId, tracker);
+    snapshot.participants.forEach((participant) => {
+      tracker.set(participant.id, {
+        focusedSeconds: 0,
+        lastStatusChangeAt: nowMs,
+        status: participant.status
+      });
+    });
+
+    this.store.update(snapshot);
+    this.emitRoomUpdated(snapshot);
+    return snapshot;
+  }
+
+  endSession(roomId: string, participantId: string): RoomSnapshot {
+    const snapshot = this.store.findByRoomId(roomId);
+
+    if (!snapshot) {
+      throw new Error('Room not found');
+    }
+
+    const host = snapshot.participants.find(
+      (participant) => participant.id === participantId
+    );
+
+    if (!host || host.role !== 'host') {
+      throw new Error('Only the host can end the session');
+    }
+
+    if (!snapshot.currentSession || snapshot.room.status === 'ended') {
+      throw new Error('No active session to end');
+    }
+
+    const nowMs = Date.now();
+    const now = new Date(nowMs).toISOString();
+
+    snapshot.room = { ...snapshot.room, status: 'ended' };
+    snapshot.currentSession = {
+      ...snapshot.currentSession,
+      endedAt: now,
+      mode: 'ended'
+    };
+
+    const tracker = this.focusTrackers.get(roomId);
+    tracker?.forEach((entry) => this.accrueFocusedSeconds(entry, nowMs));
+
+    this.store.update(snapshot);
+    this.emitRoomUpdated(snapshot);
+    return snapshot;
+  }
+
+  getFocusRanking(roomId: string): FocusRankingEntry[] {
+    const tracker = this.focusTrackers.get(roomId);
+
+    if (!tracker) {
+      return [];
+    }
+
+    return Array.from(tracker.entries())
+      .map(([participantId, entry]) => ({
+        participantId,
+        focusMinutes: Math.round(entry.focusedSeconds / 60)
+      }))
+      .sort((left, right) => right.focusMinutes - left.focusMinutes);
+  }
+
+  attachSessionSummary(roomId: string, summary: NonNullable<StudySession['summary']>): RoomSnapshot {
+    const snapshot = this.store.findByRoomId(roomId);
+
+    if (!snapshot || !snapshot.currentSession) {
+      throw new Error('No session to attach a summary to');
+    }
+
+    snapshot.currentSession = { ...snapshot.currentSession, summary };
+    this.store.update(snapshot);
+    this.emitRoomUpdated(snapshot);
+    return snapshot;
+  }
+
+  setGoalAchieved(roomId: string, participantId: string, achieved: boolean): RoomSnapshot {
+    const snapshot = this.store.findByRoomId(roomId);
+
+    if (!snapshot) {
+      throw new Error('Room not found');
+    }
+
+    const existing = snapshot.goals.find((goal) => goal.participantId === participantId);
+
+    if (!existing) {
+      throw new Error('Goal not found');
+    }
+
+    snapshot.goals = snapshot.goals.map((goal) =>
+      goal.participantId === participantId ? { ...goal, achieved } : goal
     );
     this.store.update(snapshot);
     this.emitRoomUpdated(snapshot);
@@ -353,6 +464,39 @@ export class RoomService {
     return () => {
       this.roomiMessageListeners.delete(listener);
     };
+  }
+
+  private touchFocusTracker(
+    roomId: string,
+    participantId: string,
+    status: ParticipantStatus,
+    nowMs: number
+  ): void {
+    let tracker = this.focusTrackers.get(roomId);
+
+    if (!tracker) {
+      tracker = new Map();
+      this.focusTrackers.set(roomId, tracker);
+    }
+
+    const entry = tracker.get(participantId);
+
+    if (!entry) {
+      // Lazy init covers a participant who joins mid-session, or the first status
+      // change of any kind for a room with no tracker yet.
+      tracker.set(participantId, { focusedSeconds: 0, lastStatusChangeAt: nowMs, status });
+      return;
+    }
+
+    this.accrueFocusedSeconds(entry, nowMs);
+    entry.status = status;
+  }
+
+  private accrueFocusedSeconds(entry: FocusTrackerEntry, nowMs: number): void {
+    if (entry.status === 'focused') {
+      entry.focusedSeconds += Math.max(0, (nowMs - entry.lastStatusChangeAt) / 1000);
+    }
+    entry.lastStatusChangeAt = nowMs;
   }
 
   private mergeSettings(settings: Partial<RoomSettings> | undefined): RoomSettings {

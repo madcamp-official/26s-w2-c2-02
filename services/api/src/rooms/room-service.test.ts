@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { VideoProvider } from '../video/daily-video-provider';
 import { InMemoryRoomStore } from '../adapters/storage/in-memory-room-store';
 import { RoomService } from './room-service';
@@ -256,6 +256,178 @@ describe('RoomService.startSession', () => {
     const service = createService();
 
     expect(() => service.startSession('missing-room', 'x')).toThrow('Room not found');
+  });
+});
+
+describe('RoomService.endSession', () => {
+  it('ends the session for the host and marks the room ended', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    service.startSession(created.room.id, host.id);
+
+    const snapshot = service.endSession(created.room.id, host.id);
+
+    expect(snapshot.room.status).toBe('ended');
+    expect(snapshot.currentSession?.mode).toBe('ended');
+    expect(snapshot.currentSession?.endedAt).toBeTruthy();
+  });
+
+  it('broadcasts a room update when the session ends', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    service.startSession(created.room.id, host.id);
+    let received: string | undefined;
+    service.onRoomUpdated((snapshot) => {
+      received = snapshot.room.status;
+    });
+
+    service.endSession(created.room.id, host.id);
+
+    expect(received).toBe('ended');
+  });
+
+  it('rejects a non-host participant', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    service.startSession(created.room.id, host.id);
+    const joined = service.joinRoom({
+      nickname: 'member',
+      inviteCode: created.room.inviteCode
+    });
+    const member = joined.participants.at(-1)!;
+
+    expect(() => service.endSession(created.room.id, member.id)).toThrow('Only the host');
+  });
+
+  it('rejects ending when there is no active session', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+
+    expect(() => service.endSession(created.room.id, host.id)).toThrow(
+      'No active session to end'
+    );
+  });
+
+  it('throws when the room does not exist', () => {
+    const service = createService();
+
+    expect(() => service.endSession('missing-room', 'x')).toThrow('Room not found');
+  });
+});
+
+describe('RoomService.attachSessionSummary', () => {
+  it('attaches a summary to the current session', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    service.startSession(created.room.id, host.id);
+    service.endSession(created.room.id, host.id);
+
+    const snapshot = service.attachSessionSummary(created.room.id, {
+      focusMinutes: 42,
+      goalCompletionRate: 1
+    });
+
+    expect(snapshot.currentSession?.summary).toEqual({
+      focusMinutes: 42,
+      goalCompletionRate: 1
+    });
+  });
+
+  it('throws when there is no session to attach a summary to', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+
+    expect(() =>
+      service.attachSessionSummary(created.room.id, { focusMinutes: 0, goalCompletionRate: 0 })
+    ).toThrow('No session to attach a summary to');
+  });
+});
+
+describe('RoomService.setGoalAchieved', () => {
+  it('marks a goal achieved', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    service.submitGoal(created.room.id, host.id, '수학 3단원');
+
+    const snapshot = service.setGoalAchieved(created.room.id, host.id, true);
+
+    expect(snapshot.goals[0]?.achieved).toBe(true);
+  });
+
+  it('throws when the participant has no goal', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+
+    expect(() => service.setGoalAchieved(created.room.id, host.id, true)).toThrow(
+      'Goal not found'
+    );
+  });
+});
+
+describe('RoomService focus ranking', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('ranks participants by accumulated focused time, keyed off status transitions', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-13T00:00:00.000Z'));
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    const joined = service.joinRoom({ nickname: 'member', inviteCode: created.room.inviteCode });
+    const member = joined.participants.at(-1)!;
+
+    // startSession seeds every participant's tracker: host is 'focused', member stays 'online'.
+    service.startSession(created.room.id, host.id);
+
+    vi.setSystemTime(new Date('2026-07-13T00:05:00.000Z'));
+    service.updateParticipantStatus(created.room.id, member.id, 'focused');
+
+    vi.setSystemTime(new Date('2026-07-13T00:08:00.000Z'));
+    service.updateParticipantStatus(created.room.id, host.id, 'distracted');
+
+    vi.setSystemTime(new Date('2026-07-13T00:15:00.000Z'));
+    service.endSession(created.room.id, host.id);
+
+    expect(service.getFocusRanking(created.room.id)).toEqual([
+      { participantId: member.id, focusMinutes: 10 },
+      { participantId: host.id, focusMinutes: 8 }
+    ]);
+  });
+
+  it('lazily tracks a participant who joins and goes focused mid-session', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-13T00:00:00.000Z'));
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    service.startSession(created.room.id, host.id);
+
+    vi.setSystemTime(new Date('2026-07-13T00:04:00.000Z'));
+    const joined = service.joinRoom({ nickname: 'latecomer', inviteCode: created.room.inviteCode });
+    const latecomer = joined.participants.at(-1)!;
+    service.updateParticipantStatus(created.room.id, latecomer.id, 'focused');
+
+    vi.setSystemTime(new Date('2026-07-13T00:09:00.000Z'));
+    service.endSession(created.room.id, host.id);
+
+    const ranking = service.getFocusRanking(created.room.id);
+    expect(ranking.find((entry) => entry.participantId === latecomer.id)?.focusMinutes).toBe(5);
+  });
+
+  it('returns an empty ranking for a room with no session history', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+
+    expect(service.getFocusRanking(created.room.id)).toEqual([]);
   });
 });
 
