@@ -2,7 +2,6 @@ import type { TextGenerator } from './roomi-orchestrator';
 
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
-const DEFAULT_TIMEOUT_MS = 8000;
 
 export type GeminiClientOptions = {
   apiKey?: string;
@@ -18,14 +17,14 @@ type GeminiResponse = {
 export class GeminiClient implements TextGenerator {
   private readonly apiKeys: string[];
   private readonly model: string;
-  private readonly timeoutMs: number;
+  private readonly timeoutMs: number | undefined;
 
   constructor(options: GeminiClientOptions) {
     this.apiKeys = (options.apiKeys ?? [options.apiKey]).filter(
       (apiKey): apiKey is string => Boolean(apiKey)
     );
     this.model = options.model ?? DEFAULT_MODEL;
-    this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.timeoutMs = options.timeoutMs;
   }
 
   async generateText(prompt: string): Promise<string> {
@@ -53,8 +52,10 @@ export class GeminiClient implements TextGenerator {
       throw new Error(`GEMINI_API_KEY_${keyNumber} is not configured`);
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    const controller = this.timeoutMs ? new AbortController() : undefined;
+    const timeout = controller
+      ? setTimeout(() => controller.abort(), this.timeoutMs)
+      : undefined;
 
     try {
       const response = await fetch(
@@ -63,7 +64,7 @@ export class GeminiClient implements TextGenerator {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-          signal: controller.signal
+          signal: controller?.signal
         }
       );
 
@@ -83,7 +84,9 @@ export class GeminiClient implements TextGenerator {
 
       return text;
     } finally {
-      clearTimeout(timeout);
+      if (timeout) {
+        clearTimeout(timeout);
+      }
     }
   }
 

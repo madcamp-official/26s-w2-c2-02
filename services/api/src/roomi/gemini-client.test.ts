@@ -29,8 +29,10 @@ describe('GeminiClient', () => {
 
     expect(text).toBe('다듬어진 목표');
     const calledUrl = fetchMock.mock.calls[0][0];
+    const calledInit = fetchMock.mock.calls[0][1];
     expect(calledUrl).toContain('gemini-2.5-flash');
     expect(calledUrl).toContain('key=test-key');
+    expect(calledInit?.signal).toBeUndefined();
   });
 
   it('throws when the response is not ok', async () => {
