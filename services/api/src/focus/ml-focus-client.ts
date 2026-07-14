@@ -1,5 +1,6 @@
 export interface MlFocusPredictor {
   predict(featureWindow: unknown): Promise<unknown>;
+  submitFeedback(feedback: unknown): Promise<unknown>;
 }
 
 export class MlFocusUpstreamError extends Error {
@@ -22,16 +23,24 @@ export class MlFocusClient implements MlFocusPredictor {
   ) {}
 
   async predict(featureWindow: unknown): Promise<unknown> {
+    return this.postToMlServer('/v1/focus/predict', featureWindow);
+  }
+
+  async submitFeedback(feedback: unknown): Promise<unknown> {
+    return this.postToMlServer('/v1/focus/feedback', feedback);
+  }
+
+  private async postToMlServer(path: string, body: unknown): Promise<unknown> {
     const controller = new AbortController();
     const timeout = globalThis.setTimeout(() => controller.abort(), this.options.timeoutMs ?? 5000);
 
     try {
       const response = await (this.options.fetcher ?? fetch)(
-        `${this.options.baseUrl.replace(/\/$/, '')}/v1/focus/predict`,
+        `${this.options.baseUrl.replace(/\/$/, '')}${path}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(featureWindow),
+          body: JSON.stringify(body),
           signal: controller.signal
         }
       );
@@ -41,6 +50,10 @@ export class MlFocusClient implements MlFocusPredictor {
           `ML focus server returned ${response.status}`,
           'unavailable'
         );
+      }
+
+      if (response.status === 204) {
+        return { ok: true };
       }
 
       return await response.json();

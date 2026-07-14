@@ -216,6 +216,14 @@ describe('POST /focus/predict', () => {
     });
   }
 
+  function feedback(body: unknown) {
+    return fetch(`${baseUrl}/focus/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  }
+
   it('forwards a feature window through the configured ML predictor', async () => {
     const featureWindow = { windowId: 'window-1', durationSec: 20 };
     const prediction = { modelVersion: 'ml-v1', label: 'focused', score: 0.9 };
@@ -224,7 +232,8 @@ describe('POST /focus/predict', () => {
       predict: async (input: unknown) => {
         received.push(input);
         return prediction;
-      }
+      },
+      submitFeedback: async () => ({ ok: true })
     };
 
     await startApp(mlPredictor);
@@ -242,12 +251,37 @@ describe('POST /focus/predict', () => {
     await startApp({
       predict: async () => {
         throw new MlFocusUpstreamError(`upstream ${kind}`, kind);
-      }
+      },
+      submitFeedback: async () => ({ ok: true })
     });
 
     const response = await predict({ windowId: 'window-1' });
 
     expect(response.status).toBe(status);
     expect(await response.json()).toEqual({ message: `upstream ${kind}` });
+  });
+
+  it('forwards user feedback through the configured ML predictor', async () => {
+    const userFeedback = {
+      windowId: 'window-1',
+      predictedLabel: 'distracted',
+      actualLabel: 'distracted',
+      wasActuallyFocused: false
+    };
+    const received: unknown[] = [];
+    const mlPredictor = {
+      predict: async () => ({ label: 'focused' }),
+      submitFeedback: async (input: unknown) => {
+        received.push(input);
+        return { ok: true };
+      }
+    };
+
+    await startApp(mlPredictor);
+    const response = await feedback(userFeedback);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    expect(received).toEqual([userFeedback]);
   });
 });

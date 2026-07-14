@@ -37,11 +37,13 @@
 - MediaPipe 테스트 화면에서 웹캠 얼굴 landmark 기반 Rule-Based 집중도 label, 점수, feature 지속 시간을 확인할 수 있게 추가했습니다.
 - MediaPipe 테스트 화면에서 Rule-Based 판정과 ML 서버 판정을 토글해 비교할 수 있게 했습니다. ML 서버 모드는 20초 feature window를 중앙 API의 `/focus/predict`로 보내고, 실패 시 로컬 Rule-Based 판정을 계속 표시합니다.
 - 중앙 API가 내부 ML 서버의 `/v1/focus/predict`를 호출하도록 전용 proxy를 추가했습니다. 연결 실패는 `502`, timeout은 `504`로 반환합니다.
+- MediaPipe 테스트 화면에서 ML이 비집중 확인 대상으로 예측하면 “혹시 집중 안하고 있어?” 확인 메시지를 띄우고, 사용자가 인정한 경우 중앙 API를 통해 ML 서버에 feedback을 보냅니다.
 
 ### Changed
 
 - 중앙 API의 기본 ML 서버 주소를 응답 가능한 LAN endpoint `http://192.168.0.83:8080`으로 변경했습니다. 기존 서버 환경에서 별도 주소를 써야 하면 `ROOMI_ML_API_URL`로 override 해야 합니다.
 - Desktop renderer가 내부 ML 서버에 직접 연결하지 않고 기존 `VITE_ROOMI_API_URL` 중앙 API를 통해 집중도 예측을 요청하도록 변경했습니다. 중앙 서버에는 `ROOMI_ML_API_URL=http://192.168.0.83:8080` 설정이 필요합니다.
+- 중앙 API가 내부 ML 서버의 `/v1/focus/feedback`으로 사용자 확인 feedback을 전달하도록 proxy를 확장했습니다.
 - ML 서버 예측 요청의 renderer 기본 abort 제한을 제거해 중앙 API 응답이 늦을 때 `signal is aborted without reason`으로 실패하지 않도록 했습니다.
 
 - 스터디룸에서 Daily 카메라를 다시 켤 때 종료된 기존 track을 재사용하지 않고 화상 call을 재생성해, 휴식 후 복귀와 동일하게 새 카메라 track을 획득합니다.

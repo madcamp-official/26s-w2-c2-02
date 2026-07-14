@@ -109,6 +109,23 @@ export function createApp(
     }
   });
 
+  app.post('/focus/feedback', async (request, response) => {
+    if (!mlFocusPredictor) {
+      response.status(503).json({ message: 'ML focus feedback is not configured' });
+      return;
+    }
+
+    try {
+      response.json(await mlFocusPredictor.submitFeedback(request.body));
+    } catch (error) {
+      if (error instanceof MlFocusUpstreamError) {
+        response.status(error.kind === 'timeout' ? 504 : 502).json({ message: error.message });
+        return;
+      }
+      response.status(502).json({ message: 'ML focus feedback failed' });
+    }
+  });
+
   app.get('/rooms/:inviteCode', (request, response) => {
     const snapshot = roomService.getByInviteCode(request.params.inviteCode);
 

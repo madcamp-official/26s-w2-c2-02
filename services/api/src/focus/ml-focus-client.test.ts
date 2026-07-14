@@ -22,6 +22,41 @@ describe('MlFocusClient', () => {
     );
   });
 
+  it('posts user feedback to the internal ML feedback endpoint', async () => {
+    const feedback = {
+      windowId: 'window-1',
+      predictedLabel: 'distracted',
+      actualLabel: 'distracted',
+      wasActuallyFocused: false
+    };
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true })
+    });
+    const client = new MlFocusClient({
+      baseUrl: 'http://192.168.0.83:8080/',
+      fetcher
+    });
+
+    await expect(client.submitFeedback(feedback)).resolves.toEqual({ ok: true });
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://192.168.0.83:8080/v1/focus/feedback',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify(feedback) })
+    );
+  });
+
+  it('accepts empty ML feedback responses', async () => {
+    const client = new MlFocusClient({
+      baseUrl: 'http://192.168.0.83:8080/',
+      fetcher: vi.fn().mockResolvedValue({
+        ok: true,
+        status: 204
+      })
+    });
+
+    await expect(client.submitFeedback({ windowId: 'window-1' })).resolves.toEqual({ ok: true });
+  });
+
   it('classifies an aborted upstream request as a timeout', async () => {
     const fetcher = vi.fn((_url: string, init?: RequestInit) => {
       return new Promise((_resolve, reject) => {

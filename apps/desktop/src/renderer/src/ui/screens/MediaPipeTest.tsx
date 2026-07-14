@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Bot, Camera, CircleStop, Play, RotateCcw, Settings, SlidersHorizontal } from 'lucide-react';
 import { FaceLandmarker } from '@mediapipe/tasks-vision';
 import {
+  type FocusFeedback,
   type FeatureWindowV1,
   type MlFocusLabel,
   type PredictResponse,
-  predictFocusWindow
+  predictFocusWindow,
+  sendFocusFeedback
 } from '../../focus-ml-client';
 import faceLandmarkerModel from '../../assets/mediapipe/face_landmarker.task?url';
 import wasmBinaryPath from '../../assets/mediapipe/vision_wasm_internal.wasm?url';
@@ -20,6 +22,7 @@ const wasmFileset = {
 type TestStatus = 'idle' | 'loading' | 'running' | 'stopped' | 'error';
 type FocusDecisionMode = 'rule' | 'ml';
 type MlPredictionStatus = 'idle' | 'collecting' | 'predicting' | 'ready' | 'fallback';
+type MlFeedbackStatus = 'idle' | 'sending' | 'sent' | 'dismissed' | 'error';
 type FocusLabel = 'focused' | 'distracted' | 'away' | 'sleepy' | 'uncertain' | 'paused';
 type FocusSignalName = 'face_missing' | 'eyes_closed' | 'head_turned' | 'head_down';
 
@@ -64,6 +67,7 @@ type FocusSnapshot = {
 };
 
 type MlPredictionSnapshot = {
+  featureWindow: FeatureWindowV1;
   response: PredictResponse;
   windowId: string;
   windowEnd: string;
@@ -239,6 +243,8 @@ export function MediaPipeTest({ go }: ScreenProps) {
   const [mlPredictionStatus, setMlPredictionStatus] = useState<MlPredictionStatus>('idle');
   const [mlPrediction, setMlPrediction] = useState<MlPredictionSnapshot | null>(null);
   const [mlError, setMlError] = useState<string | null>(null);
+  const [mlFeedbackStatus, setMlFeedbackStatus] = useState<MlFeedbackStatus>('idle');
+  const [mlFeedbackError, setMlFeedbackError] = useState<string | null>(null);
 
   useEffect(() => {
     settingsRef.current = ruleSettings;
@@ -280,6 +286,8 @@ export function MediaPipeTest({ go }: ScreenProps) {
       setMlPrediction(null);
       setMlPredictionStatus('idle');
       setMlError(null);
+      setMlFeedbackStatus('idle');
+      setMlFeedbackError(null);
       setStatus((current) => (current === 'error' ? current : 'stopped'));
     }
   };
@@ -397,11 +405,14 @@ export function MediaPipeTest({ go }: ScreenProps) {
       }
 
       setMlPrediction({
+        featureWindow,
         response,
         windowId: featureWindow.windowId,
         windowEnd: new Date().toLocaleTimeString()
       });
       setMlPredictionStatus('ready');
+      setMlFeedbackStatus('idle');
+      setMlFeedbackError(null);
     } catch (reason) {
       if (mlPredictionRequestRef.current !== requestId) {
         return;
@@ -409,6 +420,23 @@ export function MediaPipeTest({ go }: ScreenProps) {
 
       setMlPredictionStatus('fallback');
       setMlError(reason instanceof Error ? reason.message : 'ML 서버 예측을 사용할 수 없습니다.');
+    }
+  };
+
+  const confirmMlDistraction = async () => {
+    if (!mlPrediction) return;
+
+    setMlFeedbackStatus('sending');
+    setMlFeedbackError(null);
+
+    try {
+      await sendFocusFeedback(buildFocusFeedback(mlPrediction));
+      setMlFeedbackStatus('sent');
+    } catch (reason) {
+      setMlFeedbackStatus('error');
+      setMlFeedbackError(
+        reason instanceof Error ? reason.message : 'ML 서버에 피드백을 보내지 못했어요.'
+      );
     }
   };
 
@@ -497,6 +525,12 @@ export function MediaPipeTest({ go }: ScreenProps) {
     decisionMode === 'ml' && mlPrediction
       ? focusSnapshotFromMl(mlPrediction.response, focusSnapshot)
       : focusSnapshot;
+  const shouldShowMlFeedback =
+    decisionMode === 'ml' &&
+    mlPrediction?.response.shouldPrompt === true &&
+    mlPrediction.response.label !== 'focused' &&
+    mlFeedbackStatus !== 'sent' &&
+    mlFeedbackStatus !== 'dismissed';
   const labelClassName = `focus-label focus-label--${visibleFocusSnapshot.label}`;
   const focusScoreWidth = useMemo(
     () => `${Math.max(0, Math.min(100, visibleFocusSnapshot.score))}%`,
@@ -589,6 +623,42 @@ export function MediaPipeTest({ go }: ScreenProps) {
 
           {error ? <p className="mediapipe-test__error">{error}</p> : null}
           {mlError && decisionMode === 'ml' ? <p className="mediapipe-test__error">{mlError}</p> : null}
+          {mlFeedbackError && decisionMode === 'ml' ? (
+            <p className="mediapipe-test__error">{mlFeedbackError}</p>
+          ) : null}
+
+          {shouldShowMlFeedback ? (
+            <section className="ml-feedback" role="dialog" aria-label="ML 집중 확인" aria-modal="false">
+              <div>
+                <span className="ml-feedback__label">ML 확인</span>
+                <h2 className="ml-feedback__title">혹시 집중 안하고 있어?</h2>
+                <p className="ml-feedback__text">
+                  방금 window에서 {focusLabelText[visibleFocusSnapshot.label]} 상태로 예측됐어.
+                </p>
+              </div>
+              <div className="ml-feedback__actions">
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  disabled={mlFeedbackStatus === 'sending'}
+                  onClick={confirmMlDistraction}
+                >
+                  {mlFeedbackStatus === 'sending' ? '보내는 중...' : '맞아, 집중 안 했어'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  disabled={mlFeedbackStatus === 'sending'}
+                  onClick={() => setMlFeedbackStatus('dismissed')}
+                >
+                  아니, 집중 중이야
+                </button>
+              </div>
+            </section>
+          ) : null}
+          {mlFeedbackStatus === 'sent' ? (
+            <p className="ml-feedback__sent">피드백을 ML 서버에 보냈어요.</p>
+          ) : null}
 
           <section className="focus-card" aria-label="현재 집중도 판정">
             <div className="focus-card__head">
@@ -957,6 +1027,22 @@ function focusSnapshotFromMl(response: PredictResponse, fallback: FocusSnapshot)
     ...fallback,
     label: fromMlFocusLabel(response.label),
     score: Math.round(clamp(response.score, 0, 1) * 100)
+  };
+}
+
+function buildFocusFeedback(prediction: MlPredictionSnapshot): FocusFeedback {
+  const actualLabel = prediction.response.label === 'away' ? 'away' : 'distracted';
+
+  return {
+    windowId: prediction.windowId,
+    userId: prediction.featureWindow.userId,
+    sessionId: prediction.featureWindow.sessionId,
+    predictedLabel: prediction.response.label,
+    actualLabel,
+    wasActuallyFocused: false,
+    promptKind: prediction.response.promptKind,
+    source: 'mediapipe-test',
+    createdAt: new Date().toISOString()
   };
 }
 

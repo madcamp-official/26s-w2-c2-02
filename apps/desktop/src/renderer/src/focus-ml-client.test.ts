@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  type FocusFeedback,
   type FeatureWindowV1,
   MlFocusClientError,
   parsePredictResponse,
-  predictFocusWindow
+  predictFocusWindow,
+  sendFocusFeedback
 } from './focus-ml-client';
 
 const featureWindow: FeatureWindowV1 = {
@@ -83,6 +85,34 @@ describe('focus ML client', () => {
         method: 'POST',
         body: JSON.stringify(featureWindow),
         signal: undefined
+      })
+    );
+  });
+
+  it('posts user feedback through the central API', async () => {
+    const feedback: FocusFeedback = {
+      windowId: 'window-1',
+      userId: 'user-1',
+      sessionId: 'session-1',
+      predictedLabel: 'distracted',
+      actualLabel: 'distracted',
+      wasActuallyFocused: false,
+      promptKind: 'correction',
+      source: 'mediapipe-test',
+      createdAt: '2026-07-14T00:00:20.000Z'
+    };
+    const fetcher = vi.fn().mockResolvedValue({ ok: true });
+
+    await sendFocusFeedback(feedback, {
+      baseUrl: 'http://localhost:4100',
+      fetcher
+    });
+
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://localhost:4100/focus/feedback',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(feedback)
       })
     );
   });

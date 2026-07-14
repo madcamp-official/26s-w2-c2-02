@@ -40,6 +40,18 @@ export type PredictResponse = {
   reasons: string[];
 };
 
+export type FocusFeedback = {
+  windowId: string;
+  userId: string;
+  sessionId: string;
+  predictedLabel: MlFocusLabel;
+  actualLabel: MlFocusLabel;
+  wasActuallyFocused: boolean;
+  promptKind: PromptKind | null;
+  source: 'mediapipe-test';
+  createdAt: string;
+};
+
 const focusLabels: MlFocusLabel[] = ['focused', 'distracted', 'away', 'break_or_paused'];
 
 export class MlFocusClientError extends Error {
@@ -96,6 +108,29 @@ export async function predictFocusWindow(
     if (timeout) {
       clearTimeout(timeout);
     }
+  }
+}
+
+export async function sendFocusFeedback(
+  feedback: FocusFeedback,
+  options: {
+    baseUrl?: string;
+    fetcher?: typeof fetch;
+  } = {}
+): Promise<void> {
+  const baseUrl =
+    options.baseUrl ?? import.meta.env.VITE_ROOMI_API_URL ?? 'http://localhost:4100';
+  const fetcher = options.fetcher ?? fetch;
+  const response = await fetcher(`${baseUrl.replace(/\/$/, '')}/focus/feedback`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(feedback)
+  });
+
+  if (!response.ok) {
+    throw new MlFocusClientError(`ML focus feedback failed with ${response.status} from ${baseUrl}`);
   }
 }
 
