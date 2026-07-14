@@ -4,8 +4,14 @@ import type {
   CreateRoomInput,
   GoalRefineInput,
   GoalRefinement,
+  GameRevealInput,
+  GameSession,
+  GameStartInput,
   JoinRoomInput,
+  HiddenMission,
+  MissionResult,
   ParticipantReadyInput,
+  ExpressionReportInput,
   UpdateParticipantStatusInput,
   RoomiMessage,
   RoomSubscriptionInput,
@@ -128,6 +134,27 @@ export function updateParticipantStatus(
   socket?.emit(realtimeEvents.client.updateStatus, input);
 }
 
+export function startGame(
+  socket: Socket<ServerToClientEvents, ClientToServerEvents> | null,
+  input: GameStartInput
+) {
+  socket?.emit(realtimeEvents.client.startGame, input);
+}
+
+export function reportExpression(
+  socket: Socket<ServerToClientEvents, ClientToServerEvents> | null,
+  input: ExpressionReportInput
+) {
+  socket?.emit(realtimeEvents.client.reportExpression, input);
+}
+
+export function revealGame(
+  socket: Socket<ServerToClientEvents, ClientToServerEvents> | null,
+  input: GameRevealInput
+) {
+  socket?.emit(realtimeEvents.client.revealGame, input);
+}
+
 export function createRoomSocket() {
   return io(apiBaseUrl, {
     autoConnect: false,
@@ -140,6 +167,10 @@ export function subscribeToRoom(
   input: RoomSubscriptionInput,
   onSnapshot: (snapshot: RoomSnapshot) => void,
   onRoomiMessage: (message: RoomiMessage) => void,
+  onGameRoundBegin: (game: GameSession) => void,
+  onMissionAssign: (mission: HiddenMission) => void,
+  onMissionResult: (result: MissionResult) => void,
+  onGameReveal: (game: GameSession) => void,
   onError: (message: string) => void
 ) {
   socket.connect();
@@ -151,12 +182,20 @@ export function subscribeToRoom(
   socket.on(realtimeEvents.server.roomSnapshot, onSnapshot);
   socket.on(realtimeEvents.server.roomUpdated, onSnapshot);
   socket.on(realtimeEvents.server.roomiMessage, onRoomiMessage);
+  socket.on(realtimeEvents.server.gameRoundBegin, onGameRoundBegin);
+  socket.on(realtimeEvents.server.missionAssign, onMissionAssign);
+  socket.on(realtimeEvents.server.missionResult, onMissionResult);
+  socket.on(realtimeEvents.server.gameReveal, onGameReveal);
   socket.on(realtimeEvents.server.error, onError);
 
   return () => {
     socket.off(realtimeEvents.server.roomSnapshot, onSnapshot);
     socket.off(realtimeEvents.server.roomUpdated, onSnapshot);
     socket.off(realtimeEvents.server.roomiMessage, onRoomiMessage);
+    socket.off(realtimeEvents.server.gameRoundBegin, onGameRoundBegin);
+    socket.off(realtimeEvents.server.missionAssign, onMissionAssign);
+    socket.off(realtimeEvents.server.missionResult, onMissionResult);
+    socket.off(realtimeEvents.server.gameReveal, onGameReveal);
     socket.off(realtimeEvents.server.error, onError);
     socket.disconnect();
   };

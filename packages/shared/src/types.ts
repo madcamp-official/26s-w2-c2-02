@@ -2,6 +2,10 @@ export type ISODateString = string;
 
 export type RoomStatus = 'waiting' | 'studying' | 'break' | 'ended';
 
+export type GameKind = 'hidden_mission' | 'poker_bluff' | 'copycat_relay';
+
+export type GameStatus = 'lobby' | 'in_round' | 'guessing' | 'reveal' | 'ended';
+
 export type ParticipantStatus =
   | 'online'
   | 'focused'
@@ -65,10 +69,108 @@ export type Goal = {
 export type RoomiMessage = {
   id: string;
   roomId: string;
-  kind: 'goal_refine' | 'start' | 'focus_recovery' | 'break_return' | 'summary';
+  kind:
+    | 'goal_refine'
+    | 'start'
+    | 'focus_recovery'
+    | 'break_return'
+    | 'summary'
+    | 'game_intro'
+    | 'round_prompt'
+    | 'tell_hint'
+    | 'game_reveal'
+    | 'game_summary';
   text: string;
   targetParticipantId?: string;
   createdAt: ISODateString;
+};
+
+export type ExpressionSignals = {
+  timestamp: number;
+  smile: number;
+  jawOpen: number;
+  winkLeft: boolean;
+  winkRight: boolean;
+  browRaise: number;
+  cheekPuff: number;
+  mouthPucker: number;
+  headYaw: number;
+  headPitch: number;
+  headRoll: number;
+};
+
+export type HiddenMissionVerify =
+  | 'wink_count'
+  | 'smile_count'
+  | 'no_jaw_open'
+  | 'brow_count'
+  | 'cheek_puff_count';
+
+export type HiddenMission = {
+  id: string;
+  playerId: string;
+  prompt: string;
+  verify: HiddenMissionVerify;
+  target: number;
+};
+
+export type MissionResult = {
+  playerId: string;
+  missionId: string;
+  count: number;
+  success: boolean;
+};
+
+export type BluffTell = 'smile' | 'jaw' | 'brow' | null;
+
+export type BluffBet = {
+  participantId: string;
+  targetId: string;
+  predictsCrack: boolean;
+};
+
+export type BluffResult = {
+  targetId: string;
+  cracked: boolean;
+  tell: BluffTell;
+  heldMs: number;
+};
+
+export type RelayLink = {
+  fromId: string;
+  toId: string;
+  similarity: number;
+};
+
+export type GameRound = {
+  id: string;
+  gameId: string;
+  index: number;
+  status: GameStatus;
+  startedAt?: ISODateString;
+  endsAt?: ISODateString;
+  revealAt?: ISODateString;
+};
+
+export type GameScore = {
+  participantId: string;
+  points: number;
+};
+
+export type GameSession = {
+  id: string;
+  roomId: string;
+  kind: GameKind;
+  status: GameStatus;
+  round: GameRound;
+  scores: GameScore[];
+  missions?: HiddenMission[];
+  missionResults?: MissionResult[];
+  bluffBets?: BluffBet[];
+  bluffResult?: BluffResult;
+  relayLinks?: RelayLink[];
+  createdAt: ISODateString;
+  updatedAt: ISODateString;
 };
 
 export type FocusRankingEntry = {
@@ -101,6 +203,7 @@ export type RoomSnapshot = {
   goals: Goal[];
   roomiMessages: RoomiMessage[];
   currentSession?: StudySession;
+  currentGame?: GameSession;
 };
 
 export type RoomSession = {
@@ -178,4 +281,40 @@ export type GoalRefinement = {
   refinedText: string;
   reason: string;
   source: 'ollama' | 'template';
+};
+
+export type GameStartInput = {
+  roomId: string;
+  participantId: string;
+  kind: GameKind;
+};
+
+export type ExpressionReportInput = {
+  roomId: string;
+  participantId: string;
+  gameId: string;
+  roundId: string;
+  signals?: ExpressionSignals;
+  missionResult?: MissionResult;
+};
+
+export type BluffBetInput = {
+  roomId: string;
+  participantId: string;
+  gameId: string;
+  targetId: string;
+  predictsCrack: boolean;
+};
+
+export type RelayAdvanceInput = {
+  roomId: string;
+  participantId: string;
+  gameId: string;
+  link: RelayLink;
+};
+
+export type GameRevealInput = {
+  roomId: string;
+  participantId: string;
+  gameId: string;
 };

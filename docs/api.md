@@ -59,6 +59,11 @@ and rolls back the participant instead of returning a local-only video session.
 - The server owns the round timer through `currentSession.startedAt`,
   `currentSession.plannedMinutes`, and optional `breakEndsAt`. Clients calculate
   remaining time from server timestamps, so late joiners see the same clock.
+- If the configured central API is unavailable during local development, the
+  desktop renderer can still create a local demo room and run the face party
+  game UI on one machine. That fallback is intentionally process-local: invite
+  joins, Socket.IO sync, Daily video, and server-owned scoring still require the
+  central API.
 - Room leave behavior is split by context: the active-room leave control returns
   to the lobby without removing the participant, while the lobby leave control
   sends `room:leave` and returns to onboarding.
@@ -84,8 +89,17 @@ Client events are defined in `packages/shared/src/realtime-events.ts`.
 | `participant:ready` | client to server | Set the lobby readiness flag and broadcast `room:updated`. |
 | `goal:submit` | client to server | Legacy prompt/mission text update. Mirrors `POST /rooms/:roomId/goals` and broadcasts `room:updated`. |
 | `participant:update-status` | client to server | Publish player presence and local face-analysis state. Compatibility statuses include `online`, `focused`, `distracted`, `away`, `break`, and `paused`. |
+| `game:start` | client to server | Host starts a face party game (`hidden_mission`, `poker_bluff`, or `copycat_relay`). The server creates `currentGame`, assigns any private missions, and broadcasts `game:round-begin`. |
+| `expression:report` | client to server | Submit local expression-derived game results. Hidden mission rounds send a `missionResult`; expression bluff rounds send a `bluffResult`. |
+| `bluff:bet` | client to server | Submit a player's guess for an expression bluff target. |
+| `relay:advance` | client to server | Submit one relay mirror step with prompt, player expression signals, and similarity score. |
+| `game:reveal` | client to server | Host reveals the current game and asks the server to finalize scores. |
 | `room:snapshot` | server to client | Send the current room snapshot to a newly subscribed client. |
 | `room:updated` | server to client | Broadcast the latest room snapshot. |
+| `game:round-begin` | server to client | Broadcast the public game state for the new round. Hidden missions are removed from public snapshots. |
+| `mission:assign` | server to client | Send one hidden mission only to the assigned participant. |
+| `mission:result` | server to client | Broadcast a submitted mission result without raw camera frames. |
+| `game:reveal` | server to client | Broadcast the revealed game state, including final scores and missions that are now safe to show. |
 | `roomi:message` | server to client | Send a typed Roomi operator/game message. Targeted messages use `targetParticipantId`. |
 | `error` | server to client | Report a recoverable realtime error. |
 

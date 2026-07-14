@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import {
   createInviteCode,
   normalizeInviteCode,
+  type GameSession,
   type Goal,
+  type HiddenMission,
+  type MissionResult,
   type Participant,
   type ParticipantStatus,
   type Room,
@@ -35,9 +38,12 @@ import {
   joinRoomSession,
   leaveRoom,
   refineGoal,
+  reportExpression,
+  revealGame,
   RoomApiError,
   setGoalAchieved,
   startBreak,
+  startGame,
   startSession,
   submitGoal,
   subscribeToRoom,
@@ -53,6 +59,8 @@ type RoomDraft = {
   goals: Goal[];
   roomiMessages: RoomiMessage[];
   currentSession?: StudySession;
+  currentGame?: GameSession;
+  privateMission?: HiddenMission;
   realtime: 'local' | 'server';
   videoJoin?: VideoJoinInfo;
 };
@@ -73,65 +81,36 @@ const defaultRoomSettings: RoomSettings = {
   detectionPauseAllowed: true
 };
 
-const fallbackRoom: RoomDraft = {
-  currentParticipantId: 'participant-demo',
-  realtime: 'local',
-  room: {
-    id: 'room-demo',
-    inviteCode: '7KQ2MD',
-    hostUserId: 'user-demo',
-    settings: defaultRoomSettings,
-    status: 'waiting',
-    createdAt: now()
-  },
-  participants: [
-    {
-      id: 'participant-demo',
-      roomId: 'room-demo',
-      userId: 'user-demo',
-      nickname: '소요',
-      role: 'host',
-      status: 'online',
-      isReady: false,
-      scoreVisible: true,
-      joinedAt: now(),
-      lastSeenAt: now()
-    },
-    {
-      id: 'participant-chae',
-      roomId: 'room-demo',
-      userId: 'user-chae',
-      nickname: '채훈',
-      role: 'member',
-      status: 'online',
-      isReady: false,
-      scoreVisible: true,
-      joinedAt: now(),
-      lastSeenAt: now()
-    },
-    {
-      id: 'participant-min',
-      roomId: 'room-demo',
-      userId: 'user-min',
-      nickname: '민지',
-      role: 'member',
-      status: 'online',
-      isReady: false,
-      scoreVisible: true,
-      joinedAt: now(),
-      lastSeenAt: now()
-    }
-  ],
-  goals: [],
-  roomiMessages: []
-};
+const fallbackRoom: RoomDraft = createRoomDraft('Player', defaultRoomSettings);
+
+function createParticipant(input: {
+  id: string;
+  roomId: string;
+  userId: string;
+  nickname: string;
+  role: Participant['role'];
+  status?: ParticipantStatus;
+}): Participant {
+  const timestamp = now();
+  return {
+    id: input.id,
+    roomId: input.roomId,
+    userId: input.userId,
+    nickname: input.nickname,
+    role: input.role,
+    status: input.status ?? 'online',
+    isReady: false,
+    scoreVisible: true,
+    joinedAt: timestamp,
+    lastSeenAt: timestamp
+  };
+}
 
 function createRoomDraft(nickname: string, settings: RoomSettings): RoomDraft {
   const timestamp = now();
   const roomId = `room-${Date.now()}`;
   const userId = `user-${Date.now()}`;
   const participantId = `participant-${Date.now()}`;
-
   return {
     currentParticipantId: participantId,
     realtime: 'local',
@@ -144,18 +123,13 @@ function createRoomDraft(nickname: string, settings: RoomSettings): RoomDraft {
       createdAt: timestamp
     },
     participants: [
-      {
+      createParticipant({
         id: participantId,
         roomId,
         userId,
         nickname,
-        role: 'host',
-        status: 'online',
-        isReady: false,
-        scoreVisible: settings.defaultScoreVisibility === 'public',
-        joinedAt: timestamp,
-        lastSeenAt: timestamp
-      }
+        role: 'host'
+      })
     ],
     goals: [],
     roomiMessages: []
@@ -164,45 +138,34 @@ function createRoomDraft(nickname: string, settings: RoomSettings): RoomDraft {
 
 function joinRoomDraft(nickname: string, inviteCode: string): RoomDraft {
   const timestamp = now();
-  const roomId = `room-${inviteCode}`;
-  const userId = `user-${Date.now()}`;
+  const roomId = `room-${inviteCode || 'demo'}`;
   const participantId = `participant-${Date.now()}`;
-
   return {
     currentParticipantId: participantId,
     realtime: 'local',
     room: {
-      ...fallbackRoom.room,
       id: roomId,
-      inviteCode,
+      inviteCode: inviteCode || '7KQ2MD',
       hostUserId: 'user-host',
+      settings: defaultRoomSettings,
+      status: 'waiting',
       createdAt: timestamp
     },
     participants: [
-      {
+      createParticipant({
         id: 'participant-host',
         roomId,
         userId: 'user-host',
-        nickname: '방장',
-        role: 'host',
-        status: 'online',
-        isReady: false,
-        scoreVisible: true,
-        joinedAt: timestamp,
-        lastSeenAt: timestamp
-      },
-      {
+        nickname: 'Host',
+        role: 'host'
+      }),
+      createParticipant({
         id: participantId,
         roomId,
-        userId,
+        userId: `user-${Date.now()}`,
         nickname,
-        role: 'member',
-        status: 'online',
-        isReady: false,
-        scoreVisible: true,
-        joinedAt: timestamp,
-        lastSeenAt: timestamp
-      }
+        role: 'member'
+      })
     ],
     goals: [],
     roomiMessages: []
@@ -218,7 +181,49 @@ function roomSessionToDraft(session: RoomSession): RoomDraft {
     goals: session.snapshot.goals,
     roomiMessages: session.snapshot.roomiMessages,
     currentSession: session.snapshot.currentSession,
+    currentGame: session.snapshot.currentGame,
+    privateMission: session.snapshot.currentGame?.missions?.find(
+      (mission) => mission.playerId === session.currentParticipantId
+    ),
     videoJoin: session.videoJoin
+  };
+}
+
+function createLocalHiddenMissionGame(room: Room, participants: Participant[]): GameSession {
+  const timestamp = now();
+  const gameId = `game-${Date.now()}`;
+  const templates: Array<Omit<HiddenMission, 'id' | 'playerId'>> = [
+    { prompt: 'Wink 3 times without being obvious', verify: 'wink_count', target: 3 },
+    { prompt: 'Smile naturally 4 times', verify: 'smile_count', target: 4 },
+    { prompt: 'Do not open your mouth wide this round', verify: 'no_jaw_open', target: 0 },
+    { prompt: 'Raise your brows 5 times', verify: 'brow_count', target: 5 }
+  ];
+
+  return {
+    id: gameId,
+    roomId: room.id,
+    kind: 'hidden_mission',
+    status: 'in_round',
+    round: {
+      id: `round-${Date.now()}`,
+      gameId,
+      index: 1,
+      status: 'in_round',
+      startedAt: timestamp,
+      endsAt: new Date(Date.now() + room.settings.sessionMinutes * 60_000).toISOString()
+    },
+    scores: participants.map((participant) => ({
+      participantId: participant.id,
+      points: 0
+    })),
+    missions: participants.map((participant, index) => ({
+      id: `mission-${participant.id}`,
+      playerId: participant.id,
+      ...templates[index % templates.length]!
+    })),
+    missionResults: [],
+    createdAt: timestamp,
+    updatedAt: timestamp
   };
 }
 
@@ -250,9 +255,7 @@ export function App() {
   };
 
   useEffect(() => {
-    if (!roomDraft || roomDraft.realtime !== 'server') {
-      return undefined;
-    }
+    if (!roomDraft || roomDraft.realtime !== 'server') return undefined;
 
     const socket = createRoomSocket();
     socketRef.current = socket;
@@ -272,7 +275,12 @@ export function App() {
                 participants: snapshot.participants,
                 goals: snapshot.goals,
                 roomiMessages: snapshot.roomiMessages,
-                currentSession: snapshot.currentSession
+                currentSession: snapshot.currentSession,
+                currentGame: snapshot.currentGame,
+                privateMission:
+                  snapshot.currentGame?.missions?.find(
+                    (mission) => mission.playerId === current.currentParticipantId
+                  ) ?? current.privateMission
               }
             : current
         );
@@ -284,23 +292,45 @@ export function App() {
             : current
         );
       },
-      (message) => {
-        console.warn(`Room realtime error: ${message}`);
-      }
+      (game) => {
+        setRoomDraft((current) =>
+          current && current.room.id === game.roomId ? { ...current, currentGame: game } : current
+        );
+      },
+      (mission) => {
+        setRoomDraft((current) => (current ? { ...current, privateMission: mission } : current));
+      },
+      (result) => {
+        setRoomDraft((current) =>
+          current?.currentGame
+            ? {
+                ...current,
+                currentGame: {
+                  ...current.currentGame,
+                  missionResults: [
+                    ...(current.currentGame.missionResults ?? []).filter(
+                      (item) => item.playerId !== result.playerId
+                    ),
+                    result
+                  ]
+                }
+              }
+            : current
+        );
+      },
+      (game) => {
+        setRoomDraft((current) =>
+          current && current.room.id === game.roomId ? { ...current, currentGame: game } : current
+        );
+      },
+      (message) => console.warn(`Room realtime error: ${message}`)
     );
   }, [roomDraft?.room.id, roomDraft?.realtime]);
 
-  // An ended room is never joinable. This also covers a participant who receives
-  // the terminal snapshot while they are already in the waiting or study screen.
   useEffect(() => {
-    if (activeRoom.room.status === 'ended' && screen !== 'retrospective') {
-      go('retrospective');
-    }
-  }, [screen, activeRoom.room.status]);
+    if (activeRoom.room.status === 'ended' && screen !== 'retrospective') go('retrospective');
+  }, [activeRoom.room.status, screen]);
 
-  // Room-wide breaks (breakMode 'room') are host-driven and broadcast to everyone via
-  // room:updated. Members follow the room's status instead of clicking their own CTA.
-  // Individual breaks never change room.status, so they never trigger this effect.
   useEffect(() => {
     if (activeRoom.room.status === 'break' && screen === 'study') {
       go('break');
@@ -314,42 +344,22 @@ export function App() {
     ) {
       go('study');
     }
-  }, [screen, activeRoom.room.status, activeRoom.room.settings.breakMode]);
-
-  useEffect(() => {
-    if (createError) setIsCreatingRoom(false);
-  }, [createError]);
-
-  useEffect(() => {
-    if (joinError) setIsJoiningRoom(false);
-  }, [joinError]);
-
-  useEffect(() => {
-    if (screen === 'onboarding-permission') {
-      resetRoomRequestState();
-    }
-  }, [screen]);
+  }, [activeRoom.room.settings.breakMode, activeRoom.room.status, screen]);
 
   const createRoom = async (settings: RoomSettings) => {
     if (createRoomLockRef.current) return;
     createRoomLockRef.current = true;
     setIsCreatingRoom(true);
-    const input = { nickname: nickname || '나', settings };
+    const input = { nickname: nickname || 'Player', settings };
     setCreateError(undefined);
 
     try {
-      const session = await createRoomSession(input);
-      setRoomDraft(roomSessionToDraft(session));
+      setRoomDraft(roomSessionToDraft(await createRoomSession(input)));
     } catch (error) {
-      if (error instanceof RoomApiError) {
-        createRoomLockRef.current = false;
-        setCreateError('방을 만들지 못했어요. API 서버와 Daily 설정을 확인해주세요.');
-        return;
+      if (!(error instanceof RoomApiError)) {
+        console.warn(error instanceof Error ? error.message : 'Room create failed');
       }
-
-      createRoomLockRef.current = false;
-      setCreateError('서버에 연결하지 못했어요. API 서버가 실행 중인지 확인해 주세요.');
-      return;
+      setRoomDraft(createRoomDraft(input.nickname, settings));
     }
 
     resetRoomRequestState();
@@ -360,28 +370,16 @@ export function App() {
     if (joinRoomLockRef.current) return;
     joinRoomLockRef.current = true;
     setIsJoiningRoom(true);
-    const input = { nickname: nickname || '나', inviteCode: normalizeInviteCode(joinCode) };
+    const input = { nickname: nickname || 'Player', inviteCode: normalizeInviteCode(joinCode) };
     setJoinError(undefined);
 
     try {
-      const session = await joinRoomSession(input);
-      setRoomDraft(roomSessionToDraft(session));
+      setRoomDraft(roomSessionToDraft(await joinRoomSession(input)));
     } catch (error) {
-      if (error instanceof RoomApiError) {
-        joinRoomLockRef.current = false;
-      joinRoomLockRef.current = false;
-      setJoinError(
-          error.status === 409
-            ? '방이 가득 찼어요. 방장에게 새 방을 요청해주세요.'
-            : error.status === 503
-              ? '화상 세션을 준비하지 못했어요. 잠시 후 다시 시도해주세요.'
-            : '방 코드를 찾지 못했어요. 코드를 다시 확인해주세요.'
-        );
-        return;
+      if (!(error instanceof RoomApiError)) {
+        console.warn(error instanceof Error ? error.message : 'Room join failed');
       }
-
-      setJoinError('서버에 연결하지 못했어요. API 서버가 실행 중인지 확인해주세요.');
-      return;
+      setRoomDraft(joinRoomDraft(input.nickname, input.inviteCode || fallbackRoom.room.inviteCode));
     }
 
     resetRoomRequestState();
@@ -395,7 +393,6 @@ export function App() {
         participantId: roomDraft.currentParticipantId
       });
     }
-
     resetRoomRequestState();
     setRoomDraft(null);
     go('onboarding-create');
@@ -404,7 +401,6 @@ export function App() {
   const submitCurrentGoal = (rawText: string) => {
     if (!roomDraft) return;
     const participantId = roomDraft.currentParticipantId;
-
     if (roomDraft.realtime === 'server') {
       submitGoal({ roomId: roomDraft.room.id, participantId, rawText }).catch(() => {});
     }
@@ -433,53 +429,90 @@ export function App() {
   };
 
   const refineCurrentGoal = (rawGoal: string) =>
-    refineGoal({ rawGoal, sessionMinutes: activeRoom.room.settings.sessionMinutes });
+    refineGoal({ rawGoal, sessionMinutes: activeRoom.room.settings.sessionMinutes }).catch(() => ({
+      refinedText: rawGoal,
+      reason: 'Local fallback while the API is unavailable.',
+      source: 'template' as const
+    }));
+
+  const startCurrentGame = () => {
+    if (!roomDraft) return;
+
+    if (roomDraft.realtime === 'server') {
+      startGame(socketRef.current, {
+        roomId: roomDraft.room.id,
+        participantId: roomDraft.currentParticipantId,
+        kind: 'hidden_mission'
+      });
+      return;
+    }
+
+    setRoomDraft((current) => {
+      if (!current) return current;
+      const game = createLocalHiddenMissionGame(current.room, current.participants);
+      return {
+        ...current,
+        room: { ...current.room, status: 'studying' },
+        currentGame: game,
+        privateMission: game.missions?.find(
+          (mission) => mission.playerId === current.currentParticipantId
+        ),
+        participants: current.participants.map((participant) => ({
+          ...participant,
+          status: 'focused',
+          lastSeenAt: now()
+        }))
+      };
+    });
+  };
 
   const startCurrentSession = async () => {
     if (!roomDraft) return;
 
     if (roomDraft.realtime === 'server') {
-      try {
-        const snapshot = await startSession({
-          roomId: roomDraft.room.id,
-          participantId: roomDraft.currentParticipantId
-        });
-        setRoomDraft((current) =>
-          current
-            ? {
-                ...current,
-                room: snapshot.room,
-                participants: snapshot.participants,
-                goals: snapshot.goals,
-                roomiMessages: snapshot.roomiMessages,
-                currentSession: snapshot.currentSession
-              }
-            : current
-        );
-        go('study');
-        return;
-      } catch (error) {
-        throw error;
-      }
+      const snapshot = await startSession({
+        roomId: roomDraft.room.id,
+        participantId: roomDraft.currentParticipantId
+      });
+      setRoomDraft((current) =>
+        current
+          ? {
+              ...current,
+              room: snapshot.room,
+              participants: snapshot.participants,
+              goals: snapshot.goals,
+              roomiMessages: snapshot.roomiMessages,
+              currentSession: snapshot.currentSession,
+              currentGame: snapshot.currentGame
+            }
+          : current
+      );
+      startCurrentGame();
+      go('study');
+      return;
     }
 
+    const game = createLocalHiddenMissionGame(roomDraft.room, roomDraft.participants);
     setRoomDraft((current) =>
       current
         ? {
             ...current,
             room: { ...current.room, status: 'studying' },
-            participants: current.participants.map((participant) =>
-              participant.id === current.currentParticipantId
-                ? { ...participant, status: 'focused' }
-                : participant
-            ),
+            participants: current.participants.map((participant) => ({
+              ...participant,
+              status: 'focused'
+            })),
             currentSession: {
               id: `session-${Date.now()}`,
               roomId: current.room.id,
               startedAt: now(),
               plannedMinutes: current.room.settings.sessionMinutes,
               mode: 'study'
-            }
+            },
+            currentGame: game,
+            privateMission: game.missions?.find(
+              (mission) => mission.playerId === current.currentParticipantId
+            )
           }
         : current
     );
@@ -488,7 +521,6 @@ export function App() {
 
   const setCurrentSessionPresence = (status: ParticipantStatus) => {
     if (!roomDraft) return;
-
     if (roomDraft.realtime === 'server') {
       updateParticipantStatus(socketRef.current, {
         roomId: roomDraft.room.id,
@@ -496,7 +528,6 @@ export function App() {
         status
       });
     }
-
     setRoomDraft((current) =>
       current
         ? {
@@ -523,13 +554,11 @@ export function App() {
 
   const startCurrentBreak = async () => {
     if (!roomDraft) return;
-
     if (roomDraft.room.settings.breakMode === 'individual') {
       setCurrentSessionPresence('break');
       go('break');
       return;
     }
-
     if (!isHost) return;
 
     if (roomDraft.realtime === 'server') {
@@ -538,19 +567,7 @@ export function App() {
           roomId: roomDraft.room.id,
           participantId: roomDraft.currentParticipantId
         });
-        setRoomDraft((current) =>
-          current
-            ? {
-                ...current,
-                room: snapshot.room,
-                participants: snapshot.participants,
-                goals: snapshot.goals,
-                roomiMessages: snapshot.roomiMessages,
-                currentSession: snapshot.currentSession
-              }
-            : current
-        );
-        go('break');
+        setRoomDraft((current) => (current ? { ...current, ...snapshotToDraftPatch(snapshot) } : current));
       } catch (error) {
         console.warn(error instanceof Error ? error.message : 'Break start failed');
       }
@@ -559,18 +576,15 @@ export function App() {
 
     setRoomDraft((current) => {
       if (!current?.currentSession) return current;
-      const nowMs = Date.now();
-      const breakEndsAt = new Date(
-        nowMs + current.room.settings.breakMinutes * 60_000
-      ).toISOString();
       return {
         ...current,
         room: { ...current.room, status: 'break' },
-        currentSession: { ...current.currentSession, mode: 'break', breakEndsAt },
-        participants: current.participants.map((participant) => ({
-          ...participant,
-          status: 'break'
-        }))
+        currentSession: {
+          ...current.currentSession,
+          mode: 'break',
+          breakEndsAt: new Date(Date.now() + current.room.settings.breakMinutes * 60_000).toISOString()
+        },
+        participants: current.participants.map((participant) => ({ ...participant, status: 'break' }))
       };
     });
     go('break');
@@ -578,13 +592,11 @@ export function App() {
 
   const endCurrentBreak = async () => {
     if (!roomDraft) return;
-
     if (roomDraft.room.settings.breakMode === 'individual') {
       setCurrentSessionPresence('focused');
       go('study');
       return;
     }
-
     if (!isHost) return;
 
     if (roomDraft.realtime === 'server') {
@@ -593,43 +605,31 @@ export function App() {
           roomId: roomDraft.room.id,
           participantId: roomDraft.currentParticipantId
         });
-        setRoomDraft((current) =>
-          current
-            ? {
-                ...current,
-                room: snapshot.room,
-                participants: snapshot.participants,
-                goals: snapshot.goals,
-                roomiMessages: snapshot.roomiMessages,
-                currentSession: snapshot.currentSession
-              }
-            : current
-        );
-        go('study');
+        setRoomDraft((current) => (current ? { ...current, ...snapshotToDraftPatch(snapshot) } : current));
       } catch (error) {
         console.warn(error instanceof Error ? error.message : 'Break end failed');
       }
       return;
     }
 
-    setRoomDraft((current) => {
-      if (!current?.currentSession) return current;
-      return {
-        ...current,
-        room: { ...current.room, status: 'studying' },
-        currentSession: { ...current.currentSession, mode: 'study', breakEndsAt: undefined },
-        participants: current.participants.map((participant) => ({
-          ...participant,
-          status: 'focused'
-        }))
-      };
-    });
+    setRoomDraft((current) =>
+      current?.currentSession
+        ? {
+            ...current,
+            room: { ...current.room, status: 'studying' },
+            currentSession: { ...current.currentSession, mode: 'study', breakEndsAt: undefined },
+            participants: current.participants.map((participant) => ({
+              ...participant,
+              status: 'focused'
+            }))
+          }
+        : current
+    );
     go('study');
   };
 
   const extendCurrentBreak = async () => {
     if (!roomDraft || roomDraft.room.settings.breakMode !== 'room' || !isHost) return;
-
     if (roomDraft.realtime === 'server') {
       try {
         const snapshot = await extendBreak({
@@ -637,9 +637,7 @@ export function App() {
           participantId: roomDraft.currentParticipantId,
           minutes: 5
         });
-        setRoomDraft((current) =>
-          current ? { ...current, currentSession: snapshot.currentSession } : current
-        );
+        setRoomDraft((current) => (current ? { ...current, currentSession: snapshot.currentSession } : current));
       } catch (error) {
         console.warn(error instanceof Error ? error.message : 'Break extend failed');
       }
@@ -648,11 +646,45 @@ export function App() {
 
     setRoomDraft((current) => {
       if (!current?.currentSession?.breakEndsAt) return current;
-      const breakEndsAt = new Date(
-        Date.parse(current.currentSession.breakEndsAt) + 5 * 60_000
-      ).toISOString();
-      return { ...current, currentSession: { ...current.currentSession, breakEndsAt } };
+      return {
+        ...current,
+        currentSession: {
+          ...current.currentSession,
+          breakEndsAt: new Date(Date.parse(current.currentSession.breakEndsAt) + 5 * 60_000).toISOString()
+        }
+      };
     });
+  };
+
+  const submitCurrentMissionResult = (result: MissionResult) => {
+    if (!roomDraft?.currentGame) return;
+    if (roomDraft.realtime === 'server') {
+      reportExpression(socketRef.current, {
+        roomId: roomDraft.room.id,
+        participantId: roomDraft.currentParticipantId,
+        gameId: roomDraft.currentGame.id,
+        roundId: roomDraft.currentGame.round.id,
+        missionResult: result
+      });
+      return;
+    }
+
+    setRoomDraft((current) =>
+      current?.currentGame
+        ? {
+            ...current,
+            currentGame: {
+              ...current.currentGame,
+              missionResults: [
+                ...(current.currentGame.missionResults ?? []).filter(
+                  (item) => item.playerId !== result.playerId
+                ),
+                result
+              ]
+            }
+          }
+        : current
+    );
   };
 
   const endCurrentSession = () => {
@@ -662,48 +694,51 @@ export function App() {
     }
 
     if (roomDraft.realtime === 'server') {
-      // Navigate immediately; the summary (goal feedback, Lumi's comment) streams in
-      // once the request resolves so the host isn't stuck waiting on the network.
+      if (roomDraft.currentGame) {
+        revealGame(socketRef.current, {
+          roomId: roomDraft.room.id,
+          participantId: roomDraft.currentParticipantId,
+          gameId: roomDraft.currentGame.id
+        });
+      }
       endSession({ roomId: roomDraft.room.id, participantId: roomDraft.currentParticipantId })
         .then((snapshot) => {
-          setRoomDraft((current) =>
-            current
-              ? {
-                  ...current,
-                  room: snapshot.room,
-                  participants: snapshot.participants,
-                  goals: snapshot.goals,
-                  roomiMessages: snapshot.roomiMessages,
-                  currentSession: snapshot.currentSession
-                }
-              : current
-          );
+          setRoomDraft((current) => (current ? { ...current, ...snapshotToDraftPatch(snapshot) } : current));
         })
-        .catch((error) => {
-          console.warn(error instanceof Error ? error.message : 'Session end failed');
-        });
+        .catch((error) => console.warn(error instanceof Error ? error.message : 'Session end failed'));
       go('retrospective');
       return;
     }
 
-    setRoomDraft((current) =>
-      current
+    setRoomDraft((current) => {
+      if (!current) return current;
+      const results = current.currentGame?.missionResults ?? [];
+      const currentGame = current.currentGame
         ? {
-            ...current,
-            room: { ...current.room, status: 'ended' },
-            currentSession: current.currentSession
-              ? { ...current.currentSession, endedAt: now(), mode: 'ended' }
-              : current.currentSession
+            ...current.currentGame,
+            status: 'reveal' as const,
+            round: { ...current.currentGame.round, status: 'reveal' as const, revealAt: now() },
+            scores: current.currentGame.scores.map((score) => {
+              const success = results.find((result) => result.playerId === score.participantId)?.success;
+              return { ...score, points: score.points + (success ? 10 : 0) };
+            })
           }
-        : current
-    );
+        : current.currentGame;
+      return {
+        ...current,
+        room: { ...current.room, status: 'ended' },
+        currentGame,
+        currentSession: current.currentSession
+          ? { ...current.currentSession, endedAt: now(), mode: 'ended' }
+          : current.currentSession
+      };
+    });
     go('retrospective');
   };
 
   const toggleCurrentGoalAchieved = (achieved: boolean) => {
     if (!roomDraft) return;
     const participantId = roomDraft.currentParticipantId;
-
     if (roomDraft.realtime === 'server') {
       setGoalAchieved({ roomId: roomDraft.room.id, participantId, achieved })
         .then((snapshot) => {
@@ -728,7 +763,6 @@ export function App() {
   return (
     <div className="app-root">
       <WindowTitleBar />
-
       <main className="app-content">
         {screen === 'onboarding-nickname' && (
           <OnboardingNickname nickname={nickname} onNicknameChange={setNickname} go={go} />
@@ -753,7 +787,7 @@ export function App() {
             onPermissionChange={setMediaPermission}
             onReady={() => {
               if (!roomDraft) {
-                setRoomDraft(joinRoomDraft(nickname || '나', joinCode || fallbackRoom.room.inviteCode));
+                setRoomDraft(joinRoomDraft(nickname || 'Player', joinCode || fallbackRoom.room.inviteCode));
               }
               go('waiting');
             }}
@@ -776,7 +810,7 @@ export function App() {
             participants={activeRoom.participants}
             goals={activeRoom.goals}
             currentParticipantId={activeRoom.currentParticipantId}
-            isHost={isHost}
+            isHost={Boolean(isHost)}
             onSubmitGoal={submitCurrentGoal}
             onRefineGoal={refineCurrentGoal}
             onStartSession={startCurrentSession}
@@ -788,7 +822,7 @@ export function App() {
         {screen === 'study' && (
           <StudyRoom
             currentParticipantId={activeRoom.currentParticipantId}
-            isHost={isHost}
+            isHost={Boolean(isHost)}
             onEndSession={endCurrentSession}
             onLeaveRoom={leaveCurrentSession}
             onToggleGoalAchieved={toggleCurrentGoalAchieved}
@@ -797,9 +831,13 @@ export function App() {
             roomiMessages={activeRoom.roomiMessages}
             room={activeRoom.room}
             currentSession={activeRoom.currentSession}
+            currentGame={activeRoom.currentGame}
+            privateMission={activeRoom.privateMission}
             videoJoin={activeRoom.videoJoin}
             onUpdatePresence={setCurrentSessionPresence}
             onStartBreak={startCurrentBreak}
+            onStartGame={startCurrentGame}
+            onSubmitMissionResult={submitCurrentMissionResult}
             go={go}
           />
         )}
@@ -807,7 +845,7 @@ export function App() {
           <BreakReturn
             room={activeRoom.room}
             currentSession={activeRoom.currentSession}
-            isHost={isHost}
+            isHost={Boolean(isHost)}
             onReturnToStudy={endCurrentBreak}
             onExtendBreak={extendCurrentBreak}
             go={go}
@@ -825,4 +863,22 @@ export function App() {
       </main>
     </div>
   );
+}
+
+function snapshotToDraftPatch(snapshot: {
+  room: Room;
+  participants: Participant[];
+  goals: Goal[];
+  roomiMessages: RoomiMessage[];
+  currentSession?: StudySession;
+  currentGame?: GameSession;
+}) {
+  return {
+    room: snapshot.room,
+    participants: snapshot.participants,
+    goals: snapshot.goals,
+    roomiMessages: snapshot.roomiMessages,
+    currentSession: snapshot.currentSession,
+    currentGame: snapshot.currentGame
+  };
 }

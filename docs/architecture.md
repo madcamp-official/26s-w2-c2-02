@@ -56,6 +56,19 @@ The server owns round timing through `currentSession.startedAt`,
 clock from those timestamps, so late joiners and reconnecting players see the
 same remaining time without each client becoming its own timer authority.
 
+Face party games use `currentGame` on the room snapshot and Socket.IO events for
+round changes. The API starts rounds, stores hidden missions and scores, sends
+private mission assignments only to the matching participant, and broadcasts
+public game snapshots without hidden mission text until reveal. The renderer
+uses local expression signals to update mission progress, while the API remains
+the authority for multiplayer results.
+
+When the central API is unavailable, the desktop renderer can enter a local
+single-machine demo room so UI and local expression work can continue. That path
+does not replace the central server contract: cross-device joins, Daily media
+tokens, realtime synchronization, and authoritative multiplayer scoring still
+depend on `services/api`.
+
 ## Compatibility Naming
 
 Some runtime names still come from the earlier study-room prototype:

@@ -1,7 +1,15 @@
 import type {
+  BluffBet,
+  BluffResult,
   CreateRoomInput,
+  ExpressionSignals,
   FocusRankingEntry,
+  GameKind,
+  GameSession,
   Goal,
+  HiddenMission,
+  MissionResult,
+  RelayLink,
   JoinRoomInput,
   Participant,
   ParticipantStatus,
@@ -24,6 +32,8 @@ import type { VideoProvider } from '../video/daily-video-provider';
 type RoomUpdatedListener = (snapshot: RoomSnapshot) => void;
 type RoomiMessageListener = (message: RoomiMessage) => void;
 type AddRoomiMessageInput = Omit<RoomiMessage, 'id' | 'createdAt'>;
+type GameUpdatedListener = (snapshot: RoomSnapshot, game: GameSession) => void;
+type MissionAssignedListener = (roomId: string, mission: HiddenMission) => void;
 
 type FocusTrackerEntry = {
   focusedSeconds: number;
@@ -35,6 +45,8 @@ export class RoomService {
   private readonly dailyRooms = new Map<string, { name: string; roomUrl: string }>();
   private readonly roomUpdatedListeners = new Set<RoomUpdatedListener>();
   private readonly roomiMessageListeners = new Set<RoomiMessageListener>();
+  private readonly gameUpdatedListeners = new Set<GameUpdatedListener>();
+  private readonly missionAssignedListeners = new Set<MissionAssignedListener>();
   // Keyed by roomId, then participantId. Every ParticipantStatus transition funnels through
   // updateParticipantStatus, so this is the single seam a future focus-detection integration
   // (MediaPipe, ML) needs to call into — no other ranking code has to change.
@@ -486,6 +498,213 @@ export class RoomService {
     return snapshot;
   }
 
+  startGame(roomId: string, participantId: string, kind: GameKind): GameSession {
+    const snapshot = this.store.findByRoomId(roomId);
+
+    if (!snapshot) throw new Error('Room not found');
+
+    const host = snapshot.participants.find((participant) => participant.id === participantId);
+    if (!host || host.role !== 'host') throw new Error('Only the host can start the game');
+
+    const now = new Date().toISOString();
+    const gameId = crypto.randomUUID();
+    const game: GameSession = {
+      id: gameId,
+      roomId,
+      kind,
+      status: 'in_round',
+      round: {
+        id: crypto.randomUUID(),
+        gameId,
+        index: 1,
+        status: 'in_round',
+        startedAt: now,
+        endsAt: new Date(Date.now() + 90_000).toISOString()
+      },
+      scores: snapshot.participants.map((participant) => ({
+        participantId: participant.id,
+        points: 0
+      })),
+      missions: kind === 'hidden_mission' ? this.createHiddenMissions(snapshot.participants) : [],
+      missionResults: [],
+      bluffBets: kind === 'poker_bluff' ? [] : undefined,
+      relayLinks: kind === 'copycat_relay' ? [] : undefined,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    snapshot.currentGame = game;
+    snapshot.room = { ...snapshot.room, status: 'studying' };
+    snapshot.participants = snapshot.participants.map((participant) => ({
+      ...participant,
+      status: 'focused',
+      lastSeenAt: now
+    }));
+    this.store.update(snapshot);
+    this.emitRoomUpdated(snapshot);
+    this.emitGameUpdated(snapshot, game);
+    game.missions?.forEach((mission) => this.emitMissionAssigned(roomId, mission));
+    return game;
+  }
+
+  recordMissionResult(roomId: string, result: MissionResult): GameSession {
+    const snapshot = this.store.findByRoomId(roomId);
+    if (!snapshot?.currentGame) throw new Error('No active game');
+
+    const game = snapshot.currentGame;
+    if (game.kind !== 'hidden_mission') throw new Error('Mission results require hidden mission');
+    if (!game.missions?.some((mission) => mission.id === result.missionId && mission.playerId === result.playerId)) {
+      throw new Error('Mission not found');
+    }
+
+    const missionResults = [
+      ...(game.missionResults ?? []).filter((item) => item.playerId !== result.playerId),
+      result
+    ];
+    snapshot.currentGame = {
+      ...game,
+      missionResults,
+      updatedAt: new Date().toISOString()
+    };
+    this.store.update(snapshot);
+    this.emitGameUpdated(snapshot, snapshot.currentGame);
+    return snapshot.currentGame;
+  }
+
+  placeBluffBet(roomId: string, bet: BluffBet): GameSession {
+    const snapshot = this.store.findByRoomId(roomId);
+    if (!snapshot?.currentGame) throw new Error('No active game');
+    if (snapshot.currentGame.kind !== 'poker_bluff') {
+      throw new Error('Bluff bets require poker bluff');
+    }
+
+    const participantExists = snapshot.participants.some(
+      (participant) => participant.id === bet.participantId
+    );
+    const targetExists = snapshot.participants.some(
+      (participant) => participant.id === bet.targetId
+    );
+    if (!participantExists || !targetExists) throw new Error('Participant not found');
+
+    const bluffBets = [
+      ...(snapshot.currentGame.bluffBets ?? []).filter(
+        (item) => item.participantId !== bet.participantId
+      ),
+      bet
+    ];
+    snapshot.currentGame = {
+      ...snapshot.currentGame,
+      status: 'guessing',
+      round: { ...snapshot.currentGame.round, status: 'guessing' },
+      bluffBets,
+      updatedAt: new Date().toISOString()
+    };
+    this.store.update(snapshot);
+    this.emitGameUpdated(snapshot, snapshot.currentGame);
+    return snapshot.currentGame;
+  }
+
+  recordBluffResult(
+    roomId: string,
+    targetId: string,
+    signals: ExpressionSignals
+  ): GameSession {
+    const snapshot = this.store.findByRoomId(roomId);
+    if (!snapshot?.currentGame) throw new Error('No active game');
+    if (snapshot.currentGame.kind !== 'poker_bluff') {
+      throw new Error('Bluff results require poker bluff');
+    }
+
+    const result = this.bluffResultFromSignals(targetId, signals);
+    const scores = snapshot.currentGame.scores.map((score) => {
+      const matchedBet = snapshot.currentGame?.bluffBets?.find(
+        (bet) => bet.participantId === score.participantId
+      );
+      const betPoints =
+        matchedBet && matchedBet.predictsCrack === result.cracked ? 4 : 0;
+      const targetPoints = score.participantId === targetId && !result.cracked ? 8 : 0;
+      return { ...score, points: score.points + betPoints + targetPoints };
+    });
+
+    snapshot.currentGame = {
+      ...snapshot.currentGame,
+      bluffResult: result,
+      scores,
+      updatedAt: new Date().toISOString()
+    };
+    this.store.update(snapshot);
+    this.emitGameUpdated(snapshot, snapshot.currentGame);
+    return snapshot.currentGame;
+  }
+
+  advanceRelay(roomId: string, link: RelayLink): GameSession {
+    const snapshot = this.store.findByRoomId(roomId);
+    if (!snapshot?.currentGame) throw new Error('No active game');
+    if (snapshot.currentGame.kind !== 'copycat_relay') {
+      throw new Error('Relay links require copycat relay');
+    }
+
+    const participantIds = new Set(snapshot.participants.map((participant) => participant.id));
+    if (!participantIds.has(link.fromId) || !participantIds.has(link.toId)) {
+      throw new Error('Participant not found');
+    }
+
+    const normalizedLink = {
+      ...link,
+      similarity: Math.max(0, Math.min(1, link.similarity))
+    };
+    const scores = snapshot.currentGame.scores.map((score) =>
+      score.participantId === link.toId
+        ? { ...score, points: score.points + Math.round(normalizedLink.similarity * 10) }
+        : score
+    );
+
+    snapshot.currentGame = {
+      ...snapshot.currentGame,
+      relayLinks: [...(snapshot.currentGame.relayLinks ?? []), normalizedLink],
+      scores,
+      updatedAt: new Date().toISOString()
+    };
+    this.store.update(snapshot);
+    this.emitGameUpdated(snapshot, snapshot.currentGame);
+    return snapshot.currentGame;
+  }
+
+  revealGame(roomId: string, participantId: string, gameId: string): GameSession {
+    const snapshot = this.store.findByRoomId(roomId);
+    if (!snapshot?.currentGame || snapshot.currentGame.id !== gameId) {
+      throw new Error('No active game');
+    }
+
+    const requester = snapshot.participants.find((participant) => participant.id === participantId);
+    if (!requester) throw new Error('Participant not found');
+    if (requester.role !== 'host') throw new Error('Only the host can reveal the game');
+
+    const now = new Date().toISOString();
+    const results = snapshot.currentGame.missionResults ?? [];
+    const scores =
+      snapshot.currentGame.kind === 'hidden_mission'
+        ? snapshot.currentGame.scores.map((score) => {
+            const success = results.find(
+              (result) => result.playerId === score.participantId
+            )?.success;
+            return { ...score, points: score.points + (success ? 10 : 0) };
+          })
+        : snapshot.currentGame.scores;
+
+    snapshot.currentGame = {
+      ...snapshot.currentGame,
+      status: 'reveal',
+      round: { ...snapshot.currentGame.round, status: 'reveal', revealAt: now },
+      scores,
+      updatedAt: now
+    };
+    this.store.update(snapshot);
+    this.emitRoomUpdated(snapshot);
+    this.emitGameUpdated(snapshot, snapshot.currentGame);
+    return snapshot.currentGame;
+  }
+
   leaveRoom(roomId: string, participantId: string): RoomSnapshot {
     const snapshot = this.store.findByRoomId(roomId);
 
@@ -588,6 +807,16 @@ export class RoomService {
     };
   }
 
+  onGameUpdated(listener: GameUpdatedListener): () => void {
+    this.gameUpdatedListeners.add(listener);
+    return () => this.gameUpdatedListeners.delete(listener);
+  }
+
+  onMissionAssigned(listener: MissionAssignedListener): () => void {
+    this.missionAssignedListeners.add(listener);
+    return () => this.missionAssignedListeners.delete(listener);
+  }
+
   private touchFocusTracker(
     roomId: string,
     participantId: string,
@@ -659,6 +888,40 @@ export class RoomService {
     return createSharedInviteCode();
   }
 
+  private createHiddenMissions(participants: Participant[]): HiddenMission[] {
+    const templates: Array<Omit<HiddenMission, 'id' | 'playerId'>> = [
+      { prompt: '몰래 윙크 3번 하기', verify: 'wink_count', target: 3 },
+      { prompt: '대화 중 자연스럽게 미소 4번 짓기', verify: 'smile_count', target: 4 },
+      { prompt: '이번 라운드 동안 입 크게 벌리지 않기', verify: 'no_jaw_open', target: 0 },
+      { prompt: '눈썹을 5번 올리기', verify: 'brow_count', target: 5 },
+      { prompt: '볼을 2번 부풀리기', verify: 'cheek_puff_count', target: 2 }
+    ];
+
+    return participants.map((participant, index) => ({
+      id: crypto.randomUUID(),
+      playerId: participant.id,
+      ...templates[index % templates.length]!
+    }));
+  }
+
+  private bluffResultFromSignals(targetId: string, signals: ExpressionSignals): BluffResult {
+    const tell =
+      signals.smile >= 0.58
+        ? 'smile'
+        : signals.jawOpen >= 0.45
+          ? 'jaw'
+          : signals.browRaise >= 0.5
+            ? 'brow'
+            : null;
+
+    return {
+      targetId,
+      cracked: tell !== null,
+      tell,
+      heldMs: Math.max(0, Date.now() - signals.timestamp)
+    };
+  }
+
   private async createVideoJoin(
     snapshot: RoomSnapshot,
     participant: Participant
@@ -710,9 +973,29 @@ export class RoomService {
     this.roomUpdatedListeners.forEach((listener) => listener(snapshot));
   }
 
+  private emitGameUpdated(snapshot: RoomSnapshot, game: GameSession) {
+    this.gameUpdatedListeners.forEach((listener) => listener(snapshot, game));
+  }
+
+  private emitMissionAssigned(roomId: string, mission: HiddenMission) {
+    this.missionAssignedListeners.forEach((listener) => listener(roomId, mission));
+  }
+
   private withVisibleMessages(snapshot: RoomSnapshot, participantId?: string): RoomSnapshot {
+    const currentGame = snapshot.currentGame
+      ? {
+          ...snapshot.currentGame,
+          missions: snapshot.currentGame.missions?.filter(
+            (mission) =>
+              snapshot.currentGame?.status === 'reveal' ||
+              (participantId !== undefined && mission.playerId === participantId)
+          )
+        }
+      : snapshot.currentGame;
+
     return {
       ...snapshot,
+      currentGame,
       roomiMessages: snapshot.roomiMessages.filter(
         (message) => !message.targetParticipantId || message.targetParticipantId === participantId
       )

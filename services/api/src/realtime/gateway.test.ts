@@ -1,6 +1,13 @@
 import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { realtimeEvents, type RoomiMessage, type RoomSnapshot } from '@roomi/shared';
+import {
+  realtimeEvents,
+  type GameSession,
+  type HiddenMission,
+  type MissionResult,
+  type RoomiMessage,
+  type RoomSnapshot
+} from '@roomi/shared';
 import { io as createClient, type Socket } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { InMemoryRoomStore } from '../adapters/storage/in-memory-room-store';
@@ -177,5 +184,73 @@ describe('realtime gateway', () => {
     const [hostSnapshot, memberSnapshot] = await Promise.all([hostUpdate, memberUpdate]);
     expect(hostSnapshot.roomiMessages).toEqual([]);
     expect(memberSnapshot.roomiMessages).toHaveLength(1);
+  });
+
+  it('runs a hidden mission game from start to result reveal over sockets', async () => {
+    const created = roomService.createRoom({ nickname: 'host' });
+    const joined = roomService.joinRoom({ nickname: 'member', inviteCode: created.room.inviteCode });
+    const host = created.participants[0]!;
+    const member = joined.participants.at(-1)!;
+    const [hostClient, memberClient] = await Promise.all([connectClient(), connectClient()]);
+    await Promise.all([
+      subscribe(hostClient, created.room.id, host.id),
+      subscribe(memberClient, created.room.id, member.id)
+    ]);
+
+    const hostMission = new Promise<HiddenMission>((resolve) =>
+      hostClient.once(realtimeEvents.server.missionAssign, resolve)
+    );
+    const memberMission = new Promise<HiddenMission>((resolve) =>
+      memberClient.once(realtimeEvents.server.missionAssign, resolve)
+    );
+    const roundBegin = new Promise<GameSession>((resolve) =>
+      memberClient.once(realtimeEvents.server.gameRoundBegin, resolve)
+    );
+
+    hostClient.emit(realtimeEvents.client.startGame, {
+      roomId: created.room.id,
+      participantId: host.id,
+      kind: 'hidden_mission'
+    });
+
+    const [game, privateHostMission, privateMemberMission] = await Promise.all([
+      roundBegin,
+      hostMission,
+      memberMission
+    ]);
+    expect(game.kind).toBe('hidden_mission');
+    expect(privateHostMission.playerId).toBe(host.id);
+    expect(privateMemberMission.playerId).toBe(member.id);
+
+    const missionResult: MissionResult = {
+      playerId: host.id,
+      missionId: privateHostMission.id,
+      count: privateHostMission.target,
+      success: true
+    };
+    const resultBroadcast = new Promise<MissionResult>((resolve) =>
+      memberClient.once(realtimeEvents.server.missionResult, resolve)
+    );
+    hostClient.emit(realtimeEvents.client.reportExpression, {
+      roomId: created.room.id,
+      participantId: host.id,
+      gameId: game.id,
+      roundId: game.round.id,
+      missionResult
+    });
+    await expect(resultBroadcast).resolves.toEqual(missionResult);
+
+    const reveal = new Promise<GameSession>((resolve) =>
+      memberClient.once(realtimeEvents.server.gameReveal, resolve)
+    );
+    hostClient.emit(realtimeEvents.client.revealGame, {
+      roomId: created.room.id,
+      participantId: host.id,
+      gameId: game.id
+    });
+
+    const revealed = await reveal;
+    expect(revealed.status).toBe('reveal');
+    expect(revealed.scores.find((score) => score.participantId === host.id)?.points).toBe(10);
   });
 });
