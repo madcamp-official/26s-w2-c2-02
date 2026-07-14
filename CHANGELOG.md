@@ -123,7 +123,7 @@
 ### Notes
 ### Manual Steps
 
-- LLM proxy를 사용하려면 중앙 API 서버에서 `ROOMI_LLM_API_URL`을 내부 LLM 서버 주소로 설정하세요. Roomi API 자체를 `8081`에 띄우려면 `API_PORT=8081`을 설정하되, 같은 머신에서 upstream LLM도 `8081`을 쓰고 있으면 둘 중 하나의 포트를 변경해야 합니다.
+- LLM proxy를 사용하려면 중앙 API 서버에서 `ROOMI_LLM_API_URL`을 내부 LLM 서버 주소로 설정하세요. 외부 클라이언트는 별도 LLM hostname 없이 기존 Roomi API base URL의 `/v1/*` 경로를 호출하면 됩니다.
 - 라이브 LLM 메시지를 사용하려면 API 서버의 `services/api/.env`에 `GEMINI_API_KEY`를 설정해야 합니다. 키가 없으면 템플릿 fallback이 자동 적용됩니다.
 - `@roomi/*` workspace package scope 로 변경된 뒤에는 `pnpm install` 을 다시 실행해 로컬 workspace link 를 갱신해야 합니다.
 - 새 workspace script 를 사용하기 전에 `pnpm install` 을 실행해야 합니다.

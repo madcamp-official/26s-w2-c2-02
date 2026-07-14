@@ -152,15 +152,15 @@ Expected response:
 { "ok": true, "service": "roomi-api" }
 ```
 
-If another local computer should call the central API as an LLM proxy, start this API on the shared host and send OpenAI-compatible requests to the Roomi API base URL:
+If another local computer should call the central API as an LLM proxy, use the same Roomi API base URL as the rest of the app. In the shared MAD Camp environment, the public base URL is `https://api.roomi.madcamp-kaist.org`:
 
 ```sh
-curl http://192.168.0.23:4100/v1/chat/completions \
+curl https://api.roomi.madcamp-kaist.org/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{"model":"gemma3:4b","messages":[{"role":"user","content":"안녕"}]}'
 ```
 
-To expose the Roomi API itself on port `8081`, set `API_PORT=8081` on the proxy host. Do not bind the proxy to `8081` on the same machine that already runs the upstream LLM server on `8081`; in that case keep the Roomi API on another port such as `4100`, or move one of the two services.
+The internal LLM server can keep using `ROOMI_LLM_API_URL=http://192.168.0.83:8081`; external clients should not need a separate LLM hostname.
 
 Client `apps/desktop/.env` example for the desktop renderer:
 
