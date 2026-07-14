@@ -88,7 +88,7 @@ The API server loads the root `.env` first, then loads `services/api/.env` if it
 | `DAILY_API_KEY` | Daily API key for room/token creation. |
 | `DAILY_DOMAIN` | Daily domain used by the video provider. |
 | `GEMINI_API_KEY` | Google Gemini API key for goal refinement, kept server-side only. When unset, `POST /goals/refine` returns a deterministic template instead of calling the LLM. |
-| `ROOMI_ML_API_URL` | Internal ML server base URL. Defaults to `http://170.10.5.140:8080`; keep this server-side. |
+| `ROOMI_ML_API_URL` | Internal ML server base URL. Defaults to `http://192.168.0.83:8080`; keep this server-side. |
 | `ROOMI_ML_API_TIMEOUT_MS` | Timeout in milliseconds for central API requests to the internal ML server. Defaults to `5000`. |
 
 During local development, the API also accepts renderer origins on `localhost` and `127.0.0.1` in the `5100-5199` port range. This lets Electron and a browser guest join the same local API during one-machine testing. If another PC serves the renderer from a LAN address, add an exact origin or a narrow wildcard such as `http://192.168.*:5175`.
@@ -121,7 +121,7 @@ API_HOST=0.0.0.0
 CLIENT_ORIGIN=http://localhost:5175,http://127.0.0.1:5175,http://192.168.*:5175
 DAILY_API_KEY=...
 DAILY_DOMAIN=...
-ROOMI_ML_API_URL=http://170.10.5.140:8080
+ROOMI_ML_API_URL=http://192.168.0.83:8080
 ROOMI_ML_API_TIMEOUT_MS=5000
 GEMINI_API_KEY=
 ```

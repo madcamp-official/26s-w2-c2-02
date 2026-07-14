@@ -8,7 +8,7 @@ describe('MlFocusClient', () => {
       json: async () => ({ label: 'focused', score: 0.9 })
     });
     const client = new MlFocusClient({
-      baseUrl: 'http://170.10.5.140:8080/',
+      baseUrl: 'http://192.168.0.83:8080/',
       fetcher
     });
 
@@ -17,7 +17,7 @@ describe('MlFocusClient', () => {
       score: 0.9
     });
     expect(fetcher).toHaveBeenCalledWith(
-      'http://170.10.5.140:8080/v1/focus/predict',
+      'http://192.168.0.83:8080/v1/focus/predict',
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ windowId: 'window-1' }) })
     );
   });
@@ -29,7 +29,7 @@ describe('MlFocusClient', () => {
       });
     }) as unknown as typeof fetch;
     const client = new MlFocusClient({
-      baseUrl: 'http://170.10.5.140:8080',
+      baseUrl: 'http://192.168.0.83:8080',
       timeoutMs: 1,
       fetcher
     });

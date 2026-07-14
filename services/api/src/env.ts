@@ -52,6 +52,6 @@ export const env = {
   dailyApiKey: process.env.DAILY_API_KEY,
   dailyDomain: process.env.DAILY_DOMAIN,
   geminiApiKey: process.env.GEMINI_API_KEY,
-  mlApiUrl: process.env.ROOMI_ML_API_URL ?? 'http://170.10.5.140:8080',
+  mlApiUrl: process.env.ROOMI_ML_API_URL ?? 'http://192.168.0.83:8080',
   mlApiTimeoutMs: Number(process.env.ROOMI_ML_API_TIMEOUT_MS ?? 5000)
 };
