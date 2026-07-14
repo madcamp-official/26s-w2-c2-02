@@ -9,6 +9,8 @@
 | `POST` | `/rooms/join` | Join an existing room by invite code and return the caller participant id. |
 | `POST` | `/rooms/:roomId/goals` | Upsert the calling participant's goal (`participantId`, `rawText`) and return the room snapshot. Allowed regardless of room status (late joiners can set goals). |
 | `POST` | `/goals/refine` | Refine a raw goal (`rawGoal`, `sessionMinutes`) via Gemini and return `{ refinedText, reason, source }`. Always `200`; `source` is `template` when the LLM is unavailable. The raw goal is not persisted. |
+| `GET` | `/v1/models` | Forward an OpenAI-compatible model list request to the configured internal LLM server. |
+| `POST` | `/v1/chat/completions` | Forward an OpenAI-compatible chat completion request to the configured internal LLM server. |
 | `POST` | `/focus/predict` | Forward a renderer feature window to the internal ML server's `/v1/focus/predict` endpoint. Returns the ML response unchanged, `502` when the upstream is unavailable, and `504` when it times out. |
 | `POST` | `/focus/feedback` | Forward a renderer user correction to the internal ML server's `/v1/focus/feedback` endpoint. Returns the ML response unchanged, `502` when the upstream is unavailable, and `504` when it times out. |
 | `DELETE` | `/focus/feedback/:userId` | Forward a feedback reset request to the internal ML server's `/v1/focus/feedback/:userId` endpoint. Deletes that user's feedback and resets personalization on the ML server. |
@@ -92,6 +94,8 @@ The API server loads the root `.env` first, then loads `services/api/.env` if it
 | `GEMINI_API_KEY` | Google Gemini API key for goal refinement, kept server-side only. When unset, `POST /goals/refine` returns a deterministic template instead of calling the LLM. |
 | `ROOMI_ML_API_URL` | Internal ML server base URL. Defaults to `http://192.168.0.83:8080`; keep this server-side. |
 | `ROOMI_ML_API_TIMEOUT_MS` | Timeout in milliseconds for central API requests to the internal ML server. Defaults to `5000`. |
+| `ROOMI_LLM_API_URL` | Internal OpenAI-compatible LLM server base URL. Defaults to `http://192.168.0.83:8081`; keep this server-side when clients should not call the LLM server directly. |
+| `ROOMI_LLM_API_TIMEOUT_MS` | Timeout in milliseconds for central API requests to the internal LLM server. Defaults to `30000`. |
 
 During local development, the API also accepts renderer origins on `localhost`, `127.0.0.1`, and private LAN addresses (`10.*`, `172.16-31.*`, `192.168.*`) in the `5100-5199` port range. Packaged Electron requests are allowed with the `file://` and serialized `null` origins. This lets Electron and browser guests join the same central API during one-machine or LAN testing. For non-private origins, add an exact origin or a narrow wildcard through `CLIENT_ORIGIN`.
 
@@ -125,6 +129,8 @@ DAILY_API_KEY=...
 DAILY_DOMAIN=...
 ROOMI_ML_API_URL=http://192.168.0.83:8080
 ROOMI_ML_API_TIMEOUT_MS=5000
+ROOMI_LLM_API_URL=http://192.168.0.83:8081
+ROOMI_LLM_API_TIMEOUT_MS=30000
 GEMINI_API_KEY=
 ```
 
@@ -145,6 +151,16 @@ Expected response:
 ```json
 { "ok": true, "service": "roomi-api" }
 ```
+
+If another local computer should call the central API as an LLM proxy, start this API on the shared host and send OpenAI-compatible requests to the Roomi API base URL:
+
+```sh
+curl http://192.168.0.23:4100/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"gemma3:4b","messages":[{"role":"user","content":"안녕"}]}'
+```
+
+To expose the Roomi API itself on port `8081`, set `API_PORT=8081` on the proxy host. Do not bind the proxy to `8081` on the same machine that already runs the upstream LLM server on `8081`; in that case keep the Roomi API on another port such as `4100`, or move one of the two services.
 
 Client `apps/desktop/.env` example for the desktop renderer:
 

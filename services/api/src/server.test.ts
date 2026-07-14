@@ -7,6 +7,7 @@ import { RoomService } from './rooms/room-service';
 import { RoomiOrchestrator, type TextGenerator } from './roomi/roomi-orchestrator';
 import { createApp } from './server';
 import { MlFocusUpstreamError, type MlFocusPredictor } from './focus/ml-focus-client';
+import { LlmProxyUpstreamError, type LlmProxy } from './llm/llm-proxy-client';
 
 describe('POST /rooms/:roomId/goals', () => {
   let httpServer: HttpServer;
@@ -16,7 +17,7 @@ describe('POST /rooms/:roomId/goals', () => {
   beforeEach(async () => {
     roomService = new RoomService(new InMemoryRoomStore());
     httpServer = createServer(createApp(roomService, new RoomiOrchestrator()));
-    await new Promise<void>((resolve) => httpServer.listen(0, resolve));
+    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
     const { port } = httpServer.address() as AddressInfo;
     baseUrl = `http://localhost:${port}`;
   });
@@ -81,7 +82,7 @@ describe('POST /sessions', () => {
   beforeEach(async () => {
     roomService = new RoomService(new InMemoryRoomStore());
     httpServer = createServer(createApp(roomService, new RoomiOrchestrator()));
-    await new Promise<void>((resolve) => httpServer.listen(0, resolve));
+    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
     const { port } = httpServer.address() as AddressInfo;
     baseUrl = `http://localhost:${port}`;
   });
@@ -150,7 +151,7 @@ describe('POST /goals/refine', () => {
 
   async function startApp(orchestrator: RoomiOrchestrator) {
     httpServer = createServer(createApp(new RoomService(new InMemoryRoomStore()), orchestrator));
-    await new Promise<void>((resolve) => httpServer.listen(0, resolve));
+    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
     const { port } = httpServer.address() as AddressInfo;
     baseUrl = `http://localhost:${port}`;
   }
@@ -203,7 +204,7 @@ describe('POST /focus/predict', () => {
     httpServer = createServer(
       createApp(new RoomService(new InMemoryRoomStore()), new RoomiOrchestrator(), mlPredictor)
     );
-    await new Promise<void>((resolve) => httpServer.listen(0, resolve));
+    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
     const { port } = httpServer.address() as AddressInfo;
     baseUrl = `http://localhost:${port}`;
   }
@@ -322,6 +323,117 @@ describe('POST /focus/predict', () => {
   });
 });
 
+describe('LLM proxy routes', () => {
+  let httpServer: HttpServer;
+  let baseUrl: string;
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  });
+
+  async function startApp(llmProxy: LlmProxy) {
+    httpServer = createServer(
+      createApp(
+        new RoomService(new InMemoryRoomStore()),
+        new RoomiOrchestrator(),
+        undefined,
+        llmProxy
+      )
+    );
+    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
+    const { port } = httpServer.address() as AddressInfo;
+    baseUrl = `http://localhost:${port}`;
+  }
+
+  it('forwards OpenAI-compatible chat completion requests through the configured LLM proxy', async () => {
+    const received: unknown[] = [];
+    await startApp({
+      forward: async (input) => {
+        received.push(input);
+        return {
+          status: 200,
+          contentType: 'application/json',
+          body: '{"choices":[{"message":{"content":"안녕!"}}]}'
+        };
+      }
+    });
+
+    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gemma3:4b',
+        messages: [{ role: 'user', content: '안녕' }]
+      })
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('application/json');
+    expect(await response.json()).toEqual({
+      choices: [{ message: { content: '안녕!' } }]
+    });
+    expect(received).toEqual([
+      {
+        method: 'POST',
+        path: '/v1/chat/completions',
+        body: {
+          model: 'gemma3:4b',
+          messages: [{ role: 'user', content: '안녕' }]
+        }
+      }
+    ]);
+  });
+
+  it('forwards model list requests through the configured LLM proxy', async () => {
+    const received: unknown[] = [];
+    await startApp({
+      forward: async (input) => {
+        received.push(input);
+        return {
+          status: 200,
+          contentType: 'application/json',
+          body: '{"object":"list","data":[{"id":"gemma3:4b"}]}'
+        };
+      }
+    });
+
+    const response = await fetch(`${baseUrl}/v1/models`);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      object: 'list',
+      data: [{ id: 'gemma3:4b' }]
+    });
+    expect(received).toEqual([
+      {
+        method: 'GET',
+        path: '/v1/models',
+        body: undefined
+      }
+    ]);
+  });
+
+  it.each([
+    ['unavailable', 502],
+    ['timeout', 504]
+  ] as const)('maps an LLM upstream %s failure to %s', async (kind, status) => {
+    await startApp({
+      forward: async () => {
+        throw new LlmProxyUpstreamError(`llm ${kind}`, kind);
+      }
+    });
+
+    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'gemma3:4b', messages: [] })
+    });
+
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ message: `llm ${kind}` });
+  });
+});
+
 describe('CORS for packaged Electron', () => {
   let httpServer: HttpServer;
   let baseUrl: string;
@@ -330,7 +442,7 @@ describe('CORS for packaged Electron', () => {
     httpServer = createServer(
       createApp(new RoomService(new InMemoryRoomStore()), new RoomiOrchestrator())
     );
-    await new Promise<void>((resolve) => httpServer.listen(0, resolve));
+    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
     const { port } = httpServer.address() as AddressInfo;
     baseUrl = `http://localhost:${port}`;
   });

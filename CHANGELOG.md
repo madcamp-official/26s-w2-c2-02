@@ -7,6 +7,7 @@
 
 ### Added
 
+- 중앙 Roomi API가 `/v1/models`, `/v1/chat/completions` 같은 OpenAI 호환 LLM 요청을 내부 LLM 서버로 대신 전달하는 proxy를 제공합니다. 다른 로컬 컴퓨터는 LLM 서버에 직접 붙지 않고 Roomi API base URL로 요청할 수 있습니다.
 - 루미 메시지를 방 상태에 저장하고 실시간으로 전달하도록 연결했습니다. 자리 비움이 60초 이상 이어진 경우에만 해당 참가자에게 집중 회복 메시지를 보내며, 같은 참가자에게는 5분 cooldown을 적용합니다.
 - 스터디 라이브 세션을 시작하면 루미가 Gemini 기반 시작 멘트를 실시간으로 안내하고, 집중 이탈·자리 비움 상태에는 해당 참가자에게만 회복 메시지를 보냅니다. Gemini를 사용할 수 없을 때도 템플릿 문구로 세션이 계속 진행됩니다.
 - 대기실에서 루미에게 목표를 다듬어 달라고 요청하고, 제안을 확인한 뒤 바로 내 목표로 저장할 수 있게 했습니다. Gemini 키가 없을 때의 템플릿 제안도 같은 흐름으로 사용할 수 있습니다.
@@ -122,6 +123,7 @@
 ### Notes
 ### Manual Steps
 
+- LLM proxy를 사용하려면 중앙 API 서버에서 `ROOMI_LLM_API_URL`을 내부 LLM 서버 주소로 설정하세요. Roomi API 자체를 `8081`에 띄우려면 `API_PORT=8081`을 설정하되, 같은 머신에서 upstream LLM도 `8081`을 쓰고 있으면 둘 중 하나의 포트를 변경해야 합니다.
 - 라이브 LLM 메시지를 사용하려면 API 서버의 `services/api/.env`에 `GEMINI_API_KEY`를 설정해야 합니다. 키가 없으면 템플릿 fallback이 자동 적용됩니다.
 - `@roomi/*` workspace package scope 로 변경된 뒤에는 `pnpm install` 을 다시 실행해 로컬 workspace link 를 갱신해야 합니다.
 - 새 workspace script 를 사용하기 전에 `pnpm install` 을 실행해야 합니다.

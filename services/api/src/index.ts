@@ -8,6 +8,7 @@ import { DailyVideoProvider } from './video/daily-video-provider';
 import { GeminiClient } from './roomi/gemini-client';
 import { RoomiOrchestrator } from './roomi/roomi-orchestrator';
 import { MlFocusClient } from './focus/ml-focus-client';
+import { LlmProxyClient } from './llm/llm-proxy-client';
 
 const store = new InMemoryRoomStore();
 const roomService = new RoomService(store, new DailyVideoProvider());
@@ -17,7 +18,11 @@ const mlFocusPredictor = new MlFocusClient({
   baseUrl: env.mlApiUrl,
   timeoutMs: env.mlApiTimeoutMs
 });
-const app = createApp(roomService, roomiOrchestrator, mlFocusPredictor);
+const llmProxy = new LlmProxyClient({
+  baseUrl: env.llmApiUrl,
+  timeoutMs: env.llmApiTimeoutMs
+});
+const app = createApp(roomService, roomiOrchestrator, mlFocusPredictor, llmProxy);
 const httpServer = createServer(app);
 
 registerRealtimeGateway(httpServer, roomService, roomiOrchestrator);

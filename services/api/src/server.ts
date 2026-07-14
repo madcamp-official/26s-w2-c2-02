@@ -8,13 +8,15 @@ import type {
 } from '@roomi/shared';
 import { isAllowedClientOrigin } from './env';
 import { MlFocusUpstreamError, type MlFocusPredictor } from './focus/ml-focus-client';
+import { LlmProxyUpstreamError, type LlmProxy } from './llm/llm-proxy-client';
 import type { RoomService } from './rooms/room-service';
 import type { RoomiOrchestrator } from './roomi/roomi-orchestrator';
 
 export function createApp(
   roomService: RoomService,
   roomiOrchestrator: RoomiOrchestrator,
-  mlFocusPredictor?: MlFocusPredictor
+  mlFocusPredictor?: MlFocusPredictor,
+  llmProxy?: LlmProxy
 ) {
   const app = express();
 
@@ -29,6 +31,31 @@ export function createApp(
 
   app.get('/health', (_request, response) => {
     response.json({ ok: true, service: 'roomi-api' });
+  });
+
+  app.all('/v1/*', async (request, response) => {
+    if (!llmProxy) {
+      response.status(503).json({ message: 'LLM proxy is not configured' });
+      return;
+    }
+
+    try {
+      const proxied = await llmProxy.forward({
+        method: request.method,
+        path: request.originalUrl,
+        body: hasRequestBody(request.method) ? request.body : undefined
+      });
+      if (proxied.contentType) {
+        response.set('Content-Type', proxied.contentType);
+      }
+      response.status(proxied.status).send(proxied.body);
+    } catch (error) {
+      if (error instanceof LlmProxyUpstreamError) {
+        response.status(error.kind === 'timeout' ? 504 : 502).json({ message: error.message });
+        return;
+      }
+      response.status(502).json({ message: 'LLM proxy request failed' });
+    }
   });
 
   app.post('/rooms', async (request, response) => {
@@ -155,6 +182,11 @@ export function createApp(
   });
 
   return app;
+}
+
+function hasRequestBody(method: string) {
+  const normalizedMethod = method.toUpperCase();
+  return normalizedMethod !== 'GET' && normalizedMethod !== 'HEAD';
 }
 
 function statusForRoomError(message: string, fallback: number) {
