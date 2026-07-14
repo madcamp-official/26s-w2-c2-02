@@ -61,7 +61,7 @@ export async function predictFocusWindow(
   } = {}
 ): Promise<PredictResponse> {
   const baseUrl =
-    options.baseUrl ?? import.meta.env.VITE_ROOMI_ML_API_URL ?? 'https://api.roomiml.madcamp-kaist.org';
+    options.baseUrl ?? import.meta.env.VITE_ROOMI_ML_API_URL ?? 'http://172.10.5.140:8080';
   const fetcher = options.fetcher ?? fetch;
   const controller = new AbortController();
   const timeout = globalThis.setTimeout(() => controller.abort(), options.timeoutMs ?? 1500);
