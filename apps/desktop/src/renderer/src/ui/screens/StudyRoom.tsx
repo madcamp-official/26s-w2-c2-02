@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
   Coffee,
   LogOut,
@@ -121,6 +121,8 @@ export function StudyRoom({
   go
 }: StudyRoomProps) {
   const studyParticipants = participantsInStudyRoom(participants);
+  const gridColumns = Math.max(1, Math.ceil(Math.sqrt(studyParticipants.length || 1)));
+  const gridStyle = { '--tile-cols': gridColumns } as CSSProperties;
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const pendingCameraStateRef = useRef<boolean | undefined>(undefined);
@@ -264,7 +266,7 @@ export function StudyRoom({
             </div>
           </section>
 
-          <div className="study__grid" aria-label="참가자 영상 영역">
+          <div className="study__grid" style={gridStyle} aria-label="참가자 영상 영역">
             {studyParticipants.map((participant) => {
               const isMe = participant.id === currentParticipantId;
               const isAway = participant.status === 'away' || participant.status === 'break';
