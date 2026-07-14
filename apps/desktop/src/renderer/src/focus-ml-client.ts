@@ -61,13 +61,13 @@ export async function predictFocusWindow(
   } = {}
 ): Promise<PredictResponse> {
   const baseUrl =
-    options.baseUrl ?? import.meta.env.VITE_ROOMI_ML_API_URL ?? 'http://172.10.5.140:8080';
+    options.baseUrl ?? import.meta.env.VITE_ROOMI_API_URL ?? 'http://localhost:4100';
   const fetcher = options.fetcher ?? fetch;
   const controller = new AbortController();
-  const timeout = globalThis.setTimeout(() => controller.abort(), options.timeoutMs ?? 1500);
+  const timeout = globalThis.setTimeout(() => controller.abort(), options.timeoutMs ?? 6500);
 
   try {
-    const response = await fetcher(`${baseUrl.replace(/\/$/, '')}/v1/focus/predict`, {
+    const response = await fetcher(`${baseUrl.replace(/\/$/, '')}/focus/predict`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -87,7 +87,7 @@ export async function predictFocusWindow(
     }
     const detail = reason instanceof Error ? reason.message : 'ML focus predict failed';
     throw new MlFocusClientError(
-      `ML 서버에 연결할 수 없습니다. VITE_ROOMI_ML_API_URL=${baseUrl} 라우팅, CORS, 서버 실행 상태를 확인해주세요. (${detail})`,
+      `중앙 API를 통해 ML 서버에 연결할 수 없습니다. VITE_ROOMI_API_URL=${baseUrl} 중앙 API와 ML proxy 상태를 확인해주세요. (${detail})`,
       reason
     );
   } finally {

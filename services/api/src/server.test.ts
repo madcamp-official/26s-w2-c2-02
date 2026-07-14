@@ -6,6 +6,7 @@ import { InMemoryRoomStore } from './adapters/storage/in-memory-room-store';
 import { RoomService } from './rooms/room-service';
 import { RoomiOrchestrator, type TextGenerator } from './roomi/roomi-orchestrator';
 import { createApp } from './server';
+import { MlFocusUpstreamError, type MlFocusPredictor } from './focus/ml-focus-client';
 
 describe('POST /rooms/:roomId/goals', () => {
   let httpServer: HttpServer;
@@ -187,5 +188,66 @@ describe('POST /goals/refine', () => {
     expect(response.status).toBe(200);
     expect(body.source).toBe('gemini');
     expect(body.refinedText).toBe('25분 집중: 수학 예제 3문제');
+  });
+});
+
+describe('POST /focus/predict', () => {
+  let httpServer: HttpServer;
+  let baseUrl: string;
+
+  afterEach(async () => {
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  });
+
+  async function startApp(mlPredictor: MlFocusPredictor) {
+    httpServer = createServer(
+      createApp(new RoomService(new InMemoryRoomStore()), new RoomiOrchestrator(), mlPredictor)
+    );
+    await new Promise<void>((resolve) => httpServer.listen(0, resolve));
+    const { port } = httpServer.address() as AddressInfo;
+    baseUrl = `http://localhost:${port}`;
+  }
+
+  function predict(body: unknown) {
+    return fetch(`${baseUrl}/focus/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  }
+
+  it('forwards a feature window through the configured ML predictor', async () => {
+    const featureWindow = { windowId: 'window-1', durationSec: 20 };
+    const prediction = { modelVersion: 'ml-v1', label: 'focused', score: 0.9 };
+    const received: unknown[] = [];
+    const mlPredictor = {
+      predict: async (input: unknown) => {
+        received.push(input);
+        return prediction;
+      }
+    };
+
+    await startApp(mlPredictor);
+    const response = await predict(featureWindow);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(prediction);
+    expect(received).toEqual([featureWindow]);
+  });
+
+  it.each([
+    ['unavailable', 502],
+    ['timeout', 504]
+  ] as const)('maps an upstream %s failure to %s', async (kind, status) => {
+    await startApp({
+      predict: async () => {
+        throw new MlFocusUpstreamError(`upstream ${kind}`, kind);
+      }
+    });
+
+    const response = await predict({ windowId: 'window-1' });
+
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ message: `upstream ${kind}` });
   });
 });

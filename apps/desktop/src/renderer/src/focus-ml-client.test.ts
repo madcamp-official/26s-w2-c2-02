@@ -78,7 +78,7 @@ describe('focus ML client', () => {
 
     expect(response.label).toBe('focused');
     expect(fetcher).toHaveBeenCalledWith(
-      'http://localhost:8080/v1/focus/predict',
+      'http://localhost:8080/focus/predict',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify(featureWindow)

@@ -51,5 +51,7 @@ export const env = {
   clientOrigins: parseClientOrigins(process.env.CLIENT_ORIGIN),
   dailyApiKey: process.env.DAILY_API_KEY,
   dailyDomain: process.env.DAILY_DOMAIN,
-  geminiApiKey: process.env.GEMINI_API_KEY
+  geminiApiKey: process.env.GEMINI_API_KEY,
+  mlApiUrl: process.env.ROOMI_ML_API_URL ?? 'http://170.10.5.140:8080',
+  mlApiTimeoutMs: Number(process.env.ROOMI_ML_API_TIMEOUT_MS ?? 5000)
 };

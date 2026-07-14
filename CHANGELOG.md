@@ -35,12 +35,12 @@
 - Figma 픽셀에서 직접 추출한 색상/타이포/간격을 `styles/tokens.css` 에 design token 으로 정리하고, 공통 `AppBar`·루미 mascot·badge/pill/button 컴포넌트를 추가했습니다.
 - 개발 중 화면을 빠르게 오갈 수 있는 상단 dev 화면 전환 nav 를 추가했습니다(디자인에는 포함되지 않는 개발용 UI).
 - MediaPipe 테스트 화면에서 웹캠 얼굴 landmark 기반 Rule-Based 집중도 label, 점수, feature 지속 시간을 확인할 수 있게 추가했습니다.
-- MediaPipe 테스트 화면에서 Rule-Based 판정과 ML 서버 판정을 토글해 비교할 수 있게 했습니다. ML 서버 모드는 20초 feature window를 `/v1/focus/predict`로 보내고, 실패 시 로컬 Rule-Based 판정을 계속 표시합니다.
-- Desktop renderer 환경 예시에 `VITE_ROOMI_ML_API_URL`을 추가하고, ML 서버 fetch 실패 시 호출 중인 base URL과 CORS/라우팅 확인 힌트를 표시하도록 했습니다.
+- MediaPipe 테스트 화면에서 Rule-Based 판정과 ML 서버 판정을 토글해 비교할 수 있게 했습니다. ML 서버 모드는 20초 feature window를 중앙 API의 `/focus/predict`로 보내고, 실패 시 로컬 Rule-Based 판정을 계속 표시합니다.
+- 중앙 API가 내부 ML 서버의 `/v1/focus/predict`를 호출하도록 전용 proxy를 추가했습니다. 연결 실패는 `502`, timeout은 `504`로 반환합니다.
 
 ### Changed
 
-- Desktop renderer의 기본 ML 집중도 예측 API 연결 대상을 `http://172.10.5.140:8080`으로 변경했습니다.
+- Desktop renderer가 내부 ML 서버에 직접 연결하지 않고 기존 `VITE_ROOMI_API_URL` 중앙 API를 통해 집중도 예측을 요청하도록 변경했습니다. 중앙 서버에는 `ROOMI_ML_API_URL=http://170.10.5.140:8080` 설정이 필요합니다.
 
 - 스터디룸에서 Daily 카메라를 다시 켤 때 종료된 기존 track을 재사용하지 않고 화상 call을 재생성해, 휴식 후 복귀와 동일하게 새 카메라 track을 획득합니다.
 - 방 생성·입장 성공 또는 방 퇴장 시 요청 잠금을 초기화해, 같은 앱에서 다시 방을 만들거나 입장해도 이전 진행 중 버튼 상태가 남지 않습니다.
