@@ -36,7 +36,7 @@
 - 목적: 재현 가능한 디버깅 루프를 먼저 확보하고 원인 후보를 줄이기
 - Codex 구현: `.agents/skills/bug-investigation`
 - 사람용 해석: 수정부터 하지 말고 재현, 로그, 관련 seam, 회귀 테스트 순으로 좁혀갑니다.
-
+ㄱ
 ### tdd-loop
 
 - 목적: red -> green -> refactor 를 작은 단위로 반복
