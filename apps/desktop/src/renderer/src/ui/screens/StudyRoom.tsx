@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Coffee,
   LogOut,
@@ -13,6 +13,7 @@ import { InviteCodeCard } from '../components/InviteCodeCard';
 import {
   type Goal,
   type Participant,
+  type ParticipantStatus,
   type Room,
   type RoomiMessage,
   type StudySession,
@@ -20,6 +21,8 @@ import {
 } from '@roomi/shared';
 import type { ScreenProps } from './types';
 import { useDailyRoom } from '../../use-daily-room';
+import { focusSnapshotFromMl, type FocusLabel } from '../../focus-pipeline';
+import { useFocusDetection, type MlPredictionStatus } from '../../use-focus-detection';
 
 /**
  * Study Room · Live Session (Figma 47:2).
@@ -32,6 +35,7 @@ interface StudyRoomProps extends ScreenProps {
   isHost: boolean;
   onEndSession: () => void;
   onLeaveRoom: () => void;
+  onUpdatePresence: (status: ParticipantStatus) => void;
   participants: Participant[];
   goals: Goal[];
   roomiMessages: RoomiMessage[];
@@ -47,6 +51,14 @@ const statusLabel: Record<Participant['status'], string> = {
   away: '자리비움',
   break: '휴식중',
   paused: '감지 정지'
+};
+
+const mlStatusLabel: Record<MlPredictionStatus, string> = {
+  idle: 'ML 대기',
+  collecting: 'ML window 수집',
+  predicting: 'ML 예측 중',
+  ready: 'ML 반영',
+  fallback: '로컬 판정'
 };
 
 function participantInitial(nickname: string) {
@@ -107,11 +119,29 @@ export function setDailyCameraEnabled(
   call.setLocalVideo(false);
 }
 
+export function focusLabelToParticipantStatus(label: FocusLabel): ParticipantStatus {
+  switch (label) {
+    case 'focused':
+      return 'focused';
+    case 'away':
+      return 'away';
+    case 'sleepy':
+    case 'paused':
+      return 'paused';
+    case 'distracted':
+    case 'uncertain':
+      return 'distracted';
+    default:
+      return 'focused';
+  }
+}
+
 export function StudyRoom({
   currentParticipantId,
   isHost,
   onEndSession,
   onLeaveRoom,
+  onUpdatePresence,
   participants,
   goals,
   roomiMessages,
@@ -137,6 +167,8 @@ export function StudyRoom({
   const [isEndConfirmOpen, setIsEndConfirmOpen] = useState(false);
   const [dismissedFocusMessageId, setDismissedFocusMessageId] = useState<string>();
   const [timestamp, setTimestamp] = useState(() => Date.now());
+  const [localAnalysisTrack, setLocalAnalysisTrack] = useState<MediaStreamTrack | null>(null);
+  const lastReportedFocusStatusRef = useRef<ParticipantStatus | null>(null);
   const currentParticipant =
     studyParticipants.find((participant) => participant.id === currentParticipantId) ??
     studyParticipants[0];
@@ -160,6 +192,45 @@ export function StudyRoom({
         message.targetParticipantId === currentParticipantId &&
         message.id !== dismissedFocusMessageId
     );
+  const dailyLocalVideoTrack = useMemo(() => {
+    if (!videoJoin) {
+      return null;
+    }
+
+    const participant = participantsByRoomiId.get(currentParticipantId);
+    if (participant?.tracks?.video?.state !== 'playable') {
+      return null;
+    }
+
+    return participant.tracks.video.track ?? participant.tracks.video.persistentTrack ?? null;
+  }, [currentParticipantId, participantsByRoomiId, videoJoin]);
+  const focusAnalysisTrack = videoJoin ? dailyLocalVideoTrack : localAnalysisTrack;
+  const focusIdentity = useMemo(
+    () => ({
+      userId: currentParticipant?.userId ?? currentParticipantId,
+      sessionId: currentSession?.id ?? room.id
+    }),
+    [currentParticipant?.userId, currentParticipantId, currentSession?.id, room.id]
+  );
+  const {
+    status: focusDetectionStatus,
+    error: focusDetectionError,
+    focusSnapshot,
+    detectionSnapshot,
+    mlPrediction,
+    mlStatus,
+    mlError
+  } = useFocusDetection({
+    track: focusAnalysisTrack,
+    enabled: isCameraOn && Boolean(focusAnalysisTrack),
+    mode: 'ml',
+    identity: focusIdentity
+  });
+  const visibleFocusSnapshot =
+    mlPrediction && mlStatus === 'ready'
+      ? focusSnapshotFromMl(mlPrediction.response, focusSnapshot)
+      : focusSnapshot;
+  const visibleFocusStatus = focusLabelToParticipantStatus(visibleFocusSnapshot.label);
 
   useEffect(() => {
     const interval = window.setInterval(() => setTimestamp(Date.now()), 1_000);
@@ -196,6 +267,7 @@ export function StudyRoom({
       }
 
       localStreamRef.current = stream;
+      setLocalAnalysisTrack(stream.getVideoTracks()[0] ?? null);
 
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
@@ -208,6 +280,7 @@ export function StudyRoom({
       cancelled = true;
       localStreamRef.current?.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
+      setLocalAnalysisTrack(null);
     };
   }, [videoJoin]);
 
@@ -241,6 +314,32 @@ export function StudyRoom({
     }
     setIsCameraOn(next);
   };
+
+  useEffect(() => {
+    if (!isCameraOn || focusDetectionStatus !== 'running') {
+      return;
+    }
+
+    if (lastReportedFocusStatusRef.current === visibleFocusStatus) {
+      return;
+    }
+
+    lastReportedFocusStatusRef.current = visibleFocusStatus;
+    onUpdatePresence(visibleFocusStatus);
+  }, [focusDetectionStatus, isCameraOn, onUpdatePresence, visibleFocusStatus]);
+
+  useEffect(() => {
+    if (isCameraOn) {
+      return;
+    }
+
+    if (lastReportedFocusStatusRef.current === 'paused') {
+      return;
+    }
+
+    lastReportedFocusStatusRef.current = 'paused';
+    onUpdatePresence('paused');
+  }, [isCameraOn, onUpdatePresence]);
 
   return (
     <div className="screen screen--app">
@@ -338,6 +437,23 @@ export function StudyRoom({
                   '좋아, 지금부터 목표 한 가지에만 집중해보자. 흐름이 끊기면 내가 먼저 알려줄게.'}
               </p>
             </div>
+          </section>
+
+          <section className="study-card study-focus" aria-label="집중도 자동 감지">
+            <div className="study-card__title">집중도 자동 감지</div>
+            <div className={`focus-label focus-label--${visibleFocusSnapshot.label}`}>
+              {statusLabel[visibleFocusStatus]}
+            </div>
+            <p className="study-focus__meta">
+              {focusDetectionStatus === 'running'
+                ? `${mlStatusLabel[mlStatus]} · 얼굴 ${detectionSnapshot.faces} · ${detectionSnapshot.fps} FPS`
+                : isCameraOn
+                  ? 'MediaPipe 준비 중'
+                  : '카메라 꺼짐'}
+            </p>
+            {(focusDetectionError || mlError) && (
+              <p className="study-focus__error">{focusDetectionError ?? mlError}</p>
+            )}
           </section>
 
           {focusRecoveryMessage && (

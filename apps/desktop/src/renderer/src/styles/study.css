@@ -307,6 +307,31 @@
   word-break: keep-all;
 }
 
+.study-focus {
+  display: grid;
+  gap: 10px;
+}
+
+.study-focus .focus-label {
+  width: max-content;
+}
+
+.study-focus__meta,
+.study-focus__error {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.study-focus__meta {
+  color: var(--text-muted);
+}
+
+.study-focus__error {
+  color: var(--danger);
+}
+
 @keyframes lumi-message-in {
   from {
     opacity: 0;

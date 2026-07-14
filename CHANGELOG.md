@@ -45,6 +45,7 @@
 
 ### Changed
 
+- 스터디룸 세션에서 로컬/Daily 카메라 track을 MediaPipe + ML 집중도 파이프라인에 연결해 참가자 상태가 `focused`/`distracted`/`away`/`paused`로 자동 갱신되도록 했습니다. 감지 상태와 ML window 상태를 스터디룸 패널에서 확인할 수 있습니다.
 - 중앙 API의 기본 ML 서버 주소를 응답 가능한 LAN endpoint `http://192.168.0.83:8080`으로 변경했습니다. 기존 서버 환경에서 별도 주소를 써야 하면 `ROOMI_ML_API_URL`로 override 해야 합니다.
 - Desktop renderer가 내부 ML 서버에 직접 연결하지 않고 기존 `VITE_ROOMI_API_URL` 중앙 API를 통해 집중도 예측을 요청하도록 변경했습니다. 중앙 서버에는 `ROOMI_ML_API_URL=http://192.168.0.83:8080` 설정이 필요합니다.
 - 중앙 API가 내부 ML 서버의 `/v1/focus/feedback`으로 사용자 확인 feedback을 전달하도록 proxy를 확장했습니다.
