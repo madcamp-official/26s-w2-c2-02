@@ -37,6 +37,7 @@ interface StudyRoomProps extends ScreenProps {
   onLeaveRoom: () => void;
   onToggleGoalAchieved: (achieved: boolean) => void;
   onUpdatePresence: (status: ParticipantStatus) => void;
+  onStartBreak: () => void | Promise<void>;
   participants: Participant[];
   goals: Goal[];
   roomiMessages: RoomiMessage[];
@@ -160,13 +161,13 @@ export function StudyRoom({
   onLeaveRoom,
   onToggleGoalAchieved,
   onUpdatePresence,
+  onStartBreak,
   participants,
   goals,
   roomiMessages,
   room,
   currentSession,
-  videoJoin,
-  go
+  videoJoin
 }: StudyRoomProps) {
   const studyParticipants = participantsInStudyRoom(participants);
   const gridColumns = Math.max(1, Math.ceil(Math.sqrt(studyParticipants.length || 1)));
@@ -501,7 +502,7 @@ export function StudyRoom({
                   className="btn btn--ghost"
                   onClick={() => {
                     setDismissedFocusMessageId(focusRecoveryMessage.id);
-                    go('break');
+                    void onStartBreak();
                   }}
                 >
                   오탐이야
@@ -559,9 +560,16 @@ export function StudyRoom({
         >
           {isCameraOn ? <Video size={20} /> : <VideoOff size={20} />}
         </button>
-        <button type="button" className="ctrl" aria-label="휴식" onClick={() => go('break')}>
-          <Coffee size={20} />
-        </button>
+        {(room.settings.breakMode === 'individual' || isHost) && (
+          <button
+            type="button"
+            className="ctrl"
+            aria-label="휴식"
+            onClick={() => void onStartBreak()}
+          >
+            <Coffee size={20} />
+          </button>
+        )}
         {isHost && (
           <div className="host-actions">
             <button

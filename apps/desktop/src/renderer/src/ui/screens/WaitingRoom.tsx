@@ -38,6 +38,7 @@ export function WaitingRoom({
   const inProgress = room.status === 'studying' || room.status === 'break';
   const readyCount = participants.filter((participant) => participant.isReady).length;
   const myGoal = goals.find((goal) => goal.participantId === currentParticipantId);
+  const hasGoal = Boolean(myGoal?.rawText.trim());
   const [goalText, setGoalText] = useState(myGoal?.rawText ?? '');
   const [refinement, setRefinement] = useState<GoalRefinement | null>(null);
   const [refineError, setRefineError] = useState<string | null>(null);
@@ -140,10 +141,13 @@ export function WaitingRoom({
         <main className="waiting__main">
           <div className="waiting__head">
             <div className="waiting__head-title">
-              {inProgress && <span className="badge badge--blue">진행 중</span>}
-              <h1 className="waiting__title">
-                {inProgress ? '이미 공부 중이에요' : '다 같이 목표를 정해볼까요?'}
-              </h1>
+              <RoomiMascot size={56} mood={isRefining ? 'curious' : 'angry'} />
+              <div>
+                {inProgress && <span className="badge badge--blue">진행 중</span>}
+                <h1 className="waiting__title">
+                  {inProgress ? '이미 공부 중이에요' : '다 같이 목표를 정해볼까요?'}
+                </h1>
+              </div>
             </div>
             <InviteCodeCard inviteCode={room.inviteCode} />
           </div>
@@ -234,23 +238,33 @@ export function WaitingRoom({
               방 생성중
             </button>
           ) : inProgress ? (
-            <button
-              type="button"
-              className="btn btn--primary waiting__start"
-              disabled={isJoiningSession}
-              onClick={joinSession}
-            >
-              {isJoiningSession ? '입장 중' : '스터디룸 참여하기'}
-            </button>
+            <>
+              <button
+                type="button"
+                className="btn btn--primary waiting__start"
+                disabled={isJoiningSession || !hasGoal}
+                onClick={joinSession}
+              >
+                {isJoiningSession ? '입장 중' : '스터디룸 참여하기'}
+              </button>
+              {!hasGoal && (
+                <p className="waiting__goal-required">먼저 목표를 적어야 참여할 수 있어요.</p>
+              )}
+            </>
           ) : isHost ? (
-            <button
-              type="button"
-              className="btn btn--primary waiting__start"
-              disabled={isStartingSession}
-              onClick={startSession}
-            >
-              {isStartingSession ? '방 생성중' : '세션 시작하기'}
-            </button>
+            <>
+              <button
+                type="button"
+                className="btn btn--primary waiting__start"
+                disabled={isStartingSession || !hasGoal}
+                onClick={startSession}
+              >
+                {isStartingSession ? '방 생성중' : '세션 시작하기'}
+              </button>
+              {!hasGoal && (
+                <p className="waiting__goal-required">먼저 목표를 적어야 시작할 수 있어요.</p>
+              )}
+            </>
           ) : (
             <div className="waiting__wait-note" role="status">
               <span className="waiting__wait-dot" aria-hidden="true" />

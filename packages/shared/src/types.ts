@@ -19,6 +19,7 @@ export type User = {
 export type RoomSettings = {
   sessionMinutes: number;
   breakMode: 'room' | 'individual';
+  breakMinutes: number;
   defaultScoreVisibility: 'public' | 'private';
   maxParticipants: 4;
   authMode: 'nickname_code';
@@ -90,6 +91,7 @@ export type StudySession = {
   endedAt?: ISODateString;
   plannedMinutes: number;
   mode: 'study' | 'break' | 'ended';
+  breakEndsAt?: ISODateString;
   summary?: SessionSummary;
 };
 

@@ -154,6 +154,8 @@ describe('App screen router', () => {
     fireEvent.click(screen.getByRole('button', { name: '방 만들고 대기실로 가기' }));
     fireEvent.click(await screen.findByRole('button', { name: '권한 확인하고 입장' }));
     await screen.findByRole('heading', { level: 1, name: '다 같이 목표를 정해볼까요?' });
+    fireEvent.change(screen.getByLabelText('내 목표'), { target: { value: '수학 3단원' } });
+    fireEvent.blur(screen.getByLabelText('내 목표'));
     fireEvent.click(screen.getByRole('button', { name: '세션 시작하기' }));
     await screen.findByLabelText('내 웹캠 미리보기');
     expect(screen.getByText('소요 (나)')).toBeInTheDocument();
@@ -269,7 +271,9 @@ describe('App screen router', () => {
         { id: 'participant-host', roomId: 'room-server', userId: 'user-host', nickname: '소요', role: 'host', status: 'online', isReady: true, scoreVisible: true, joinedAt: timestamp, lastSeenAt: timestamp },
         { id: 'participant-minji', roomId: 'room-server', userId: 'user-minji', nickname: '민지', role: 'member', status: 'online', isReady: false, scoreVisible: true, joinedAt: timestamp, lastSeenAt: timestamp }
       ],
-      goals: [],
+      goals: [
+        { id: 'goal-minji', roomId: 'room-server', participantId: 'participant-minji', rawText: '영어 단어 100개', createdAt: timestamp }
+      ],
       roomiMessages: [],
       currentSession: {
         id: 'session-1',
@@ -356,6 +360,7 @@ function defaultTestRoomSettings() {
   return {
     authMode: 'nickname_code',
     breakMode: 'room',
+    breakMinutes: 10,
     defaultScoreVisibility: 'public',
     detectionPauseAllowed: true,
     maxParticipants: 4,

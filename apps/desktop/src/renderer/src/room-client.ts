@@ -77,6 +77,18 @@ export function endSession(input: { roomId: string; participantId: string }) {
   return requestSnapshot('/sessions/end', input);
 }
 
+export function startBreak(input: { roomId: string; participantId: string }) {
+  return requestSnapshot('/sessions/break/start', input);
+}
+
+export function endBreak(input: { roomId: string; participantId: string }) {
+  return requestSnapshot('/sessions/break/end', input);
+}
+
+export function extendBreak(input: { roomId: string; participantId: string; minutes?: number }) {
+  return requestSnapshot('/sessions/break/extend', input);
+}
+
 export function setGoalAchieved(input: {
   roomId: string;
   participantId: string;

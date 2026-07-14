@@ -278,6 +278,128 @@ export class RoomService {
     return snapshot;
   }
 
+  startBreak(roomId: string, participantId: string): RoomSnapshot {
+    const snapshot = this.store.findByRoomId(roomId);
+
+    if (!snapshot) {
+      throw new Error('Room not found');
+    }
+
+    const host = snapshot.participants.find(
+      (participant) => participant.id === participantId
+    );
+
+    if (!host || host.role !== 'host') {
+      throw new Error('Only the host can start a break');
+    }
+
+    if (snapshot.room.settings.breakMode !== 'room') {
+      throw new Error('Break mode is not room-wide');
+    }
+
+    if (!snapshot.currentSession || snapshot.currentSession.mode !== 'study') {
+      throw new Error('No active study session to pause');
+    }
+
+    const nowMs = Date.now();
+    const now = new Date(nowMs).toISOString();
+    const breakEndsAt = new Date(
+      nowMs + snapshot.room.settings.breakMinutes * 60_000
+    ).toISOString();
+
+    snapshot.room = { ...snapshot.room, status: 'break' };
+    snapshot.currentSession = { ...snapshot.currentSession, mode: 'break', breakEndsAt };
+    snapshot.participants = snapshot.participants.map((participant) => ({
+      ...participant,
+      status: 'break',
+      lastSeenAt: now
+    }));
+
+    const tracker = this.focusTrackers.get(roomId);
+    tracker?.forEach((entry) => {
+      this.accrueFocusedSeconds(entry, nowMs);
+      entry.status = 'break';
+    });
+
+    this.store.update(snapshot);
+    this.emitRoomUpdated(snapshot);
+    return snapshot;
+  }
+
+  endBreak(roomId: string, participantId: string): RoomSnapshot {
+    const snapshot = this.store.findByRoomId(roomId);
+
+    if (!snapshot) {
+      throw new Error('Room not found');
+    }
+
+    const host = snapshot.participants.find(
+      (participant) => participant.id === participantId
+    );
+
+    if (!host || host.role !== 'host') {
+      throw new Error('Only the host can end a break');
+    }
+
+    if (!snapshot.currentSession || snapshot.currentSession.mode !== 'break') {
+      throw new Error('No active break to end');
+    }
+
+    const nowMs = Date.now();
+    const now = new Date(nowMs).toISOString();
+
+    snapshot.room = { ...snapshot.room, status: 'studying' };
+    snapshot.currentSession = {
+      ...snapshot.currentSession,
+      mode: 'study',
+      breakEndsAt: undefined
+    };
+    snapshot.participants = snapshot.participants.map((participant) => ({
+      ...participant,
+      status: 'focused',
+      lastSeenAt: now
+    }));
+
+    const tracker = this.focusTrackers.get(roomId);
+    tracker?.forEach((entry) => {
+      entry.lastStatusChangeAt = nowMs;
+      entry.status = 'focused';
+    });
+
+    this.store.update(snapshot);
+    this.emitRoomUpdated(snapshot);
+    return snapshot;
+  }
+
+  extendBreak(roomId: string, participantId: string, minutes: number): RoomSnapshot {
+    const snapshot = this.store.findByRoomId(roomId);
+
+    if (!snapshot) {
+      throw new Error('Room not found');
+    }
+
+    const host = snapshot.participants.find(
+      (participant) => participant.id === participantId
+    );
+
+    if (!host || host.role !== 'host') {
+      throw new Error('Only the host can extend a break');
+    }
+
+    if (!snapshot.currentSession || snapshot.currentSession.mode !== 'break' || !snapshot.currentSession.breakEndsAt) {
+      throw new Error('No active break to extend');
+    }
+
+    const breakEndsAt = new Date(
+      Date.parse(snapshot.currentSession.breakEndsAt) + minutes * 60_000
+    ).toISOString();
+
+    snapshot.currentSession = { ...snapshot.currentSession, breakEndsAt };
+    this.store.update(snapshot);
+    this.emitRoomUpdated(snapshot);
+    return snapshot;
+  }
+
   endSession(roomId: string, participantId: string): RoomSnapshot {
     const snapshot = this.store.findByRoomId(roomId);
 
