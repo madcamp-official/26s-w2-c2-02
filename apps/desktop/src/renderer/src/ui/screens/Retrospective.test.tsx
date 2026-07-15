@@ -19,6 +19,20 @@ describe('Retrospective', () => {
             left: false
           }
         ]}
+        focusReport={{
+          ready: true,
+          observedMinutes: 12,
+          eyesClosedRatio: 0.18,
+          blinksPerMinute: 24,
+          yawnsPerHour: 3,
+          headTurnsPerHour: 4,
+          awaysPerHour: 1,
+          gazeDiversionsPerHour: 5,
+          restlessness: 30,
+          fatigue: 64,
+          distraction: 48,
+          restSuggested: true
+        }}
         goals={[]}
         go={vi.fn()}
         onHome={onHome}
@@ -34,8 +48,16 @@ describe('Retrospective', () => {
       />
     );
 
-    expect(screen.getByText('12분')).toBeInTheDocument();
-    expect(screen.getByText('144점')).toBeInTheDocument();
+    expect(screen.getAllByText('12분').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('144점').length).toBeGreaterThan(0);
+    expect(screen.getByText('피로도')).toBeInTheDocument();
+    expect(screen.getByText('64')).toBeInTheDocument();
+    expect(screen.getByText('산만함')).toBeInTheDocument();
+    expect(screen.getByText('48')).toBeInTheDocument();
+    expect(screen.getByText('집중 신호 요약')).toBeInTheDocument();
+    expect(screen.getByText('18%')).toBeInTheDocument();
+    expect(screen.getByText('24회/분')).toBeInTheDocument();
+    expect(screen.getByText('3회/시간')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '홈으로' }));
     expect(onHome).toHaveBeenCalledTimes(1);
   });

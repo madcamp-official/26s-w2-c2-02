@@ -65,6 +65,10 @@
   grid-template-columns: repeat(3, 1fr);
 }
 
+.retro__stats--study-summary {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
 .retro-stat {
   min-height: 105px;
   padding: 20px;
@@ -134,6 +138,34 @@
   margin-top: 8px;
   font-size: 14px;
   color: var(--text-muted);
+}
+
+.retro-signal-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.retro-signal-grid div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-sm);
+  background: var(--row-bg);
+}
+
+.retro-signal-grid dt {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.retro-signal-grid dd {
+  margin-top: 6px;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--heading);
 }
 
 .retro-rounds {
@@ -239,7 +271,9 @@
 
 @media (max-width: 720px) {
   .retro__stats,
-  .retro__stats--game {
+  .retro__stats--game,
+  .retro__stats--study-summary,
+  .retro-signal-grid {
     grid-template-columns: 1fr;
   }
 

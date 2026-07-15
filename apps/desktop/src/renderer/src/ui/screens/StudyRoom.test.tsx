@@ -543,6 +543,40 @@ describe('StudyRoom focus nudges', () => {
     fireEvent.click(screen.getByRole('button', { name: '집중 중이야' }));
     await waitFor(() => expect(onUpdatePresence).toHaveBeenCalledWith('focused'));
   });
+
+  it('passes the latest focus report when leaving study mode', () => {
+    const participant = createParticipant('participant-host', 'Host');
+    const onLeaveRoom = vi.fn();
+    focusDetectionMock.snapshot.sessionStats = {
+      ...readyStats,
+      eyesClosedFrames: 20,
+      blinks: 48,
+      yawns: 1,
+      headTurns: 4,
+      aways: 1,
+      gazeDiversions: 5,
+      motionSum: 120
+    };
+
+    render(
+      <StudyRoom
+        {...baseStudyRoomProps(participant)}
+        room={createRoom('hidden_mission', 'study')}
+        onLeaveRoom={onLeaveRoom}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '나가기' }));
+
+    expect(onLeaveRoom).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ready: true,
+        observedMinutes: 2,
+        fatigue: expect.any(Number),
+        distraction: expect.any(Number)
+      })
+    );
+  });
 });
 
 describe('DailyParticipantMedia', () => {

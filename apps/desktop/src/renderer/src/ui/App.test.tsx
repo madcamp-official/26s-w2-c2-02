@@ -333,8 +333,8 @@ describe('App screen router', () => {
       status: 'online'
     });
     expect(await screen.findByRole('heading', { level: 1, name: '오늘 세션, 잘 마쳤어요!' })).toBeInTheDocument();
-    expect(screen.getByText('7분')).toBeInTheDocument();
-    expect(screen.getByText('84점')).toBeInTheDocument();
+    expect(screen.getAllByText('7분').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('84점').length).toBeGreaterThan(0);
     expect(socketMock.emit).not.toHaveBeenCalledWith('room:leave', {
       roomId: 'room-server',
       participantId: 'participant-minji'

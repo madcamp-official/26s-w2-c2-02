@@ -40,7 +40,7 @@ import {
   type FocusSnapshot,
   type RuleSettings
 } from '../../focus-pipeline';
-import { focusIndices, type FocusIndices } from '../../focus-stats';
+import { focusIndices, type FocusIndices, type FocusSessionReport } from '../../focus-stats';
 import { useFocusDetection } from '../../use-focus-detection';
 import {
   missionResultFromCounter,
@@ -91,8 +91,8 @@ type MissionAccusationPrompt = {
 interface StudyRoomProps extends ScreenProps {
   currentParticipantId: string;
   isHost: boolean;
-  onEndSession: () => void;
-  onLeaveRoom: () => void;
+  onEndSession: (focusReport?: FocusSessionReport) => void;
+  onLeaveRoom: (focusReport?: FocusSessionReport) => void;
   onToggleGoalAchieved: (achieved: boolean) => void;
   onUpdatePresence: (status: ParticipantStatus) => void;
   onStartBreak: () => void | Promise<void>;
@@ -104,6 +104,7 @@ interface StudyRoomProps extends ScreenProps {
   onAdvanceRelay?: (toId: string, similarity: number) => void;
   onReadyNextRound?: () => void;
   onSendChatMessage?: (text: string) => void;
+  onUpdateFocusReport?: (focusReport: FocusSessionReport) => void;
   participants: Participant[];
   goals: Goal[];
   roomiMessages: RoomiMessage[];
@@ -540,6 +541,7 @@ export function StudyRoom({
   onAdvanceRelay,
   onReadyNextRound,
   onSendChatMessage,
+  onUpdateFocusReport,
   participants,
   goals,
   roomiMessages,
@@ -581,6 +583,7 @@ export function StudyRoom({
   );
   const [dismissedRestSuggestion, setDismissedRestSuggestion] = useState(false);
   const [focusCheckDismissedUntil, setFocusCheckDismissedUntil] = useState(0);
+  const lastReportedFocusKeyRef = useRef('');
   const previousMissionCountsRef = useRef<Map<string, number>>(new Map());
   const reportedMissionRef = useRef<{ missionId: string; count: number; success: boolean } | null>(null);
   const { callObject, localMedia, participantsByRoomiId, restart } =
@@ -617,6 +620,7 @@ export function StudyRoom({
     () => focusIndices(focusDetection.sessionStats),
     [focusDetection.sessionStats]
   );
+  const myFocusReport = useMemo(() => toFocusSessionReport(myFocusIndices), [myFocusIndices]);
   const focusPresenceStatus = focusStatusFromSignals(
     focusDetection.focusSnapshot.label,
     myFocusIndices,
@@ -676,6 +680,14 @@ export function StudyRoom({
   useEffect(() => {
     if (focusDetection.status === 'running') onUpdatePresence(focusPresenceStatus);
   }, [focusDetection.status, focusPresenceStatus, onUpdatePresence]);
+
+  useEffect(() => {
+    if (!isStudyMode || !onUpdateFocusReport) return;
+    const key = focusReportKey(myFocusReport);
+    if (key === lastReportedFocusKeyRef.current) return;
+    lastReportedFocusKeyRef.current = key;
+    onUpdateFocusReport(myFocusReport);
+  }, [isStudyMode, myFocusReport, onUpdateFocusReport]);
 
   useEffect(() => {
     setCalibratedRuleSettings(null);
@@ -954,6 +966,14 @@ export function StudyRoom({
     );
     setFocusCheckDismissedUntil(Date.now() + focusCheckCooldownMs);
     onUpdatePresence('focused');
+  };
+
+  const leaveRoom = () => {
+    onLeaveRoom(isStudyMode ? myFocusReport : undefined);
+  };
+
+  const endSession = () => {
+    onEndSession(isStudyMode ? myFocusReport : undefined);
   };
 
   return (
@@ -1528,7 +1548,7 @@ export function StudyRoom({
             )}
           </div>
         )}
-        <button type="button" className="ctrl ctrl--leave" onClick={onLeaveRoom} aria-label="나가기">
+        <button type="button" className="ctrl ctrl--leave" onClick={leaveRoom} aria-label="나가기">
           <LogOut size={20} />
         </button>
       </div>
@@ -1548,7 +1568,7 @@ export function StudyRoom({
               <button type="button" className="btn btn--ghost" onClick={() => setConfirmEnd(false)}>
                 취소
               </button>
-              <button type="button" className="btn btn--danger" onClick={onEndSession}>
+              <button type="button" className="btn btn--danger" onClick={endSession}>
                 세션 종료
               </button>
             </div>
@@ -1723,6 +1743,40 @@ function emptyExpressionSignals(): ExpressionSignals {
     headPitch: 0,
     headRoll: 0
   };
+}
+
+function toFocusSessionReport(indices: FocusIndices): FocusSessionReport {
+  return {
+    ready: indices.ready,
+    observedMinutes: indices.observedMinutes,
+    eyesClosedRatio: indices.eyesClosedRatio,
+    blinksPerMinute: indices.blinksPerMinute,
+    yawnsPerHour: indices.yawnsPerHour,
+    headTurnsPerHour: indices.headTurnsPerHour,
+    awaysPerHour: indices.awaysPerHour,
+    gazeDiversionsPerHour: indices.gazeDiversionsPerHour,
+    restlessness: indices.restlessness,
+    fatigue: indices.fatigue,
+    distraction: indices.distraction,
+    restSuggested: indices.restSuggested
+  };
+}
+
+function focusReportKey(report: FocusSessionReport) {
+  return [
+    report.ready,
+    report.observedMinutes,
+    report.eyesClosedRatio,
+    report.blinksPerMinute,
+    report.yawnsPerHour,
+    report.headTurnsPerHour,
+    report.awaysPerHour,
+    report.gazeDiversionsPerHour,
+    report.restlessness,
+    report.fatigue,
+    report.distraction,
+    report.restSuggested
+  ].join(':');
 }
 
 function createDistractionCard(roundId: string, roundIndex: number): DistractionCard {

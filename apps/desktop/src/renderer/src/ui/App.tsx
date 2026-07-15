@@ -35,6 +35,7 @@ import { StudyRoom } from './screens/StudyRoom';
 import { BreakReturn } from './screens/BreakReturn';
 import { Retrospective } from './screens/Retrospective';
 import type { ScreenId } from './screens/types';
+import type { FocusSessionReport } from '../focus-stats';
 import {
   advanceRelay,
   createRoomSession,
@@ -70,6 +71,7 @@ type RoomDraft = {
   roomiMessages: RoomiMessage[];
   chatMessages: ChatMessage[];
   focusRanking: FocusRankingEntry[];
+  focusReport?: FocusSessionReport;
   currentSession?: StudySession;
   currentGame?: GameSession;
   privateMission?: HiddenMission;
@@ -722,7 +724,7 @@ export function App() {
     go('study');
   };
 
-  const leaveCurrentSession = () => {
+  const leaveCurrentSession = (focusReport?: FocusSessionReport) => {
     if (!roomDraft) {
       go('retrospective');
       return;
@@ -737,9 +739,13 @@ export function App() {
     }
 
     setRoomDraft((current) =>
-      current ? buildRetrospectiveDraft(current, 'online') : current
+      current ? buildRetrospectiveDraft(current, 'online', focusReport) : current
     );
     go('retrospective');
+  };
+
+  const updateCurrentFocusReport = (focusReport: FocusSessionReport) => {
+    setRoomDraft((current) => (current ? { ...current, focusReport } : current));
   };
 
   const startCurrentBreak = async () => {
@@ -1154,7 +1160,7 @@ export function App() {
     });
   };
 
-  const endCurrentSession = () => {
+  const endCurrentSession = (focusReport?: FocusSessionReport) => {
     if (!roomDraft) {
       go('retrospective');
       return;
@@ -1173,6 +1179,9 @@ export function App() {
           setRoomDraft((current) => (current ? { ...current, ...snapshotToDraftPatch(snapshot) } : current));
         })
         .catch((error) => console.warn(error instanceof Error ? error.message : 'Session end failed'));
+      setRoomDraft((current) =>
+        current ? { ...current, focusReport: focusReport ?? current.focusReport } : current
+      );
       go('retrospective');
       return;
     }
@@ -1198,9 +1207,15 @@ export function App() {
         room: { ...current.room, status: 'ended' },
         currentGame,
         currentSession: current.currentSession
-          ? sessionWithLocalSummary(current.currentSession, current.goals, current.focusRanking, now())
+          ? sessionWithLocalSummary(
+              current.currentSession,
+              current.goals,
+              current.focusRanking,
+              now()
+            )
           : current.currentSession
       };
+      next.focusReport = focusReport ?? current.focusReport;
       const winner = currentGame?.scores
         ? [...currentGame.scores].sort((left, right) => right.points - left.points)[0]
         : undefined;
@@ -1328,6 +1343,7 @@ export function App() {
             onAdvanceRelay={advanceCurrentRelay}
             onReadyNextRound={readyForNextRound}
             onSendChatMessage={submitCurrentChatMessage}
+            onUpdateFocusReport={updateCurrentFocusReport}
             go={go}
           />
         )}
@@ -1346,6 +1362,7 @@ export function App() {
             session={activeRoom.currentSession}
             currentGame={activeRoom.currentGame}
             focusRanking={activeRoom.focusRanking}
+            focusReport={activeRoom.focusReport}
             goals={activeRoom.goals}
             onHome={returnHome}
             participants={activeRoom.participants}
@@ -1378,7 +1395,8 @@ function snapshotToDraftPatch(snapshot: {
 
 function buildRetrospectiveDraft(
   draft: RoomDraft,
-  currentParticipantStatus: ParticipantStatus
+  currentParticipantStatus: ParticipantStatus,
+  focusReport?: FocusSessionReport
 ): RoomDraft {
   const timestamp = now();
   const participants = draft.participants.map((participant) =>
@@ -1389,6 +1407,7 @@ function buildRetrospectiveDraft(
 
   return {
     ...draft,
+    focusReport: focusReport ?? draft.focusReport,
     participants,
     currentSession: draft.currentSession
       ? sessionWithLocalSummary(draft.currentSession, draft.goals, draft.focusRanking, timestamp)

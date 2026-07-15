@@ -7,6 +7,7 @@ import type {
   Participant,
   StudySession
 } from '@roomi/shared';
+import type { FocusSessionReport } from '../../focus-stats';
 import type { ScreenProps } from './types';
 
 interface RetrospectiveProps extends ScreenProps {
@@ -16,6 +17,7 @@ interface RetrospectiveProps extends ScreenProps {
   participants: Participant[];
   currentParticipantId: string;
   focusRanking?: FocusRankingEntry[];
+  focusReport?: FocusSessionReport;
   onHome?: () => void;
 }
 
@@ -33,6 +35,7 @@ export function Retrospective({
   session,
   currentGame,
   focusRanking = [],
+  focusReport,
   goals,
   onHome,
   participants,
@@ -62,6 +65,7 @@ export function Retrospective({
     myFocusMinutes ?? session?.summary?.focusMinutes ?? fallbackFocusMinutes(session);
   const focusPercent =
     plannedMinutes > 0 ? Math.min(100, Math.round((focusMinutes / plannedMinutes) * 100)) : 0;
+  const myFocusScore = ranking.find((entry) => entry.participantId === currentParticipantId)?.score;
 
   const myGoal = goals.find((goal) => goal.participantId === currentParticipantId);
   const goalAchieved = myGoal?.achieved ?? false;
@@ -89,11 +93,32 @@ export function Retrospective({
           </div>
 
           {/* Stats */}
-          <div className="retro__stats">
+          <div className="retro__stats retro__stats--study-summary">
             <div className="retro-stat">
               <div className="retro-stat__label">집중 시간</div>
               <div className="retro-stat__value">{focusMinutes}분</div>
               <div className="retro-stat__note">목표의 {focusPercent}%</div>
+            </div>
+            <div className="retro-stat">
+              <div className="retro-stat__label">집중 점수</div>
+              <div className="retro-stat__value">{myFocusScore ?? 0}점</div>
+              <div className="retro-stat__note">
+                {ranking.length > 0 ? `${ranking.length}명 중 ${selfRank(ranking, currentParticipantId)}위` : '순위 집계 없음'}
+              </div>
+            </div>
+            <div className="retro-stat">
+              <div className="retro-stat__label">피로도</div>
+              <div className="retro-stat__value">{focusReport?.fatigue ?? 0}</div>
+              <div className="retro-stat__note">
+                {focusReport?.restSuggested ? '휴식 권장' : focusReport?.ready ? '휴식 권장 없음' : '측정 부족'}
+              </div>
+            </div>
+            <div className="retro-stat">
+              <div className="retro-stat__label">산만함</div>
+              <div className="retro-stat__value">{focusReport?.distraction ?? 0}</div>
+              <div className="retro-stat__note">
+                {focusReport?.ready ? `${focusReport.observedMinutes}분 관찰` : '측정 부족'}
+              </div>
             </div>
             <div className="retro-stat">
               <div className="retro-stat__label">목표 결과</div>
@@ -112,6 +137,50 @@ export function Retrospective({
           <div className="retro-block">
             <div className="retro-block__title">목표 피드백</div>
             <p className="retro-block__text">{goalFeedback}</p>
+          </div>
+
+          <div className="retro-block">
+            <div className="retro-block__title">집중 신호 요약</div>
+            {focusReport ? (
+              <dl className="retro-signal-grid">
+                <div>
+                  <dt>관찰 시간</dt>
+                  <dd>{focusReport.observedMinutes}분</dd>
+                </div>
+                <div>
+                  <dt>눈 감김</dt>
+                  <dd>{Math.round(focusReport.eyesClosedRatio * 100)}%</dd>
+                </div>
+                <div>
+                  <dt>눈 깜빡임</dt>
+                  <dd>{focusReport.blinksPerMinute}회/분</dd>
+                </div>
+                <div>
+                  <dt>하품</dt>
+                  <dd>{focusReport.yawnsPerHour}회/시간</dd>
+                </div>
+                <div>
+                  <dt>시선 이탈</dt>
+                  <dd>{focusReport.gazeDiversionsPerHour}회/시간</dd>
+                </div>
+                <div>
+                  <dt>고개 돌림</dt>
+                  <dd>{focusReport.headTurnsPerHour}회/시간</dd>
+                </div>
+                <div>
+                  <dt>자리 비움</dt>
+                  <dd>{focusReport.awaysPerHour}회/시간</dd>
+                </div>
+                <div>
+                  <dt>자세 흔들림</dt>
+                  <dd>{focusReport.restlessness}</dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="retro-block__text">
+                피로도와 산만함은 이번 세션에서 충분히 집계되지 않았어요.
+              </p>
+            )}
           </div>
 
           {/* Focus ranking */}
@@ -308,6 +377,11 @@ function rankGameScores(scores: GameScore[], participants: Participant[]) {
 
 function participantName(participants: Participant[], participantId: string) {
   return participants.find((participant) => participant.id === participantId)?.nickname ?? '알 수 없음';
+}
+
+function selfRank(ranking: FocusRankingEntry[], participantId: string) {
+  const index = ranking.findIndex((entry) => entry.participantId === participantId);
+  return index >= 0 ? index + 1 : '-';
 }
 
 function gameLabel(kind: GameSession['kind']) {

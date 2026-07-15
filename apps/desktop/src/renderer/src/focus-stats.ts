@@ -51,6 +51,22 @@ export type FocusIndices = {
   restSuggested: boolean;
 };
 
+export type FocusSessionReport = Pick<
+  FocusIndices,
+  | 'ready'
+  | 'observedMinutes'
+  | 'eyesClosedRatio'
+  | 'blinksPerMinute'
+  | 'yawnsPerHour'
+  | 'headTurnsPerHour'
+  | 'awaysPerHour'
+  | 'gazeDiversionsPerHour'
+  | 'restlessness'
+  | 'fatigue'
+  | 'distraction'
+  | 'restSuggested'
+>;
+
 /**
  * Rates need a denominator before they say anything: one yawn 20 seconds in is not
  * 180 yawns an hour. The panel shows "측정 중" until this much face time is in.
