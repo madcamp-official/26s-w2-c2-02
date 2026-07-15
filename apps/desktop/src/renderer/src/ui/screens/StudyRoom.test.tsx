@@ -544,6 +544,36 @@ describe('StudyRoom focus nudges', () => {
     await waitFor(() => expect(onUpdatePresence).toHaveBeenCalledWith('focused'));
   });
 
+  it('shows the focus confirmation when the local verdict is not focused', () => {
+    const participant = createParticipant('participant-host', 'Host');
+    focusDetectionMock.snapshot.focusSnapshot = {
+      label: 'away',
+      score: 0,
+      activeSignals: ['face_missing'],
+      durations: {
+        face_missing: 5,
+        eyes_closed: 0,
+        head_turned: 0,
+        head_down: 0,
+        yawning: 0,
+        gaze_diverged: 0
+      },
+      blinksPerMinute: 0,
+      yawnCount: 0,
+      motionAmount: 0,
+      current: attentiveFrame({ facePresent: false })
+    };
+
+    render(
+      <StudyRoom
+        {...baseStudyRoomProps(participant)}
+        room={createRoom('hidden_mission', 'study')}
+      />
+    );
+
+    expect(screen.getByRole('region', { name: '집중 상태 확인' })).toBeInTheDocument();
+  });
+
   it('passes the latest focus report when leaving study mode', () => {
     const participant = createParticipant('participant-host', 'Host');
     const onLeaveRoom = vi.fn();

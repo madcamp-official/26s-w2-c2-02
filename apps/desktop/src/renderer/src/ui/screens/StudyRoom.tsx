@@ -410,6 +410,10 @@ export function focusVerdictLabel(status: ParticipantStatus) {
   return '집중 안 함';
 }
 
+function shouldAskFocusConfirmation(status: ParticipantStatus) {
+  return status === 'distracted' || status === 'away' || status === 'paused';
+}
+
 function tileDotClass(status: ParticipantStatus) {
   if (status === 'away') return 'tile__dot--away';
   if (status === 'distracted') return 'tile__dot--distracted';
@@ -631,7 +635,7 @@ export function StudyRoom({
   const shouldShowFocusCheck =
     isStudyMode &&
     focusDetection.status === 'running' &&
-    focusPresenceStatus === 'distracted' &&
+    shouldAskFocusConfirmation(focusPresenceStatus) &&
     timestamp >= focusCheckDismissedUntil;
 
   // Keyed on the score value rather than the ranking array: the array is a fresh
@@ -1158,7 +1162,7 @@ export function StudyRoom({
                 <span className="focus-nudge__eyebrow">집중 확인</span>
                 <h2>혹시 집중 안하고 있어?</h2>
                 <p>
-                  고개, 시선, 산만 지표가 높게 잡혔어요. 오탐이면 지금 자세를 기준으로 조금 더
+                  카메라 신호나 산만 지표가 높게 잡혔어요. 오탐이면 지금 자세를 기준으로 조금 더
                   넓게 판단할게요.
                 </p>
               </div>
