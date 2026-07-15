@@ -17,9 +17,12 @@ const focusedFrame: Omit<FrameSignals, 'timestamp'> = {
   eyeAspectRatio: 0.3,
   headYawRatio: 0,
   headPitchRatio: 0,
+  headPose: null,
+  mouthAspectRatio: 0.1,
   eyesClosed: false,
   headTurned: false,
-  headDown: false
+  headDown: false,
+  mouthOpen: false
 };
 
 /** Frames spanning `seconds`, sampled every 100ms, ending at t = seconds * 1000. */
@@ -88,6 +91,84 @@ describe('classifyFocus', () => {
 
     expect(snapshot.activeSignals).toEqual([]);
     expect(snapshot.label).toBe('focused');
+  });
+
+  it('can report away immediately when face missing delay is disabled', () => {
+    const snapshot = classifyFocus(
+      frameRun(0, { facePresent: false }),
+      { ...defaultRuleSettings, faceMissingSeconds: 0 }
+    );
+
+    expect(snapshot.label).toBe('away');
+    expect(snapshot.activeSignals).toContain('face_missing');
+  });
+
+  it('does not report away with zero face delay while the latest frame has a face', () => {
+    const snapshot = classifyFocus(
+      frameRun(0),
+      { ...defaultRuleSettings, faceMissingSeconds: 0 }
+    );
+
+    expect(snapshot.label).toBe('focused');
+    expect(snapshot.activeSignals).not.toContain('face_missing');
+  });
+});
+
+describe('fatigue signals', () => {
+  const yawning = { mouthOpen: true, mouthAspectRatio: 0.7 };
+
+  it('treats a sustained wide-open mouth as a yawn', () => {
+    // Runs to the end of the window, so the yawn is still in progress.
+    const frames = windowWithRuns(7, { starts: [5], runSeconds: 2.5, apply: yawning });
+    const snapshot = classifyFocus(frames, defaultRuleSettings);
+
+    expect(snapshot.activeSignals).toContain('yawning');
+  });
+
+  it('does not let a single yawn pause someone who is still working', () => {
+    const frames = windowWithRuns(7, { starts: [5], runSeconds: 2.5, apply: yawning });
+    const snapshot = classifyFocus(frames, defaultRuleSettings);
+
+    // Yawning is tiredness, not absence. It dents the score but must not flip the
+    // label, because `sleepy` maps to a `paused` presence in the study room.
+    expect(snapshot.score).toBe(85);
+    expect(snapshot.label).toBe('focused');
+  });
+
+  it('does not mistake talking for yawning', () => {
+    const frames = windowWithRuns(20, {
+      starts: [2, 5, 8, 11, 14],
+      runSeconds: 0.6,
+      apply: yawning
+    });
+    const snapshot = classifyFocus(frames, defaultRuleSettings);
+
+    expect(snapshot.activeSignals).not.toContain('yawning');
+    expect(snapshot.yawnCount).toBe(0);
+    expect(snapshot.score).toBe(100);
+  });
+
+  it('counts completed yawns across the window', () => {
+    const frames = windowWithRuns(30, { starts: [2, 12, 22], runSeconds: 2, apply: yawning });
+
+    expect(classifyFocus(frames, defaultRuleSettings).yawnCount).toBe(3);
+  });
+
+  it('reports the blink rate per minute', () => {
+    const frames = windowWithRuns(30, {
+      starts: [2, 8, 14, 20, 26],
+      runSeconds: 0.2,
+      apply: { eyesClosed: true }
+    });
+
+    // 5 blinks across a 30 second window.
+    expect(classifyFocus(frames, defaultRuleSettings).blinksPerMinute).toBe(10);
+  });
+
+  it('does not count a drowsy eye closure as a blink', () => {
+    const frames = windowWithRuns(30, { starts: [5], runSeconds: 5, apply: { eyesClosed: true } });
+
+    expect(classifyFocus(frames, defaultRuleSettings).blinksPerMinute).toBe(0);
   });
 });
 
@@ -163,6 +244,37 @@ describe('buildFeatureWindow', () => {
     expect(window.features.eyeClosedRatio).toBe(0);
   });
 
+  it('reports the real head angles when frames carry a pose', () => {
+    const frames = frameRun(20, {
+      headPose: { headYaw: 12, headPitch: -4, headRoll: 0 },
+      // A ratio that would fabricate 45 degrees under the old ratio * 90 rule.
+      headYawRatio: 0.5
+    });
+    const window = buildFeatureWindow(
+      frames,
+      classifyFocus(frames, defaultRuleSettings),
+      0,
+      20_000,
+      identity
+    );
+
+    expect(window.features.headYawMean).toBe(12);
+    expect(window.features.headPitchMean).toBe(-4);
+  });
+
+  it('falls back to scaling the landmark ratio when no pose is available', () => {
+    const frames = frameRun(20, { headPose: null, headYawRatio: 0.5 });
+    const window = buildFeatureWindow(
+      frames,
+      classifyFocus(frames, defaultRuleSettings),
+      0,
+      20_000,
+      identity
+    );
+
+    expect(window.features.headYawMean).toBe(45);
+  });
+
   it('clamps the reported duration into the schema range', () => {
     const frames = frameRun(1);
     const window = buildFeatureWindow(
@@ -199,14 +311,119 @@ describe('extractFrameSignals', () => {
     expect(signals).toMatchObject({ timestamp: 1_234, facePresent: false, eyeAspectRatio: 0 });
   });
 
-  it('flags a downward pitch as head down', () => {
+  it('still detects head down from landmarks alone when no matrix arrives', () => {
     const face = syntheticFace({ noseY: 0.9 });
     const signals = extractFrameSignals(face, defaultRuleSettings, 0, null);
 
     expect(signals.facePresent).toBe(true);
     expect(signals.headDown).toBe(true);
   });
+
+  it('leaves the head pose null when MediaPipe supplied no matrix', () => {
+    const signals = extractFrameSignals(syntheticFace({ noseY: 0.5 }), defaultRuleSettings, 0, null);
+
+    expect(signals.headPose).toBeNull();
+  });
+
+  it('reads real angles from the transformation matrix when one is supplied', () => {
+    const signals = extractFrameSignals(
+      syntheticFace({ noseY: 0.5 }),
+      defaultRuleSettings,
+      0,
+      null,
+      identityMatrix()
+    );
+
+    expect(signals.headPose).toEqual({ headYaw: 0, headPitch: 0, headRoll: 0 });
+  });
+
+  it('judges head angle from the matrix rather than the landmark ratio', () => {
+    // The landmarks say the nose is far below the eyes, which the ratio fallback
+    // would read as head down. The pose says the head is level, and it wins.
+    const signals = extractFrameSignals(
+      syntheticFace({ noseY: 0.9 }),
+      defaultRuleSettings,
+      0,
+      null,
+      identityMatrix()
+    );
+
+    expect(signals.headDown).toBe(false);
+  });
+
+  it('leaves normal study movement alone', () => {
+    const comfortable = extractFrameSignals(
+      syntheticFace({ noseY: 0.5 }),
+      defaultRuleSettings,
+      0,
+      null,
+      pitchMatrix(20)
+    );
+
+    expect(comfortable.headDown).toBe(false);
+  });
+
+  it('flags a downward pitch past the comfortable range as head down', () => {
+    const signals = extractFrameSignals(
+      syntheticFace({ noseY: 0.5 }),
+      defaultRuleSettings,
+      0,
+      null,
+      pitchMatrix(35)
+    );
+
+    expect(signals.headDown).toBe(true);
+  });
+
+  it('flags a yaw past the comfortable range as head turned in either direction', () => {
+    const face = syntheticFace({ noseY: 0.5 });
+    const left = extractFrameSignals(face, defaultRuleSettings, 0, null, yawMatrix(-40));
+    const right = extractFrameSignals(face, defaultRuleSettings, 0, null, yawMatrix(40));
+    const comfortable = extractFrameSignals(face, defaultRuleSettings, 0, null, yawMatrix(25));
+
+    expect(left.headTurned).toBe(true);
+    expect(right.headTurned).toBe(true);
+    expect(comfortable.headTurned).toBe(false);
+  });
 });
+
+/**
+ * A window of `totalSeconds` sampled every 100ms, where `apply` is set during
+ * each run starting at `starts` (seconds) and lasting `runSeconds`.
+ */
+function windowWithRuns(
+  totalSeconds: number,
+  options: { starts: number[]; runSeconds: number; apply: Partial<FrameSignals> }
+): FrameSignals[] {
+  return Array.from({ length: totalSeconds * 10 + 1 }, (_, index) => {
+    const timestamp = index * 100;
+    const inRun = options.starts.some(
+      (start) => timestamp >= start * 1000 && timestamp < (start + options.runSeconds) * 1000
+    );
+    return { ...focusedFrame, timestamp, ...(inRun ? options.apply : {}) };
+  });
+}
+
+/** A head facing the camera, in MediaPipe's column-major 4x4 layout. */
+function identityMatrix(): number[] {
+  return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+}
+
+/** Head pitched down by `degrees` (positive is looking down). */
+function pitchMatrix(degrees: number): number[] {
+  const angle = (degrees * Math.PI) / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return [1, 0, 0, 0, 0, cos, sin, 0, 0, -sin, cos, 0, 0, 0, 0, 1];
+}
+
+/** Head turned by `degrees` of yaw. */
+function yawMatrix(degrees: number): number[] {
+  const angle = (degrees * Math.PI) / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return [cos, 0, -sin, 0, 0, 1, 0, 0, sin, 0, cos, 0, 0, 0, 0, 1];
+}
 
 /**
  * A minimal 468-point face: eyes near the top, nose placed by the caller. Only

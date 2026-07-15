@@ -93,20 +93,36 @@ const settingGroups: Array<{
         unit: ''
       },
       {
-        key: 'headTurnRatioThreshold',
-        label: '고개 돌림 비율',
-        min: 0.08,
-        max: 0.35,
-        step: 0.01,
+        key: 'headTurnDegreesThreshold',
+        label: '고개 돌림 각도',
+        min: 15,
+        max: 60,
+        step: 1,
+        unit: '°'
+      },
+      {
+        key: 'headDownDegreesThreshold',
+        label: '고개 숙임 각도',
+        min: 10,
+        max: 50,
+        step: 1,
+        unit: '°'
+      },
+      {
+        key: 'mouthAspectRatioThreshold',
+        label: '입 벌림 MAR',
+        min: 0.3,
+        max: 0.9,
+        step: 0.05,
         unit: ''
       },
       {
-        key: 'headDownRatioThreshold',
-        label: '고개 숙임 비율',
-        min: 0.24,
-        max: 0.5,
-        step: 0.01,
-        unit: ''
+        key: 'yawningSeconds',
+        label: '하품 지속',
+        min: 0.5,
+        max: 4,
+        step: 0.1,
+        unit: '초'
       }
     ]
   },
@@ -558,22 +574,51 @@ export function MediaPipeTest({ go }: ScreenProps) {
             <FeatureMeter label="눈 감김" value={focusSnapshot.durations.eyes_closed} unit="초" />
             <FeatureMeter label="고개 돌림" value={focusSnapshot.durations.head_turned} unit="초" />
             <FeatureMeter label="고개 숙임" value={focusSnapshot.durations.head_down} unit="초" />
+            <FeatureMeter label="하품" value={focusSnapshot.durations.yawning} unit="초" />
             <FeatureMeter
               label="EAR"
               value={round(focusSnapshot.current.eyeAspectRatio, 2)}
               unit=""
             />
             <FeatureMeter
-              label="yaw"
+              label="MAR"
+              value={round(focusSnapshot.current.mouthAspectRatio, 2)}
+              unit=""
+            />
+            <FeatureMeter label="깜빡임" value={focusSnapshot.blinksPerMinute} unit="회/분" />
+            <FeatureMeter label="하품 횟수" value={focusSnapshot.yawnCount} unit="회" />
+            <FeatureMeter
+              label="yaw 비율"
               value={round(focusSnapshot.current.headYawRatio, 2)}
               unit=""
             />
             <FeatureMeter
-              label="pitch"
+              label="pitch 비율"
               value={round(focusSnapshot.current.headPitchRatio, 2)}
               unit=""
             />
+            <FeatureMeter
+              label="yaw 각도"
+              value={round(focusSnapshot.current.headPose?.headYaw ?? 0, 1)}
+              unit="°"
+            />
+            <FeatureMeter
+              label="pitch 각도"
+              value={round(focusSnapshot.current.headPose?.headPitch ?? 0, 1)}
+              unit="°"
+            />
+            <FeatureMeter
+              label="roll 각도"
+              value={round(focusSnapshot.current.headPose?.headRoll ?? 0, 1)}
+              unit="°"
+            />
           </div>
+
+          <p className="mediapipe-test__note">
+            고개 돌림·숙임 판정은 MediaPipe 6DoF 행렬에서 계산한 각도를 씁니다. 아래를 볼수록 pitch가
+            커지고, 기본 임계값은 편하게 앉아 움직이는 범위(yaw ±25°, pitch +20° 안팎) 바깥에
+            맞춰져 있습니다. 비율 값은 각도를 얻지 못한 프레임의 예비 계산에만 쓰입니다.
+          </p>
 
           <p className="mediapipe-test__note">
             Rule-Based는 매 프레임 로컬 기준으로 판정하고, ML 서버 모드는 같은 로컬 feature를 20초

@@ -40,7 +40,7 @@
   font-size: 24px;
   font-weight: 800;
   color: var(--heading);
-  letter-spacing: -0.3px;
+  letter-spacing: 0;
 }
 
 .retro__subtitle {

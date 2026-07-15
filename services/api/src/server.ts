@@ -2,6 +2,7 @@ import cors from 'cors';
 import express from 'express';
 import type {
   CreateRoomInput,
+  GameKind,
   GoalAchievedInput,
   GoalRefineInput,
   JoinRoomInput,
@@ -99,13 +100,21 @@ export function createApp(
     try {
       const { roomId, participantId } = request.body as SessionStartInput;
       const snapshot = roomService.startSession(roomId, participantId);
-      const text = await roomiOrchestrator.generateStartMessage({
-        sessionMinutes: snapshot.currentSession?.plannedMinutes ?? snapshot.room.settings.sessionMinutes,
-        goalCount: snapshot.goals.length
-      });
+      const isStudyMode = snapshot.room.settings.activityKind === 'study';
+      const text = isStudyMode
+        ? await roomiOrchestrator.generateStartMessage({
+            sessionMinutes: snapshot.currentSession?.plannedMinutes ?? snapshot.room.settings.sessionMinutes,
+            goalCount: snapshot.goals.length
+          })
+        : await roomiOrchestrator.generateGameIntroMessage({
+            game: toFacePartyGameKind(snapshot.room.settings.defaultGameKind),
+            playerCount: snapshot.participants.length,
+            playStyles: snapshot.goals.map((goal) => goal.rawText.trim()).filter(Boolean),
+            tone: 'playful'
+          });
       roomService.addRoomiMessage({
         roomId: snapshot.room.id,
-        kind: 'start',
+        kind: isStudyMode ? 'start' : 'game_intro',
         text
       });
       response.json(roomService.snapshotForParticipant(roomId, participantId));
@@ -168,8 +177,8 @@ export function createApp(
         throw new Error('No active session to end');
       }
 
-      const baseSummary = computeSummary(session, snapshot.goals);
       const ranking = roomService.getFocusRanking(roomId);
+      const baseSummary = computeSummary(session, snapshot.goals, ranking);
       const retrospective = await roomiOrchestrator.generateRetrospective({
         sessionMinutes: session.plannedMinutes,
         focusMinutes: baseSummary.focusMinutes,
@@ -202,15 +211,19 @@ export function createApp(
   });
 
   app.post('/goals/refine', async (request, response) => {
-    // The raw goal stays server-side; only the refined text and reason go back.
-    const { rawGoal, sessionMinutes } = request.body as GoalRefineInput;
+    // The raw goal/style stays server-side; only the refined text and reason go back.
+    const { rawGoal, sessionMinutes, mode = 'study_goal', gameKind } = request.body as GoalRefineInput;
 
-    if (typeof rawGoal !== 'string' || !rawGoal.trim() || typeof sessionMinutes !== 'number') {
+    if (
+      typeof rawGoal !== 'string' ||
+      typeof sessionMinutes !== 'number' ||
+      (mode !== 'play_style' && !rawGoal.trim())
+    ) {
       response.status(400).json({ message: 'rawGoal (string) and sessionMinutes (number) are required' });
       return;
     }
 
-    const refinement = await roomiOrchestrator.refineGoal(rawGoal, sessionMinutes);
+    const refinement = await roomiOrchestrator.refineGoal(rawGoal, sessionMinutes, mode, gameKind);
     response.json(refinement);
   });
 
@@ -282,6 +295,11 @@ export function createApp(
 function hasRequestBody(method: string) {
   const normalizedMethod = method.toUpperCase();
   return normalizedMethod !== 'GET' && normalizedMethod !== 'HEAD';
+}
+
+function toFacePartyGameKind(kind: GameKind) {
+  if (kind === 'copycat_relay') return 'copycat';
+  return kind;
 }
 
 function statusForRoomError(message: string, fallback: number) {

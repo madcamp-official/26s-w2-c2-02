@@ -4,9 +4,11 @@ import {
   createInviteCode,
   formatInviteCode,
   inviteCodeAlphabet,
-  normalizeInviteCode
+  normalizeInviteCode,
+  type GameSession,
+  type HiddenMission
 } from '@roomi/shared';
-import { App } from './App';
+import { App, resolvePrivateMission } from './App';
 
 const socketMock = {
   connect: vi.fn(),
@@ -359,17 +361,82 @@ describe('App screen router', () => {
   });
 });
 
+describe('resolvePrivateMission', () => {
+  it('drops the previous private mission when a public next-round game arrives first', () => {
+    const previousMission = hiddenMission('mission-1', 'participant-host', 'Smile twice');
+    const previousGame = hiddenMissionGame('round-1', [previousMission]);
+    const publicNextRound = {
+      ...previousGame,
+      status: 'in_round' as const,
+      round: {
+        ...previousGame.round,
+        id: 'round-2',
+        index: 2
+      },
+      missions: []
+    };
+
+    expect(
+      resolvePrivateMission(
+        {
+          currentParticipantId: 'participant-host',
+          currentGame: previousGame,
+          privateMission: previousMission
+        },
+        publicNextRound
+      )
+    ).toBeUndefined();
+  });
+
+  it('keeps the current private mission for public updates within the same round', () => {
+    const mission = hiddenMission('mission-1', 'participant-host', 'Smile twice');
+    const game = hiddenMissionGame('round-1', [mission]);
+
+    expect(
+      resolvePrivateMission(
+        {
+          currentParticipantId: 'participant-host',
+          currentGame: game,
+          privateMission: mission
+        },
+        { ...game, missions: [] }
+      )
+    ).toBe(mission);
+  });
+
+  it('uses a newly assigned private mission from participant-specific snapshots', () => {
+    const previousMission = hiddenMission('mission-1', 'participant-host', 'Smile twice');
+    const nextMission = hiddenMission('mission-2', 'participant-host', 'Wink twice');
+    const previousGame = hiddenMissionGame('round-1', [previousMission]);
+    const nextGame = hiddenMissionGame('round-2', [nextMission]);
+
+    expect(
+      resolvePrivateMission(
+        {
+          currentParticipantId: 'participant-host',
+          currentGame: previousGame,
+          privateMission: previousMission
+        },
+        nextGame
+      )
+    ).toBe(nextMission);
+  });
+});
+
 function defaultTestRoomSettings() {
   return {
+    activityKind: 'study',
     authMode: 'nickname_code',
     breakMode: 'room',
     breakMinutes: 10,
+    defaultGameKind: 'hidden_mission',
     defaultScoreVisibility: 'public',
     detectionPauseAllowed: true,
     maxParticipants: 4,
     rankingMetric: 'focus_minutes',
     roomiTone: 'friendly_casual',
     sessionMinutes: 50,
+    roundCount: 3,
     videoProvider: 'daily',
     videoRequired: true
   };
@@ -428,4 +495,39 @@ function stubHostApi() {
       };
     })
   );
+}
+
+function hiddenMission(id: string, playerId: string, prompt: string): HiddenMission {
+  return {
+    id,
+    playerId,
+    prompt,
+    verify: 'smile_count',
+    target: 2
+  };
+}
+
+function hiddenMissionGame(roundId: string, missions: HiddenMission[]): GameSession {
+  return {
+    id: 'game-1',
+    roomId: 'room-1',
+    kind: 'hidden_mission',
+    status: 'in_round',
+    round: {
+      id: roundId,
+      gameId: 'game-1',
+      index: Number(roundId.replace('round-', '')) || 1,
+      status: 'in_round',
+      startedAt: '2026-07-15T00:00:00.000Z',
+      endsAt: '2026-07-15T00:01:30.000Z'
+    },
+    totalRounds: 3,
+    completedRounds: [],
+    nextRoundReadyParticipantIds: [],
+    scores: [{ participantId: 'participant-host', points: 0 }],
+    missions,
+    missionResults: [],
+    createdAt: '2026-07-15T00:00:00.000Z',
+    updatedAt: '2026-07-15T00:00:00.000Z'
+  };
 }

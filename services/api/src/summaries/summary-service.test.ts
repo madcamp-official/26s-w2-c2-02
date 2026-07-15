@@ -31,7 +31,30 @@ describe('createEmptySummary', () => {
 });
 
 describe('computeSummary', () => {
-  it('derives focus minutes from the elapsed time between start and end', () => {
+  it('averages the tracked focus minutes instead of counting elapsed time', () => {
+    const summary = computeSummary(
+      session({ startedAt: '2026-07-13T00:00:00.000Z', endedAt: '2026-07-13T00:42:00.000Z' }),
+      [],
+      [
+        { participantId: 'participant-1', focusMinutes: 40, nickname: '참가자1', left: false },
+        { participantId: 'participant-2', focusMinutes: 10, nickname: '참가자2', left: false }
+      ]
+    );
+
+    expect(summary.focusMinutes).toBe(25);
+  });
+
+  it('does not credit focus time to a participant who sat out the session', () => {
+    const summary = computeSummary(
+      session({ startedAt: '2026-07-13T00:00:00.000Z', endedAt: '2026-07-13T00:50:00.000Z' }),
+      [],
+      [{ participantId: 'participant-1', focusMinutes: 0, nickname: '참가자1', left: false }]
+    );
+
+    expect(summary.focusMinutes).toBe(0);
+  });
+
+  it('falls back to elapsed time when detection tracked nothing', () => {
     const summary = computeSummary(
       session({ startedAt: '2026-07-13T00:00:00.000Z', endedAt: '2026-07-13T00:42:00.000Z' }),
       []
@@ -40,7 +63,7 @@ describe('computeSummary', () => {
     expect(summary.focusMinutes).toBe(42);
   });
 
-  it('caps focus minutes at the planned duration', () => {
+  it('caps the elapsed-time fallback at the planned duration', () => {
     const summary = computeSummary(
       session({
         plannedMinutes: 25,

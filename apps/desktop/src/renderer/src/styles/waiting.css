@@ -29,6 +29,11 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.waiting__head-title > div {
   min-width: 0;
 }
 
@@ -36,7 +41,20 @@
   font-size: 28px;
   font-weight: 800;
   color: var(--heading);
-  letter-spacing: -0.4px;
+  letter-spacing: 0;
+}
+
+.waiting__title--game {
+  overflow: hidden;
+  font-size: clamp(18px, 2vw, 20px);
+  letter-spacing: 0;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.waiting__head > .invite-card {
+  flex: none;
 }
 
 .waiting__subtitle {
@@ -155,6 +173,34 @@
 .waiting__panel-sub {
   margin-top: 6px;
   font-size: 13px;
+  color: var(--text-muted);
+}
+
+.waiting-game {
+  display: grid;
+  gap: 4px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--row-bg);
+}
+
+.waiting-game__label {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--purple-700);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.waiting-game strong {
+  font-size: 14px;
+  color: var(--heading);
+}
+
+.waiting-game span:last-child {
+  font-size: 12px;
   color: var(--text-muted);
 }
 

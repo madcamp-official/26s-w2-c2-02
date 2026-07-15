@@ -7,7 +7,7 @@ describe('buildSplashHtml', () => {
     const html = buildSplashHtml('data:image/png;base64,AAAA');
 
     expect(html).toContain('루미');
-    expect(html).toContain('친구들과 함께 켜두는 AI 운영 스터디룸');
+    expect(html).toContain('친구들과 함께 켜두는 AI 플레이룸');
   });
 
   it('전달한 마스코트 이미지를 인라인한다', () => {

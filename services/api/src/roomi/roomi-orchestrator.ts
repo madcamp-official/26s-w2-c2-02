@@ -1,11 +1,18 @@
-import type { GoalRefinement } from '@roomi/shared';
+import type { GameKind, GoalRefinement } from '@roomi/shared';
 
 export type RoomiPromptKind =
   | 'goal_refine'
   | 'start'
   | 'focus_recovery'
   | 'break_return'
-  | 'summary';
+  | 'summary'
+  | 'hidden_mission'
+  | 'poker_bluff'
+  | 'copycat_seed'
+  | 'game_intro'
+  | 'game_reaction'
+  | 'game_reveal'
+  | 'game_summary';
 
 /**
  * Single seam between the app and any LLM text provider. OllamaClient implements
@@ -38,10 +45,83 @@ export type RetrospectiveText = {
   lumiComment: string;
 };
 
+export type FacePartyGameKind = 'hidden_mission' | 'poker_bluff' | 'copycat';
+
+export type FacePartyGameTone = 'friendly' | 'playful' | 'calm';
+
+export type HiddenMissionPromptInput = {
+  nickname?: string;
+  theme?: string;
+  roundSeconds?: number;
+  tone?: FacePartyGameTone;
+};
+
+export type PokerBluffPromptInput = {
+  theme?: string;
+  questionCount?: number;
+  tellHintCount?: number;
+  tone?: FacePartyGameTone;
+};
+
+export type PokerBluffPrompt = {
+  questions: string[];
+  tellHints: string[];
+};
+
+export type CopycatSeedInput = {
+  theme?: string;
+  count?: number;
+  tone?: FacePartyGameTone;
+};
+
+export type FacePartyGameMessageInput = {
+  game: FacePartyGameKind;
+  roundNumber?: number;
+  playerCount?: number;
+  winnerNickname?: string;
+  visibleSignals?: string[];
+  playStyles?: string[];
+  tone?: FacePartyGameTone;
+};
+
+export type FacePartyGameReactionInput = FacePartyGameMessageInput & {
+  event:
+    | 'mission_progress'
+    | 'mission_success'
+    | 'mission_fail'
+    | 'bluff_bet'
+    | 'bluff_cracked'
+    | 'bluff_held'
+    | 'relay_advanced';
+  actorNickname?: string;
+  targetNickname?: string;
+  actorPlayStyle?: string;
+  targetPlayStyle?: string;
+  points?: number;
+};
+
+export type FacePartyChatReactionInput = {
+  game: FacePartyGameKind;
+  latestNickname: string;
+  latestText: string;
+  recentMessages: Array<{ nickname: string; text: string }>;
+  playStyles?: string[];
+  tone?: FacePartyGameTone;
+};
+
 export class RoomiOrchestrator {
   constructor(private readonly generator?: TextGenerator) {}
 
-  async refineGoal(rawGoal: string, sessionMinutes: number): Promise<GoalRefinement> {
+  async refineGoal(
+    rawGoal: string,
+    sessionMinutes: number,
+    mode: 'study_goal' | 'play_style' = 'study_goal',
+    gameKind: GameKind = 'hidden_mission'
+  ): Promise<GoalRefinement> {
+    if (mode === 'play_style') {
+      return this.refinePlayStyle(rawGoal, gameKind);
+    }
+
     if (this.generator) {
       try {
         const refinedText = this.sanitizeRefinedText(
@@ -63,6 +143,28 @@ export class RoomiOrchestrator {
     }
 
     return this.templateRefinement(rawGoal, sessionMinutes);
+  }
+
+  private async refinePlayStyle(rawStyle: string, gameKind: GameKind): Promise<GoalRefinement> {
+    if (this.generator) {
+      try {
+        const refinedText = this.sanitizeRefinedText(
+          await this.generator.generateText(this.buildPlayStylePrompt(rawStyle, gameKind))
+        );
+
+        if (refinedText && this.isKoreanText(refinedText)) {
+          return {
+            refinedText,
+            reason: '루미가 이번 게임에서 써먹기 좋은 플레이 스타일로 골랐어요.',
+            source: 'ollama'
+          };
+        }
+      } catch (error) {
+        this.logGeneratorFailure('goal_refine', error);
+      }
+    }
+
+    return this.templatePlayStyle(rawStyle, gameKind);
   }
 
   async generateStartMessage(input: StartMessageInput): Promise<string> {
@@ -91,10 +193,26 @@ export class RoomiOrchestrator {
       [
         `참가자: ${input.nickname}`,
         `상태: ${statusLabel}`,
-        `현재 목표: ${input.goal ?? '등록된 목표 없음'}`
-      ].join('\n'),
-      `${input.nickname}, 잠깐 흐름이 끊긴 것 같아. 돌아오면 목표의 다음 한 단계만 바로 시작해보자.`
+        `현재 목표: ${input.goal ?? '등록된 목표 없음'}`,
+        // A face-signal reading of "distracted" is a guess and is often wrong
+        // (taking notes reads the same as looking at a phone), so the message has
+        // to check with the participant instead of telling them what they did.
+        input.status === 'distracted'
+          ? '감지는 틀릴 수 있어. 딴짓한다고 단정하지 말고 아직 목표 작업 중인지 먼저 물어봐.'
+          : ''
+      ]
+        .filter(Boolean)
+        .join('\n'),
+      this.templateFocusRecovery(input)
     );
+  }
+
+  private templateFocusRecovery(input: FocusRecoveryInput): string {
+    if (input.status === 'distracted') {
+      return `${input.nickname}, 혹시 아직 목표 작업 중이야? 맞으면 그대로 가고, 아니면 다음 한 단계만 같이 정해보자.`;
+    }
+
+    return `${input.nickname}, 잠깐 흐름이 끊긴 것 같아. 돌아오면 목표의 다음 한 단계만 바로 시작해보자.`;
   }
 
   async generateRetrospective(input: RetrospectiveInput): Promise<RetrospectiveText> {
@@ -110,6 +228,94 @@ export class RoomiOrchestrator {
       this.logGeneratorFailure('summary', error);
       return fallback;
     }
+  }
+
+  async generateHiddenMissionPrompt(input: HiddenMissionPromptInput = {}): Promise<string> {
+    const fallback = this.templateHiddenMissionPrompt(input);
+    return this.generateFacePartyText(
+      'hidden_mission',
+      this.buildHiddenMissionPrompt(input),
+      fallback
+    );
+  }
+
+  async generatePokerBluffPrompt(input: PokerBluffPromptInput = {}): Promise<PokerBluffPrompt> {
+    const fallback = this.templatePokerBluffPrompt(input);
+
+    if (!this.generator) return fallback;
+
+    try {
+      const raw = await this.generator.generateText(this.buildPokerBluffPrompt(input));
+      const parsed = this.parsePokerBluffOutput(raw);
+      return parsed && this.isKoreanText([...parsed.questions, ...parsed.tellHints].join(' '))
+        ? parsed
+        : fallback;
+    } catch (error) {
+      this.logGeneratorFailure('poker_bluff', error);
+      return fallback;
+    }
+  }
+
+  async generateCopycatSeedExpressions(input: CopycatSeedInput = {}): Promise<string[]> {
+    const fallback = this.templateCopycatSeedExpressions(input);
+
+    if (!this.generator) return fallback;
+
+    try {
+      const raw = await this.generator.generateText(this.buildCopycatSeedPrompt(input));
+      const parsed = this.parseLineList(raw, input.count ?? 4);
+      return parsed.length > 0 && this.isKoreanText(parsed.join(' ')) ? parsed : fallback;
+    } catch (error) {
+      this.logGeneratorFailure('copycat_seed', error);
+      return fallback;
+    }
+  }
+
+  async generateGameIntroMessage(input: FacePartyGameMessageInput): Promise<string> {
+    return this.generateFacePartyText(
+      'game_intro',
+      this.buildFacePartyMessagePrompt('intro', input),
+      this.templateGameIntroMessage(input)
+    );
+  }
+
+  async generateGameReactionMessage(input: FacePartyGameReactionInput): Promise<string> {
+    return this.generateFacePartyText(
+      'game_reaction',
+      this.buildFacePartyReactionPrompt(input),
+      this.templateGameReactionMessage(input)
+    );
+  }
+
+  async generateChatReactionMessage(input: FacePartyChatReactionInput): Promise<string> {
+    const fallback = this.templateChatReactionMessage(input);
+
+    if (!this.generator) return fallback;
+
+    try {
+      const raw = await this.generator.generateText(this.buildFacePartyChatReactionPrompt(input));
+      const text = this.sanitizeChatReactionText(raw, input);
+      return text && this.isKoreanText(text) ? text : fallback;
+    } catch (error) {
+      this.logGeneratorFailure('game_reaction', error);
+      return fallback;
+    }
+  }
+
+  async generateGameRevealMessage(input: FacePartyGameMessageInput): Promise<string> {
+    return this.generateFacePartyText(
+      'game_reveal',
+      this.buildFacePartyMessagePrompt('reveal', input),
+      this.templateGameRevealMessage(input)
+    );
+  }
+
+  async generateGameSummaryMessage(input: FacePartyGameMessageInput): Promise<string> {
+    return this.generateFacePartyText(
+      'game_summary',
+      this.buildFacePartyMessagePrompt('summary', input),
+      this.templateGameSummaryMessage(input)
+    );
   }
 
   private templateRetrospective(input: RetrospectiveInput): RetrospectiveText {
@@ -151,10 +357,362 @@ export class RoomiOrchestrator {
     return { goalFeedback: feedback, lumiComment: lumi };
   }
 
+  private templateHiddenMissionPrompt(input: HiddenMissionPromptInput): string {
+    const theme = input.theme ?? '화상 통화';
+    const duration = input.roundSeconds ? `${input.roundSeconds}초 동안` : '이번 라운드 동안';
+    const target = input.nickname ? `${input.nickname}, ` : '';
+    return `${target}${duration} ${theme} 이야기를 하면서 턱을 한 번 가볍게 만지고 자연스럽게 이어가.`;
+  }
+
+  private templatePokerBluffPrompt(input: PokerBluffPromptInput): PokerBluffPrompt {
+    const theme = input.theme ?? '주말 계획';
+    const questionCount = input.questionCount ?? 3;
+    const tellHintCount = input.tellHintCount ?? 3;
+    const questions = [
+      `${theme} 이야기에서 실제로 있었던 작은 디테일 하나는 뭐야?`,
+      `${theme} 이야기를 친구들이 기억한다면 어떤 장면일 것 같아?`,
+      `${theme} 이야기를 더 선명하게 만드는 사소한 단서는 뭐야?`,
+      `${theme} 계획에서 마지막 순간에 바뀐 점이 있었어?`
+    ].slice(0, questionCount);
+    const tellHints = [
+      '구체적인 디테일을 말하기 전 멈칫하는 타이밍을 보세요.',
+      '손짓과 이야기 순서가 자연스럽게 맞는지 비교해보세요.',
+      '질문이 구체적일 때 시선 방향이 바뀌는지 살펴보세요.',
+      '시간 순서를 물었을 때 같은 표현을 반복하는지 들어보세요.'
+    ].slice(0, tellHintCount);
+
+    return { questions, tellHints };
+  }
+
+  private templateCopycatSeedExpressions(input: CopycatSeedInput): string[] {
+    const theme = input.theme ?? '빠른 리액션';
+    return [
+      `${theme}에 맞춰 크게 놀란 표정 짓기`,
+      `${theme}에 맞춰 살짝 의심하는 옆눈질하기`,
+      `${theme}에 맞춰 조용히 기뻐하는 표정 짓기`,
+      `${theme}에 맞춰 웃음을 참는 표정 짓기`,
+      `${theme}에 맞춰 진지하게 발표하는 표정 짓기`
+    ].slice(0, input.count ?? 4);
+  }
+
+  private templateGameIntroMessage(input: FacePartyGameMessageInput): string {
+    const name = this.faceGameName(input.game);
+    const round = input.roundNumber ? ` ${input.roundNumber}라운드.` : '';
+    const styles = this.formatPlayStyles(input.playStyles);
+    if (input.game === 'hidden_mission') {
+      const topic = this.hiddenMissionConversationTopic(input.roundNumber);
+      return `${name}${round} 대화 주제는 "${topic}"이야. 이 얘기를 자연스럽게 이어가면서 각자 비밀 미션은 티 안 나게 섞어보자.${styles}`;
+    }
+    return `${name}${round} 가볍게 시작해보자. 타이밍, 제스처, 시선 방향, 표정 움직임처럼 눈에 보이는 단서만 사용할게.${styles}`;
+  }
+
+  private templateGameRevealMessage(input: FacePartyGameMessageInput): string {
+    const winner = input.winnerNickname ? `${input.winnerNickname}이 이번 라운드를 가져갔어.` : '공개 시간이야.';
+    const signals = this.formatVisibleSignals(input.visibleSignals);
+    const styles = this.formatPlayStyles(input.playStyles);
+    return `${winner} 참고한 단서는 눈에 보이는 신호뿐이야${signals}.${styles}`;
+  }
+
+  private templateGameReactionMessage(input: FacePartyGameReactionInput): string {
+    const actor = input.actorNickname ?? '누군가';
+    const target = input.targetNickname ? ` ${input.targetNickname}에게` : '';
+    const points = input.points ? ` +${input.points}점.` : '';
+    const signals = this.formatVisibleSignals(input.visibleSignals);
+    const actorStyle = input.actorPlayStyle ? ` 오늘 스타일 "${input.actorPlayStyle}"도 꽤 살아났어.` : '';
+    const targetStyle = input.targetPlayStyle ? ` ${input.targetPlayStyle} 모드로 받아쳐보자.` : '';
+
+    if (input.event === 'mission_success') {
+      return this.templateHiddenMissionSignalNudge(input.visibleSignals);
+    }
+    if (input.event === 'mission_progress') {
+      return this.templateHiddenMissionSignalNudge(input.visibleSignals);
+    }
+    if (input.event === 'mission_fail') {
+      return this.templateHiddenMissionSignalNudge(input.visibleSignals);
+    }
+    if (input.event === 'bluff_bet') {
+      return `${actor}가${target} 블러프 판정을 걸었어. 타이밍, 제스처, 표정 움직임만 보자.${targetStyle}`;
+    }
+    if (input.event === 'bluff_cracked') {
+      return `${actor}의 포커페이스가 흔들렸어${signals}.${points}${actorStyle}`;
+    }
+    if (input.event === 'bluff_held') {
+      return `${actor}가 포커페이스를 지켰어${signals}.${points}${actorStyle}`;
+    }
+    return `${actor}가${target} 카피캣 릴레이를 넘겼어${signals}.${points}${actorStyle}${targetStyle}`;
+  }
+
+  private templateHiddenMissionSignalNudge(signals?: string[]): string {
+    const clue = signals?.[0] ?? '보이는 표정 신호';
+    return `방금 누군가 ${clue} 살짝 보인 것 같은데...? 못 본 척 자연스럽게 이어가자.`;
+  }
+
+  private templateChatReactionMessage(input: FacePartyChatReactionInput): string {
+    if (input.game === 'hidden_mission') {
+      return `${input.latestNickname}, 그럼 그때 제일 당황했던 포인트가 뭐였는지 하나만 더 말해줘.`;
+    }
+    return `${input.latestNickname}, 그 얘기에서 가장 먼저 떠오른 장면이 뭔지 하나만 더 말해줘.`;
+  }
+
+  private templateGameSummaryMessage(input: FacePartyGameMessageInput): string {
+    const name = this.faceGameName(input.game);
+    const players = input.playerCount ? `${input.playerCount}명` : '이번 방';
+    const signals = this.formatVisibleSignals(input.visibleSignals);
+    const styles = this.formatPlayStyles(input.playStyles);
+    return `${name}이 ${players}과 함께 끝났어. 감정이나 진실 여부를 추측하지 않고 보이는 신호만 참고했어${signals}.${styles}`;
+  }
+
+  private buildHiddenMissionPrompt(input: HiddenMissionPromptInput): string {
+    return [
+      '표정 파티 게임에서 사용할 개인 비밀 미션을 하나 만들어줘.',
+      `닉네임: ${input.nickname ?? '참가자'}`,
+      `주제: ${input.theme ?? '화상 통화'}`,
+      `라운드 시간: ${input.roundSeconds ?? '미지정'}초`,
+      `톤: ${input.tone ?? '장난스럽고 가벼움'}`,
+      '규칙: 한국어 한 문장만 출력. 구체적으로 눈에 보이는 행동만 지시. 감정, 거짓말 탐지, 정체성 민감 특성은 언급하지 마.',
+      '미션 문장만 출력해.'
+    ].join('\n');
+  }
+
+  private buildPokerBluffPrompt(input: PokerBluffPromptInput): string {
+    return [
+      '화상 통화용 포커페이스 블러프 게임 콘텐츠를 만들어줘.',
+      `주제: ${input.theme ?? '주말 계획'}`,
+      `질문 수: ${input.questionCount ?? 3}`,
+      `보이는 신호 힌트 수: ${input.tellHintCount ?? 3}`,
+      `톤: ${input.tone ?? '장난스럽고 가벼움'}`,
+      '규칙: 반드시 한국어로만 출력. 누가 거짓말한다고 단정하지 말고 감정, 의도, 건강, 정체성을 추론하지 마. 힌트는 타이밍, 시선 방향, 제스처, 표정 움직임, 자세, 말 속도처럼 보이거나 들리는 신호만 말해.',
+      '형식은 정확히 이렇게:',
+      'QUESTIONS:',
+      '- <한국어 질문>',
+      'HINTS:',
+      '- <한국어 보이는 신호 힌트>'
+    ].join('\n');
+  }
+
+  private buildCopycatSeedPrompt(input: CopycatSeedInput): string {
+    return [
+      '표정 카피캣 릴레이 게임에서 따라 할 표정/제스처 씨앗을 만들어줘.',
+      `주제: ${input.theme ?? '빠른 리액션'}`,
+      `개수: ${input.count ?? 4}`,
+      `톤: ${input.tone ?? '장난스럽고 가벼움'}`,
+      '규칙: 반드시 한국어로만 출력. 보이는 얼굴 움직임이나 제스처만 지시. 감정 단정, 진단, 민감 특성은 금지.',
+      '번호 없이 한 줄에 하나씩 출력해.'
+    ].join('\n');
+  }
+
+  private buildFacePartyMessagePrompt(
+    stage: 'intro' | 'reveal' | 'summary',
+    input: FacePartyGameMessageInput
+  ): string {
+    return [
+      `표정 파티 게임의 ${stage} 진행 멘트를 만들어줘.`,
+      `게임: ${this.faceGameName(input.game)}`,
+      `라운드: ${input.roundNumber ?? '미지정'}`,
+      `참가자 수: ${input.playerCount ?? '미지정'}`,
+      `승자: ${input.winnerNickname ?? '미지정'}`,
+      `보이는 신호: ${(input.visibleSignals ?? []).join(', ') || '제공 없음'}`,
+      `참가자 플레이 스타일: ${(input.playStyles ?? []).join(', ') || '제공 없음'}`,
+      `톤: ${input.tone ?? '친근함'}`,
+      '규칙: 반드시 한국어로만 출력. 보이는 신호와 참가자가 직접 정한 플레이 스타일만 언급하고 감정, 거짓말, 의도, 호감, 건강, 정체성 특성을 탐지했다고 말하지 마.',
+      stage === 'intro' && input.game === 'hidden_mission'
+        ? '숨은 표정 미션 intro에서는 대화 주제 하나를 반드시 제시하고, 참가자들이 그 주제로 대화하면서 비밀 미션을 자연스럽게 섞도록 안내해.'
+        : '',
+      '짧은 한두 문장만 출력해.'
+    ].filter(Boolean).join('\n');
+  }
+
+  private buildFacePartyReactionPrompt(input: FacePartyGameReactionInput): string {
+    const isHiddenMissionEvent = input.game === 'hidden_mission' && input.event.startsWith('mission_');
+    return [
+      '표정 파티 게임 진행자 루미의 짧은 실시간 반응을 만들어줘.',
+      `게임: ${this.faceGameName(input.game)}`,
+      `이벤트: ${isHiddenMissionEvent ? '숨은 표정 단서 포착' : input.event}`,
+      `행동한 참가자: ${isHiddenMissionEvent ? '비공개' : input.actorNickname ?? '미지정'}`,
+      `대상 참가자: ${input.targetNickname ?? '미지정'}`,
+      `행동한 참가자 플레이 스타일: ${isHiddenMissionEvent ? '비공개' : input.actorPlayStyle ?? '제공 없음'}`,
+      `대상 참가자 플레이 스타일: ${input.targetPlayStyle ?? '제공 없음'}`,
+      `점수: ${isHiddenMissionEvent ? '비공개' : input.points ?? '없음'}`,
+      `보이는 신호: ${(input.visibleSignals ?? []).join(', ') || '제공 없음'}`,
+      `톤: ${input.tone ?? '장난스럽고 가벼움'}`,
+      '규칙: 반드시 한국어로만 출력. 게임 행동, 보이는 신호, 참가자가 직접 정한 플레이 스타일만 언급하고 감정, 거짓말, 의도, 호감, 건강, 정체성 특성을 탐지했다고 말하지 마.',
+      isHiddenMissionEvent
+        ? '숨은 표정 미션 이벤트는 참가자 이름, 성공 여부, 점수, 카운트, "미션 성공"이라는 표현을 말하지 마. 반드시 보이는 신호에 들어온 행동만 넌지시 암시하고, 다른 행동으로 바꿔 말하지 마.'
+        : '',
+      '짧은 한 문장만 출력해.'
+    ].filter(Boolean).join('\n');
+  }
+
+  private buildFacePartyChatReactionPrompt(input: FacePartyChatReactionInput): string {
+    return [
+      '표정 파티 게임 진행자 루미가 채팅 흐름에 짧게 반응해줘.',
+      `게임: ${this.faceGameName(input.game)}`,
+      `최근 채팅:\n${input.recentMessages
+        .map((message) => `${message.nickname}: ${message.text}`)
+        .join('\n')}`,
+      `새 채팅 작성자: ${input.latestNickname}`,
+      `새 채팅: ${input.latestText}`,
+      `참가자 플레이 스타일: ${(input.playStyles ?? []).join(', ') || '제공 없음'}`,
+      `톤: ${input.tone ?? '장난스럽고 가벼움'}`,
+      '규칙: 반드시 한국어로만 출력. 전체 대화 로그를 요약하지 말고 최근 채팅 흐름에만 반응해. 참가자 이름과 직접 쓴 말만 사용하고 감정, 거짓말, 의도, 호감, 건강, 정체성 특성을 추론하지 마.',
+      '새 채팅을 그대로 반복하거나 바꿔 말하지 마. 질문이면 짧게 답하고, 진술이면 그 내용에 관련된 구체적인 후속 질문이나 코멘트를 해.',
+      '답변은 새 채팅보다 새 정보가 많아야 해. "그 얘기", "그 주제", "말 좋다"처럼 내용 없는 진행 멘트만 쓰지 마.',
+      input.game === 'hidden_mission'
+        ? '숨은 표정 미션에서는 대화가 끊기지 않게 주제를 살짝 이어주고, 미션을 직접 공개하거나 카운트를 언급하지 마.'
+        : '',
+      '짧은 한 문장만 출력해.'
+    ].filter(Boolean).join('\n');
+  }
+
+  private sanitizeChatReactionText(
+    rawOutput: string,
+    input: FacePartyChatReactionInput
+  ): string {
+    let text = rawOutput.trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, '').trim();
+    const nicknamePrefix = new RegExp(`^${this.escapeRegExp(input.latestNickname)}\\s*[:：]\\s*`);
+    text = text.replace(nicknamePrefix, '').trim();
+
+    const latestText = input.latestText.trim();
+    if (latestText) {
+      const latestPrefix = new RegExp(`^${this.escapeRegExp(latestText)}[\\s,，.!?。！？]*`);
+      text = text.replace(latestPrefix, '').trim();
+    }
+
+    return text;
+  }
+
+  private escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  private hiddenMissionConversationTopic(roundNumber?: number): string {
+    const topics = [
+      '요즘 애매하게 웃겼던 일',
+      '친구가 보면 바로 놀릴 만한 작은 습관',
+      '최근에 괜히 기억에 남은 장면',
+      '처음엔 별거 아닌데 말하다 보니 길어지는 이야기',
+      '하루만 바꿔보고 싶은 사소한 규칙'
+    ];
+    const index = roundNumber ? (roundNumber - 1) % topics.length : 0;
+    return topics[Math.max(0, index)]!;
+  }
+
+  private parsePokerBluffOutput(rawOutput: string): PokerBluffPrompt | null {
+    const questions: string[] = [];
+    const tellHints: string[] = [];
+    let section: 'questions' | 'hints' | null = null;
+
+    for (const line of rawOutput.split(/\r?\n/)) {
+      const cleaned = this.cleanListItem(line);
+      if (!cleaned) continue;
+      if (/^questions:?$/i.test(cleaned)) {
+        section = 'questions';
+        continue;
+      }
+      if (/^(hints|tell hints|visible-signal hints):?$/i.test(cleaned)) {
+        section = 'hints';
+        continue;
+      }
+      if (section === 'questions') questions.push(cleaned);
+      if (section === 'hints') tellHints.push(cleaned);
+    }
+
+    return questions.length > 0 && tellHints.length > 0 ? { questions, tellHints } : null;
+  }
+
+  private parseLineList(rawOutput: string, limit: number): string[] {
+    return rawOutput
+      .split(/\r?\n/)
+      .map((line) => this.cleanListItem(line))
+      .filter(Boolean)
+      .slice(0, limit);
+  }
+
+  private cleanListItem(line: string): string {
+    return line
+      .trim()
+      .replace(/^[-*]\s*/, '')
+      .replace(/^\d+[.)]\s*/, '')
+      .trim();
+  }
+
+  private async generateFacePartyText(
+    kind: Extract<
+      RoomiPromptKind,
+      'hidden_mission' | 'game_intro' | 'game_reaction' | 'game_reveal' | 'game_summary'
+    >,
+    prompt: string,
+    fallback: string
+  ): Promise<string> {
+    if (!this.generator) return fallback;
+
+    try {
+      const text = (await this.generator.generateText(prompt)).trim();
+      return text && this.isKoreanText(text) ? text : fallback;
+    } catch (error) {
+      this.logGeneratorFailure(kind, error);
+      return fallback;
+    }
+  }
+
+  private faceGameName(game: FacePartyGameKind): string {
+    if (game === 'hidden_mission') return '숨은 표정 미션';
+    if (game === 'poker_bluff') return '포커페이스 블러프';
+    return '카피캣 릴레이';
+  }
+
+  private toFacePartyGameKind(kind: GameKind): FacePartyGameKind {
+    if (kind === 'copycat_relay') return 'copycat';
+    return kind;
+  }
+
+  private formatVisibleSignals(signals?: string[]): string {
+    if (!signals || signals.length === 0) return '';
+    return `: ${signals.join(', ')}`;
+  }
+
+  private formatPlayStyles(styles?: string[]): string {
+    if (!styles || styles.length === 0) return '';
+    return ` 오늘의 플레이 스타일도 같이 살펴봤어: ${styles.join(', ')}.`;
+  }
+
+  private isKoreanText(text: string): boolean {
+    return /[가-힣]/.test(text);
+  }
+
   private templateRefinement(rawGoal: string, sessionMinutes: number): GoalRefinement {
     return {
       refinedText: `${sessionMinutes}분 동안 '${rawGoal}'에 집중해서 끝내기`,
       reason: '루미가 기본 형식으로 정리했어요.',
+      source: 'template'
+    };
+  }
+
+  private templatePlayStyle(rawStyle: string, gameKind: GameKind): GoalRefinement {
+    const fallbackByGame: Record<GameKind, string[]> = {
+      hidden_mission: [
+        '들키면 더 억울해하는 비밀 요원처럼 굴기',
+        '표정은 차분하게 두고 리액션만 아주 살짝 늦게 하기',
+        '웃기 직전에 고개를 돌리는 무표정 장인 되기'
+      ],
+      poker_bluff: [
+        '괜히 자신감 넘치는 분석가처럼 말하기',
+        '의심받을수록 더 침착한 척하기',
+        '표정은 차갑게, 말투는 다정하게 유지하기'
+      ],
+      copycat_relay: [
+        '디테일 하나를 집요하게 따라 하는 카피 장인 되기',
+        '처음엔 못 알아들은 척하다가 갑자기 정확히 따라 하기',
+        '작은 표정 변화까지 과장해서 넘겨주기'
+      ]
+    };
+    const trimmed = rawStyle.trim();
+
+    return {
+      refinedText: trimmed || fallbackByGame[gameKind][0],
+      reason: trimmed
+        ? '루미가 입력한 스타일을 게임에서 쓰기 좋게 정리했어요.'
+        : `${this.faceGameName(this.toFacePartyGameKind(gameKind))}에 어울리는 기본 스타일을 골랐어요.`,
       source: 'template'
     };
   }
@@ -170,6 +728,26 @@ export class RoomiOrchestrator {
       '- 따뜻하고 간결한 한 문장, 이모지·따옴표·태그·라벨 없이',
       '- 다듬어진 목표 문장 한 줄만 출력하고 다른 설명은 붙이지 마',
       `다시 한번 확인: 참가자 목표는 "${rawGoal}"야. 다른 주제를 지어내지 말고 이 목표만 다듬어.`
+    ].join('\n');
+  }
+
+  private buildPlayStylePrompt(rawStyle: string, gameKind: GameKind): string {
+    const inputLine = rawStyle.trim()
+      ? `참가자가 적은 초안: "${rawStyle.trim()}"`
+      : '참가자가 아직 초안을 적지 않았으니 새로 추천해줘.';
+
+    return [
+      '너는 표정 파티 게임 진행자 "루미"야.',
+      `게임: ${this.faceGameName(this.toFacePartyGameKind(gameKind))}`,
+      inputLine,
+      '대기실에서 참가자 한 명이 설정할 "오늘의 플레이 스타일" 한 줄을 만들어줘.',
+      '규칙:',
+      '- 반드시 한국어로만 출력',
+      '- 참가자가 따라 할 수 있는 장난스러운 말투나 행동 스타일일 것',
+      '- 게임 판정을 직접 조작하거나 승리를 보장하는 내용은 금지',
+      '- 감정, 거짓말, 의도, 건강, 정체성 같은 민감 추론은 금지',
+      '- 28자 안팎의 한 문장, 따옴표·라벨·이모지 없이',
+      '플레이 스타일 문장만 출력해.'
     ].join('\n');
   }
 

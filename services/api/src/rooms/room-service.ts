@@ -1,9 +1,17 @@
 import type {
+  BluffBet,
+  BluffResult,
   ChatMessage,
   CreateRoomInput,
-  FocusRankingBroadcast,
+  ExpressionSignals,
   FocusRankingEntry,
+  GameKind,
+  GameRoundSummary,
+  GameSession,
   Goal,
+  HiddenMission,
+  MissionResult,
+  RelayLink,
   JoinRoomInput,
   Participant,
   ParticipantStatus,
@@ -25,10 +33,35 @@ import type { VideoProvider } from '../video/daily-video-provider';
 
 type RoomUpdatedListener = (snapshot: RoomSnapshot) => void;
 type RoomiMessageListener = (message: RoomiMessage) => void;
-type FocusRankingListener = (payload: FocusRankingBroadcast) => void;
+type FocusRankingListener = (payload: {
+  roomId: string;
+  ranking: FocusRankingEntry[];
+}) => void;
 type AddRoomiMessageInput = Omit<RoomiMessage, 'id' | 'createdAt'>;
-type AddChatMessageInput = { roomId: string; participantId: string; text: string };
-const CHAT_MESSAGE_MAX_LENGTH = 500;
+type ChatMessageListener = (message: ChatMessage) => void;
+type AddChatMessageInput = Pick<ChatMessage, 'roomId' | 'participantId' | 'text'>;
+type GameUpdatedListener = (snapshot: RoomSnapshot, game: GameSession) => void;
+type MissionAssignedListener = (roomId: string, mission: HiddenMission) => void;
+
+const GAME_ROUND_MS = 90_000;
+const NEXT_ROUND_WAIT_MS = 5 * 60_000;
+
+export const hiddenMissionTemplates: ReadonlyArray<Omit<HiddenMission, 'id' | 'playerId'>> = [
+  { prompt: '대화 사이에 몰래 윙크 2번 넣기', verify: 'wink_count', target: 2 },
+  { prompt: '누가 말할 때 자연스럽게 윙크 3번 하기', verify: 'wink_count', target: 3 },
+  { prompt: '카메라를 보며 아주 짧게 윙크 4번 하기', verify: 'wink_count', target: 4 },
+  { prompt: '들키지 않게 작게 미소 3번 짓기', verify: 'smile_count', target: 3 },
+  { prompt: '리액션할 때 자연스럽게 미소 4번 섞기', verify: 'smile_count', target: 4 },
+  { prompt: '말을 듣는 척하며 조용히 미소 5번 만들기', verify: 'smile_count', target: 5 },
+  { prompt: '대답하기 직전에 입을 살짝 2번 벌리기', verify: 'jaw_open_count', target: 2 },
+  { prompt: '놀란 척 아주 짧게 입을 3번 열기', verify: 'jaw_open_count', target: 3 },
+  { prompt: '눈썹을 살짝 3번 올리기', verify: 'brow_count', target: 3 },
+  { prompt: '중요한 말이 나올 때 눈썹 리액션 4번 하기', verify: 'brow_count', target: 4 },
+  { prompt: '카메라 쪽으로 눈썹을 5번 들어 올리기', verify: 'brow_count', target: 5 },
+  { prompt: '듣는 척하면서 고개를 2번 살짝 끄덕이기', verify: 'nod_count', target: 2 },
+  { prompt: '상대 말 끝에 맞춰 고개를 3번 작게 끄덕이기', verify: 'nod_count', target: 3 },
+  { prompt: '생각난 척 고개를 4번 짧게 끄덕이기', verify: 'nod_count', target: 4 }
+];
 
 type FocusTrackerEntry = {
   focusedSeconds: number;
@@ -43,6 +76,10 @@ export class RoomService {
   private readonly roomUpdatedListeners = new Set<RoomUpdatedListener>();
   private readonly roomiMessageListeners = new Set<RoomiMessageListener>();
   private readonly focusRankingListeners = new Set<FocusRankingListener>();
+  private readonly chatMessageListeners = new Set<ChatMessageListener>();
+  private readonly chatMessages = new Map<string, ChatMessage[]>();
+  private readonly gameUpdatedListeners = new Set<GameUpdatedListener>();
+  private readonly missionAssignedListeners = new Set<MissionAssignedListener>();
   // Keyed by roomId, then participantId. Every ParticipantStatus transition funnels through
   // updateParticipantStatus, so this is the single seam a future focus-detection integration
   // (MediaPipe, ML) needs to call into — no other ranking code has to change.
@@ -166,9 +203,10 @@ export class RoomService {
       throw new Error('Room not found');
     }
 
-    const nickname =
-      snapshot.participants.find((participant) => participant.id === participantId)?.nickname ??
-      'Unknown';
+    const previousParticipant = snapshot.participants.find(
+      (participant) => participant.id === participantId
+    );
+    const nickname = previousParticipant?.nickname ?? 'Unknown';
     this.touchFocusTracker(roomId, participantId, status, Date.now(), nickname);
 
     snapshot.participants = snapshot.participants.map((participant) =>
@@ -176,13 +214,41 @@ export class RoomService {
         ? { ...participant, status, lastSeenAt: new Date().toISOString() }
         : participant
     );
+    const shouldReplaceHiddenMission =
+      previousParticipant?.status === 'online' &&
+      status === 'focused' &&
+      snapshot.currentGame?.kind === 'hidden_mission' &&
+      snapshot.currentGame.status === 'in_round';
+    let replacementMission: HiddenMission | undefined;
+    if (shouldReplaceHiddenMission && snapshot.currentGame) {
+      const previousMission = snapshot.currentGame.missions?.find(
+        (mission) => mission.playerId === participantId
+      );
+      const replacement = this.createReplacementHiddenMission(participantId, previousMission);
+      replacementMission = replacement;
+      snapshot.currentGame = {
+        ...snapshot.currentGame,
+        missions: [
+          ...(snapshot.currentGame.missions ?? []).filter(
+            (mission) => mission.playerId !== participantId
+          ),
+          replacement
+        ],
+        missionResults: (snapshot.currentGame.missionResults ?? []).filter(
+          (result) => result.playerId !== participantId
+        ),
+        updatedAt: new Date().toISOString()
+      };
+    }
     this.store.update(snapshot);
+    if (replacementMission && snapshot.currentGame) {
+      this.emitMissionAssigned(roomId, replacementMission);
+      this.emitGameUpdated(snapshot, snapshot.currentGame);
+    }
     this.emitRoomUpdated(snapshot);
-
     if (snapshot.room.status === 'studying') {
       this.emitFocusRanking(roomId);
     }
-
     return snapshot;
   }
 
@@ -310,6 +376,10 @@ export class RoomService {
 
     if (!host || host.role !== 'host') {
       throw new Error('Only the host can start a break');
+    }
+
+    if (snapshot.room.settings.activityKind !== 'study') {
+      throw new Error('Breaks are only available in study mode');
     }
 
     if (snapshot.room.settings.breakMode !== 'room') {
@@ -507,6 +577,270 @@ export class RoomService {
     return snapshot;
   }
 
+  startGame(roomId: string, participantId: string, kind: GameKind): GameSession {
+    const snapshot = this.store.findByRoomId(roomId);
+
+    if (!snapshot) throw new Error('Room not found');
+
+    const host = snapshot.participants.find((participant) => participant.id === participantId);
+    if (!host || host.role !== 'host') throw new Error('Only the host can start the game');
+
+    const now = new Date().toISOString();
+    const gameId = crypto.randomUUID();
+    const totalRounds = Math.max(1, Math.min(10, snapshot.room.settings.roundCount ?? 1));
+    const game: GameSession = {
+      id: gameId,
+      roomId,
+      kind,
+      status: 'in_round',
+      round: {
+        id: crypto.randomUUID(),
+        gameId,
+        index: 1,
+        status: 'in_round',
+        startedAt: now,
+        endsAt: new Date(Date.now() + GAME_ROUND_MS).toISOString()
+      },
+      totalRounds,
+      completedRounds: [],
+      nextRoundReadyParticipantIds: [],
+      scores: snapshot.participants.map((participant) => ({
+        participantId: participant.id,
+        points: 0
+      })),
+      missions: kind === 'hidden_mission' ? this.createHiddenMissions(snapshot.participants) : [],
+      missionResults: [],
+      bluffBets: kind === 'poker_bluff' ? [] : undefined,
+      relayLinks: kind === 'copycat_relay' ? [] : undefined,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    snapshot.currentGame = game;
+    snapshot.room = { ...snapshot.room, status: 'studying' };
+    snapshot.participants = snapshot.participants.map((participant) => ({
+      ...participant,
+      status: 'focused',
+      lastSeenAt: now
+    }));
+    this.store.update(snapshot);
+    this.emitRoomUpdated(snapshot);
+    this.emitGameUpdated(snapshot, game);
+    game.missions?.forEach((mission) => this.emitMissionAssigned(roomId, mission));
+    return game;
+  }
+
+  recordMissionResult(roomId: string, result: MissionResult): GameSession {
+    const snapshot = this.store.findByRoomId(roomId);
+    if (!snapshot?.currentGame) throw new Error('No active game');
+
+    const game = snapshot.currentGame;
+    if (game.kind !== 'hidden_mission') throw new Error('Mission results require hidden mission');
+    if (game.status !== 'in_round' && game.status !== 'guessing') return game;
+    if (!game.missions?.some((mission) => mission.id === result.missionId && mission.playerId === result.playerId)) {
+      throw new Error('Mission not found');
+    }
+
+    const missionResults = [
+      ...(game.missionResults ?? []).filter((item) => item.playerId !== result.playerId),
+      result
+    ];
+    const nextGame = {
+      ...game,
+      missionResults,
+      updatedAt: new Date().toISOString()
+    };
+    snapshot.currentGame = result.success
+      ? this.finishGameRound(snapshot, nextGame)
+      : nextGame;
+    this.store.update(snapshot);
+    this.emitGameUpdated(snapshot, snapshot.currentGame);
+    return snapshot.currentGame;
+  }
+
+  placeBluffBet(roomId: string, bet: BluffBet): GameSession {
+    const snapshot = this.store.findByRoomId(roomId);
+    if (!snapshot?.currentGame) throw new Error('No active game');
+    if (snapshot.currentGame.kind !== 'poker_bluff') {
+      throw new Error('Bluff bets require poker bluff');
+    }
+
+    const participantExists = snapshot.participants.some(
+      (participant) => participant.id === bet.participantId
+    );
+    const targetExists = snapshot.participants.some(
+      (participant) => participant.id === bet.targetId
+    );
+    if (!participantExists || !targetExists) throw new Error('Participant not found');
+
+    const bluffBets = [
+      ...(snapshot.currentGame.bluffBets ?? []).filter(
+        (item) => item.participantId !== bet.participantId
+      ),
+      bet
+    ];
+    snapshot.currentGame = {
+      ...snapshot.currentGame,
+      status: 'guessing',
+      round: { ...snapshot.currentGame.round, status: 'guessing' },
+      bluffBets,
+      updatedAt: new Date().toISOString()
+    };
+    this.store.update(snapshot);
+    this.emitGameUpdated(snapshot, snapshot.currentGame);
+    return snapshot.currentGame;
+  }
+
+  recordBluffResult(
+    roomId: string,
+    targetId: string,
+    signals: ExpressionSignals
+  ): GameSession {
+    const snapshot = this.store.findByRoomId(roomId);
+    if (!snapshot?.currentGame) throw new Error('No active game');
+    if (snapshot.currentGame.kind !== 'poker_bluff') {
+      throw new Error('Bluff results require poker bluff');
+    }
+
+    const result = this.bluffResultFromSignals(targetId, signals);
+    const scores = snapshot.currentGame.scores.map((score) => {
+      const matchedBet = snapshot.currentGame?.bluffBets?.find(
+        (bet) => bet.participantId === score.participantId
+      );
+      const betPoints =
+        matchedBet && matchedBet.predictsCrack === result.cracked ? 4 : 0;
+      const targetPoints = score.participantId === targetId && !result.cracked ? 8 : 0;
+      return { ...score, points: score.points + betPoints + targetPoints };
+    });
+
+    snapshot.currentGame = {
+      ...snapshot.currentGame,
+      bluffResult: result,
+      scores,
+      updatedAt: new Date().toISOString()
+    };
+    this.store.update(snapshot);
+    this.emitGameUpdated(snapshot, snapshot.currentGame);
+    return snapshot.currentGame;
+  }
+
+  advanceRelay(roomId: string, link: RelayLink): GameSession {
+    const snapshot = this.store.findByRoomId(roomId);
+    if (!snapshot?.currentGame) throw new Error('No active game');
+    if (snapshot.currentGame.kind !== 'copycat_relay') {
+      throw new Error('Relay links require copycat relay');
+    }
+
+    const participantIds = new Set(snapshot.participants.map((participant) => participant.id));
+    if (!participantIds.has(link.fromId) || !participantIds.has(link.toId)) {
+      throw new Error('Participant not found');
+    }
+
+    const normalizedLink = {
+      ...link,
+      similarity: Math.max(0, Math.min(1, link.similarity))
+    };
+    const scores = snapshot.currentGame.scores.map((score) =>
+      score.participantId === link.toId
+        ? { ...score, points: score.points + Math.round(normalizedLink.similarity * 10) }
+        : score
+    );
+
+    snapshot.currentGame = {
+      ...snapshot.currentGame,
+      relayLinks: [...(snapshot.currentGame.relayLinks ?? []), normalizedLink],
+      scores,
+      updatedAt: new Date().toISOString()
+    };
+    this.store.update(snapshot);
+    this.emitGameUpdated(snapshot, snapshot.currentGame);
+    return snapshot.currentGame;
+  }
+
+  revealGame(roomId: string, participantId: string, gameId: string): GameSession {
+    const snapshot = this.store.findByRoomId(roomId);
+    if (!snapshot?.currentGame || snapshot.currentGame.id !== gameId) {
+      throw new Error('No active game');
+    }
+
+    const requester = snapshot.participants.find((participant) => participant.id === participantId);
+    if (!requester) throw new Error('Participant not found');
+    if (requester.role !== 'host') throw new Error('Only the host can reveal the game');
+
+    snapshot.currentGame =
+      snapshot.currentGame.status === 'between_round'
+        ? {
+            ...snapshot.currentGame,
+            status: 'reveal',
+            round: {
+              ...snapshot.currentGame.round,
+              status: 'reveal',
+              revealAt: new Date().toISOString()
+            },
+            nextRoundReadyParticipantIds: [],
+            nextRoundStartsAt: undefined,
+            updatedAt: new Date().toISOString()
+          }
+        : this.finishGameRound(snapshot, snapshot.currentGame, true);
+    this.store.update(snapshot);
+    this.emitRoomUpdated(snapshot);
+    this.emitGameUpdated(snapshot, snapshot.currentGame);
+    return snapshot.currentGame;
+  }
+
+  markNextRoundReady(roomId: string, participantId: string, gameId: string): GameSession {
+    const snapshot = this.store.findByRoomId(roomId);
+    if (!snapshot?.currentGame || snapshot.currentGame.id !== gameId) {
+      throw new Error('No active game');
+    }
+
+    const game = snapshot.currentGame;
+    if (game.status !== 'between_round') return game;
+
+    const participantExists = snapshot.participants.some(
+      (participant) => participant.id === participantId
+    );
+    if (!participantExists) throw new Error('Participant not found');
+
+    const readyIds = new Set(game.nextRoundReadyParticipantIds ?? []);
+    readyIds.add(participantId);
+    const activeParticipantIds = snapshot.participants.map((participant) => participant.id);
+    const everyoneReady = activeParticipantIds.every((id) => readyIds.has(id));
+
+    snapshot.currentGame = everyoneReady
+      ? this.startNextRound(snapshot, game)
+      : {
+          ...game,
+          nextRoundReadyParticipantIds: [...readyIds],
+          updatedAt: new Date().toISOString()
+        };
+
+    this.store.update(snapshot);
+    this.emitRoomUpdated(snapshot);
+    this.emitGameUpdated(snapshot, snapshot.currentGame);
+    if (snapshot.currentGame.status === 'in_round') {
+      snapshot.currentGame.missions?.forEach((mission) =>
+        this.emitMissionAssigned(roomId, mission)
+      );
+    }
+    return snapshot.currentGame;
+  }
+
+  startNextRoundIfDue(roomId: string, gameId: string, nowMs = Date.now()): GameSession | undefined {
+    const snapshot = this.store.findByRoomId(roomId);
+    if (!snapshot?.currentGame || snapshot.currentGame.id !== gameId) return undefined;
+    const game = snapshot.currentGame;
+    if (game.status !== 'between_round' || !game.nextRoundStartsAt) return game;
+    if (Date.parse(game.nextRoundStartsAt) > nowMs) return game;
+
+    snapshot.currentGame = this.startNextRound(snapshot, game);
+    this.store.update(snapshot);
+    this.emitRoomUpdated(snapshot);
+    this.emitGameUpdated(snapshot, snapshot.currentGame);
+    snapshot.currentGame.missions?.forEach((mission) => this.emitMissionAssigned(roomId, mission));
+    return snapshot.currentGame;
+  }
+
   leaveRoom(roomId: string, participantId: string): RoomSnapshot {
     const snapshot = this.store.findByRoomId(roomId);
 
@@ -526,6 +860,7 @@ export class RoomService {
 
     if (snapshot.participants.length === 0) {
       this.deleteDailyRoom(snapshot.room.id);
+      this.chatMessages.delete(snapshot.room.id);
     }
 
     if (leavingParticipant?.role === 'host' && snapshot.participants.length > 0) {
@@ -543,11 +878,9 @@ export class RoomService {
 
     this.store.update(snapshot);
     this.emitRoomUpdated(snapshot);
-
     if (snapshot.room.status === 'studying') {
       this.emitFocusRanking(roomId);
     }
-
     return snapshot;
   }
 
@@ -582,16 +915,6 @@ export class RoomService {
     };
   }
 
-  // Lets the gateway push live focus minutes to clients without them polling
-  // /sessions/end. Reuses getFocusRanking, so there is only one ranking formula.
-  onFocusRankingUpdated(listener: FocusRankingListener): () => void {
-    this.focusRankingListeners.add(listener);
-
-    return () => {
-      this.focusRankingListeners.delete(listener);
-    };
-  }
-
   addRoomiMessage(input: AddRoomiMessageInput): RoomiMessage {
     const snapshot = this.store.findByRoomId(input.roomId);
 
@@ -618,14 +941,6 @@ export class RoomService {
     return message;
   }
 
-  onRoomiMessage(listener: RoomiMessageListener): () => void {
-    this.roomiMessageListeners.add(listener);
-
-    return () => {
-      this.roomiMessageListeners.delete(listener);
-    };
-  }
-
   addChatMessage(input: AddChatMessageInput): ChatMessage {
     const snapshot = this.store.findByRoomId(input.roomId);
 
@@ -641,24 +956,66 @@ export class RoomService {
       throw new Error('Participant not found');
     }
 
-    const text = input.text.trim().slice(0, CHAT_MESSAGE_MAX_LENGTH);
+    const text = input.text.trim().slice(0, 300);
 
     if (!text) {
-      throw new Error('Chat message text is required');
+      throw new Error('Chat message is empty');
     }
 
     const message: ChatMessage = {
       id: crypto.randomUUID(),
-      roomId: snapshot.room.id,
-      participantId: participant.id,
+      roomId: input.roomId,
+      participantId: input.participantId,
       nickname: participant.nickname,
       text,
       createdAt: new Date().toISOString()
     };
-
-    snapshot.chatMessages = [...snapshot.chatMessages, message].slice(-100);
+    const recentMessages = [...(this.chatMessages.get(input.roomId) ?? []), message].slice(-30);
+    this.chatMessages.set(input.roomId, recentMessages);
+    snapshot.chatMessages = recentMessages;
     this.store.update(snapshot);
+    this.chatMessageListeners.forEach((listener) => listener(message));
     return message;
+  }
+
+  recentChatMessages(roomId: string, limit = 10): ChatMessage[] {
+    return (this.chatMessages.get(roomId) ?? []).slice(-limit);
+  }
+
+  onRoomiMessage(listener: RoomiMessageListener): () => void {
+    this.roomiMessageListeners.add(listener);
+
+    return () => {
+      this.roomiMessageListeners.delete(listener);
+    };
+  }
+
+  // Lets the gateway push live focus minutes to clients without them polling
+  // /sessions/end. Reuses getFocusRanking, so there is only one ranking formula.
+  onFocusRankingUpdated(listener: FocusRankingListener): () => void {
+    this.focusRankingListeners.add(listener);
+
+    return () => {
+      this.focusRankingListeners.delete(listener);
+    };
+  }
+
+  onChatMessage(listener: ChatMessageListener): () => void {
+    this.chatMessageListeners.add(listener);
+
+    return () => {
+      this.chatMessageListeners.delete(listener);
+    };
+  }
+
+  onGameUpdated(listener: GameUpdatedListener): () => void {
+    this.gameUpdatedListeners.add(listener);
+    return () => this.gameUpdatedListeners.delete(listener);
+  }
+
+  onMissionAssigned(listener: MissionAssignedListener): () => void {
+    this.missionAssignedListeners.add(listener);
+    return () => this.missionAssignedListeners.delete(listener);
   }
 
   private touchFocusTracker(
@@ -698,6 +1055,7 @@ export class RoomService {
 
     this.accrueFocusedSeconds(entry, nowMs);
     entry.status = status;
+    entry.nickname = nickname;
   }
 
   // Settles focus time up to the moment a participant leaves, then locks the
@@ -762,6 +1120,150 @@ export class RoomService {
     return createSharedInviteCode();
   }
 
+  private finishGameRound(
+    snapshot: RoomSnapshot,
+    game: GameSession,
+    forceReveal = false
+  ): GameSession {
+    const now = new Date().toISOString();
+    const scores = this.scoreCompletedRound(game);
+    const roundSummary: GameRoundSummary = {
+      roundIndex: game.round.index,
+      status: forceReveal || game.round.index >= game.totalRounds ? 'revealed' : 'completed',
+      endedAt: now,
+      scores,
+      missionResults: game.missionResults,
+      bluffResult: game.bluffResult,
+      relayLinks: game.relayLinks
+    };
+    const completedRounds = [...(game.completedRounds ?? []), roundSummary];
+    const isFinalRound = forceReveal || game.round.index >= game.totalRounds;
+
+    if (isFinalRound) {
+      return {
+        ...game,
+        status: 'reveal',
+        round: { ...game.round, status: 'reveal', revealAt: now },
+        scores,
+        completedRounds,
+        nextRoundReadyParticipantIds: [],
+        nextRoundStartsAt: undefined,
+        updatedAt: now
+      };
+    }
+
+    const nextRoundStartsAt = new Date(Date.now() + NEXT_ROUND_WAIT_MS).toISOString();
+    return {
+      ...game,
+      status: 'between_round',
+      round: {
+        ...game.round,
+        status: 'between_round',
+        revealAt: now,
+        nextStartsAt: nextRoundStartsAt
+      },
+      scores,
+      completedRounds,
+      nextRoundReadyParticipantIds: [],
+      nextRoundStartsAt,
+      updatedAt: now
+    };
+  }
+
+  private startNextRound(snapshot: RoomSnapshot, game: GameSession): GameSession {
+    const now = new Date().toISOString();
+    const roundIndex = game.round.index + 1;
+    return {
+      ...game,
+      status: 'in_round',
+      round: {
+        id: crypto.randomUUID(),
+        gameId: game.id,
+        index: roundIndex,
+        status: 'in_round',
+        startedAt: now,
+        endsAt: new Date(Date.now() + GAME_ROUND_MS).toISOString()
+      },
+      missions:
+        game.kind === 'hidden_mission'
+          ? this.createHiddenMissions(snapshot.participants, game.missions)
+          : [],
+      missionResults: [],
+      bluffBets: game.kind === 'poker_bluff' ? [] : undefined,
+      bluffResult: undefined,
+      relayLinks: game.kind === 'copycat_relay' ? [] : undefined,
+      nextRoundReadyParticipantIds: [],
+      nextRoundStartsAt: undefined,
+      updatedAt: now
+    };
+  }
+
+  private scoreCompletedRound(game: GameSession): GameSession['scores'] {
+    if (game.kind !== 'hidden_mission') return game.scores;
+
+    const results = game.missionResults ?? [];
+    return game.scores.map((score) => {
+      const result = results.find((item) => item.playerId === score.participantId);
+      const mission = game.missions?.find((item) => item.playerId === score.participantId);
+      const roundPoints = hiddenMissionRoundPoints(result, mission);
+      return { ...score, points: score.points + roundPoints };
+    });
+  }
+
+  private createHiddenMissions(
+    participants: Participant[],
+    previousMissions: HiddenMission[] = []
+  ): HiddenMission[] {
+    const shuffled = [...hiddenMissionTemplates].sort(() => Math.random() - 0.5);
+    return participants.map((participant, index) => {
+      const previousPrompt = previousMissions.find(
+        (mission) => mission.playerId === participant.id
+      )?.prompt;
+      let template = shuffled[index % shuffled.length]!;
+      if (template.prompt === previousPrompt) {
+        template = shuffled[(index + 1) % shuffled.length]!;
+      }
+      return {
+        id: crypto.randomUUID(),
+        playerId: participant.id,
+        ...template
+      };
+    });
+  }
+
+  private createReplacementHiddenMission(
+    participantId: string,
+    previousMission: HiddenMission | undefined
+  ): HiddenMission {
+    const candidates = hiddenMissionTemplates.filter(
+      (template) => template.prompt !== previousMission?.prompt
+    );
+    const template = candidates[Math.floor(Math.random() * candidates.length)] ?? hiddenMissionTemplates[0]!;
+    return {
+      id: crypto.randomUUID(),
+      playerId: participantId,
+      ...template
+    };
+  }
+
+  private bluffResultFromSignals(targetId: string, signals: ExpressionSignals): BluffResult {
+    const tell =
+      signals.smile >= 0.58
+        ? 'smile'
+        : signals.jawOpen >= 0.45
+          ? 'jaw'
+          : signals.browRaise >= 0.5
+            ? 'brow'
+            : null;
+
+    return {
+      targetId,
+      cracked: tell !== null,
+      tell,
+      heldMs: Math.max(0, Date.now() - signals.timestamp)
+    };
+  }
+
   private async createVideoJoin(
     snapshot: RoomSnapshot,
     participant: Participant
@@ -818,12 +1320,41 @@ export class RoomService {
     this.focusRankingListeners.forEach((listener) => listener({ roomId, ranking }));
   }
 
+  private emitGameUpdated(snapshot: RoomSnapshot, game: GameSession) {
+    this.gameUpdatedListeners.forEach((listener) => listener(snapshot, game));
+  }
+
+  private emitMissionAssigned(roomId: string, mission: HiddenMission) {
+    this.missionAssignedListeners.forEach((listener) => listener(roomId, mission));
+  }
+
   private withVisibleMessages(snapshot: RoomSnapshot, participantId?: string): RoomSnapshot {
+    const currentGame = snapshot.currentGame
+      ? {
+          ...snapshot.currentGame,
+          missions: snapshot.currentGame.missions?.filter(
+            (mission) =>
+              snapshot.currentGame?.status === 'reveal' ||
+              (participantId !== undefined && mission.playerId === participantId)
+          )
+        }
+      : snapshot.currentGame;
+
     return {
       ...snapshot,
+      currentGame,
+      chatMessages: this.recentChatMessages(snapshot.room.id, 30),
       roomiMessages: snapshot.roomiMessages.filter(
         (message) => !message.targetParticipantId || message.targetParticipantId === participantId
       )
     };
   }
+}
+
+function hiddenMissionRoundPoints(
+  result: MissionResult | undefined,
+  mission: HiddenMission | undefined
+): number {
+  if (!result || !mission || mission.target <= 0) return 0;
+  return Math.round((Math.min(result.count, mission.target) / mission.target) * 10);
 }

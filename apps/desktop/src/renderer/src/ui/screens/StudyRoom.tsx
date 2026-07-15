@@ -1,22 +1,27 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import {
   Coffee,
+  Eye,
+  EyeOff,
+  Flag,
   LogOut,
-  MessageCircle,
   Mic,
   MicOff,
   MoreHorizontal,
+  Play,
   Send,
   Video,
-  VideoOff,
-  X
+  VideoOff
 } from 'lucide-react';
-import { RoomiMascot, type RoomiMood } from '../components/RoomiMascot';
-import { InviteCodeCard } from '../components/InviteCodeCard';
 import {
   type ChatMessage,
+  type ExpressionSignals,
   type FocusRankingEntry,
+  type GameKind,
+  type GameSession,
   type Goal,
+  type HiddenMission,
+  type MissionResult,
   type Participant,
   type ParticipantStatus,
   type Room,
@@ -24,17 +29,46 @@ import {
   type StudySession,
   type VideoJoinInfo
 } from '@roomi/shared';
+import { InviteCodeCard } from '../components/InviteCodeCard';
+import { RoomiMascot } from '../components/RoomiMascot';
 import type { ScreenProps } from './types';
 import { useDailyRoom } from '../../use-daily-room';
-import { focusSnapshotFromMl, type FocusLabel } from '../../focus-pipeline';
-import { useFocusDetection, type MlPredictionStatus } from '../../use-focus-detection';
+import {
+  defaultRuleSettings,
+  type FocusLabel,
+  type FocusSnapshot
+} from '../../focus-pipeline';
+import { useFocusDetection } from '../../use-focus-detection';
+import {
+  missionResultFromCounter,
+  updateHiddenMissionCounter,
+  type MissionCounterState
+} from '../../expression-pipeline';
 
-/**
- * Study Room · Live Session (Figma 47:2).
- * NOTE: No screenshot was available (Figma read quota exhausted). Layout is
- * inferred from the AGENTS.md IA (video grid, timer, goals, Lumi panel,
- * personal confirm message, controls). Verify against Figma.
- */
+type DailyParticipantMediaLike = {
+  tracks?: {
+    video?: {
+      state?: string;
+      track?: MediaStreamTrack;
+    };
+  };
+};
+
+type DistractionCardKind = 'memory' | 'quick_choice' | 'odd_expression';
+
+type DistractionCard = {
+  id: string;
+  kind: DistractionCardKind;
+  title: string;
+  prompt: string;
+  choices: string[];
+  answer: string;
+};
+
+type KeyedMissionCounterState = MissionCounterState & {
+  missionKey: string;
+};
+
 interface StudyRoomProps extends ScreenProps {
   currentParticipantId: string;
   isHost: boolean;
@@ -43,98 +77,133 @@ interface StudyRoomProps extends ScreenProps {
   onToggleGoalAchieved: (achieved: boolean) => void;
   onUpdatePresence: (status: ParticipantStatus) => void;
   onStartBreak: () => void | Promise<void>;
+  onStartGame?: (kind: GameKind) => void;
+  onSubmitMissionResult?: (result: MissionResult) => void;
+  onSubmitBluffBet?: (targetId: string, predictsCrack: boolean) => void;
+  onSubmitBluffSignals?: (signals: ExpressionSignals) => void;
+  onAdvanceRelay?: (toId: string, similarity: number) => void;
+  onReadyNextRound?: () => void;
+  onSendChatMessage?: (text: string) => void;
   participants: Participant[];
   goals: Goal[];
   roomiMessages: RoomiMessage[];
   chatMessages: ChatMessage[];
-  onSendChatMessage: (text: string) => void;
+  focusRanking?: FocusRankingEntry[];
   room: Room;
   currentSession?: StudySession;
+  currentGame?: GameSession;
+  privateMission?: HiddenMission;
   videoJoin?: VideoJoinInfo;
-  focusRanking: FocusRankingEntry[];
 }
 
-const statusLabel: Record<Participant['status'], string> = {
-  online: '집중중',
-  focused: '집중중',
-  distracted: '주의 필요',
-  away: '자리비움',
-  break: '휴식중',
-  paused: '감지 정지'
+const statusLabel: Record<ParticipantStatus, string> = {
+  online: '대기',
+  focused: '참여 중',
+  distracted: '주의 이탈',
+  away: '자리 비움',
+  break: '휴식',
+  paused: '눈 감김'
 };
 
-const mlStatusLabel: Record<MlPredictionStatus, string> = {
-  idle: 'ML 대기',
-  collecting: 'ML window 수집',
-  predicting: 'ML 예측 중',
-  ready: 'ML 반영',
-  fallback: '로컬 판정'
+const studyRoomRuleSettings = {
+  ...defaultRuleSettings,
+  faceMissingSeconds: 0
 };
 
-function participantInitial(nickname: string) {
-  return nickname.trim().slice(0, 1) || '?';
-}
-
-function roomiMessageLabel(message: RoomiMessage | undefined) {
-  if (!message) return '집중 안내';
-
-  switch (message.kind) {
-    case 'start':
-      return '세션 시작';
-    case 'focus_recovery':
-      return '개인 집중 알림';
-    case 'break_return':
-      return '복귀 안내';
-    case 'summary':
-      return '세션 안내';
-    default:
-      return '루미의 제안';
+const distractionCards: Omit<DistractionCard, 'id'>[] = [
+  {
+    kind: 'memory',
+    title: '순간 기억',
+    prompt: '루미가 방금 띄운 숫자를 고르세요.',
+    choices: ['3', '7', '9'],
+    answer: '7'
+  },
+  {
+    kind: 'quick_choice',
+    title: '빠른 선택',
+    prompt: '가장 큰 숫자를 고르세요.',
+    choices: ['18', '31', '27'],
+    answer: '31'
+  },
+  {
+    kind: 'odd_expression',
+    title: '다른 표정 찾기',
+    prompt: '하나만 다른 표정을 고르세요.',
+    choices: ['🙂', '🙂', '😐', '🙂'],
+    answer: '😐'
   }
-}
-
-/** LIVE 안내 패널에서 루미가 지을 표정. 최근 메시지 종류에 따라 감정을 바꾼다. */
-function moodForRoomiMessage(message: RoomiMessage | undefined): RoomiMood {
-  switch (message?.kind) {
-    case 'break_return':
-      return 'wink'; // 휴식 잘 다녀왔지? 반갑게 윙크
-    case 'focus_recovery':
-      return 'angry'; // 확인을 마친 뒤: "자, 다시 불붙여보자!"
-    case 'goal_refine':
-      return 'curious'; // 목표를 함께 들여다보는 중
-    case 'start':
-    case 'summary':
-    default:
-      return 'smile';
-  }
-}
-
-export function remainingSessionSeconds(session: StudySession, timestamp = Date.now()) {
-  const endsAt = Date.parse(session.startedAt) + session.plannedMinutes * 60_000;
-  return Math.max(0, Math.ceil((endsAt - timestamp) / 1_000));
-}
-
-export function formatSessionTime(seconds: number) {
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
-}
+];
 
 export function participantsInStudyRoom(participants: Participant[]) {
   return participants.filter((participant) => participant.status !== 'online');
 }
 
-export function reconcilePendingCameraState(
-  reported: boolean,
-  pending: boolean | undefined
-): { cameraOn: boolean; pending: boolean | undefined } {
-  return pending !== undefined && pending !== reported
-    ? { cameraOn: pending, pending }
-    : { cameraOn: reported, pending: undefined };
+export function remainingSessionSeconds(session: StudySession, timestamp = Date.now()) {
+  const durationMs = session.plannedMinutes * 60_000;
+  return Math.max(0, Math.ceil((Date.parse(session.startedAt) + durationMs - timestamp) / 1_000));
+}
+
+export function formatSessionTime(totalSeconds: number) {
+  const minutes = Math.floor(Math.max(0, totalSeconds) / 60);
+  const seconds = Math.max(0, totalSeconds) % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+export function focusLabelToParticipantStatus(label: FocusLabel): ParticipantStatus {
+  if (label === 'focused') return 'focused';
+  if (label === 'away') return 'away';
+  if (label === 'sleepy' || label === 'paused') return 'paused';
+  return 'distracted';
+}
+
+export function participantStatusLabel(
+  participant: Pick<Participant, 'status'>,
+  focusSnapshot?: Partial<FocusSnapshot>
+) {
+  if (focusSnapshot) {
+    const activeSignals = new Set(focusSnapshot.activeSignals ?? []);
+    if (focusSnapshot.current?.facePresent === false || activeSignals.has('face_missing')) {
+      return '얼굴 없음';
+    }
+    if (activeSignals.has('eyes_closed') || focusSnapshot.label === 'sleepy') {
+      return '눈 감김';
+    }
+    if (activeSignals.has('head_down')) {
+      return '고개 숙임';
+    }
+    if (activeSignals.has('head_turned')) {
+      return '시선 이탈';
+    }
+    if (activeSignals.has('yawning')) {
+      return '하품';
+    }
+    if (focusSnapshot.label === 'uncertain') {
+      return '집중 흔들림';
+    }
+    if (focusSnapshot.label === 'distracted') {
+      return '주의 이탈';
+    }
+  }
+
+  return statusLabel[participant.status];
+}
+
+function tileDotClass(status: ParticipantStatus) {
+  if (status === 'away') return 'tile__dot--away';
+  if (status === 'distracted') return 'tile__dot--distracted';
+  if (status === 'paused') return 'tile__dot--paused';
+  return '';
+}
+
+export function reconcilePendingCameraState(reported: boolean, requested: boolean) {
+  return reported === requested
+    ? { cameraOn: reported, pending: undefined }
+    : { cameraOn: requested, pending: true };
 }
 
 export function setDailyCameraEnabled(
   enabled: boolean,
-  call: { setLocalVideo: (enabled: boolean) => unknown },
+  callObject: Pick<NonNullable<ReturnType<typeof useDailyRoom>['callObject']>, 'setLocalVideo'>,
   restart: () => void
 ) {
   if (enabled) {
@@ -142,24 +211,62 @@ export function setDailyCameraEnabled(
     return;
   }
 
-  call.setLocalVideo(false);
+  callObject.setLocalVideo(false);
 }
 
-export function focusLabelToParticipantStatus(label: FocusLabel): ParticipantStatus {
-  switch (label) {
-    case 'focused':
-      return 'focused';
-    case 'away':
-      return 'away';
-    case 'sleepy':
-    case 'paused':
-      return 'paused';
-    case 'distracted':
-    case 'uncertain':
-      return 'distracted';
-    default:
-      return 'focused';
+export function shouldUseLocalCameraFallback(
+  videoJoin: VideoJoinInfo | undefined,
+  _cameraOn: boolean,
+  dailyVideoTrack: MediaStreamTrack | null
+) {
+  return !videoJoin || !dailyVideoTrack;
+}
+
+export function DailyParticipantMedia({
+  fallbackInitial,
+  fallbackTrack,
+  isCameraOn,
+  isMe,
+  participant
+}: {
+  fallbackInitial: string;
+  isCameraOn: boolean;
+  isMe: boolean;
+  participant?: DailyParticipantMediaLike;
+  fallbackTrack?: MediaStreamTrack;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const track =
+    participant?.tracks?.video?.state === 'playable'
+      ? participant.tracks.video.track
+      : fallbackTrack;
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !track || !isCameraOn) return;
+    if (typeof MediaStream === 'undefined') return;
+
+    video.srcObject = new MediaStream([track]);
+    void video.play().catch(() => {});
+
+    return () => {
+      video.srcObject = null;
+    };
+  }, [track, isCameraOn]);
+
+  if (!track || !isCameraOn) {
+    return <span className="tile__avatar">{fallbackInitial}</span>;
   }
+
+  return (
+    <video
+      ref={videoRef}
+      className="tile__video"
+      muted={isMe}
+      playsInline
+      aria-label={isMe ? '내 웹캠 미리보기' : `${fallbackInitial} 웹캠 미리보기`}
+    />
+  );
 }
 
 export function StudyRoom({
@@ -170,106 +277,65 @@ export function StudyRoom({
   onToggleGoalAchieved,
   onUpdatePresence,
   onStartBreak,
+  onStartGame,
+  onSubmitMissionResult,
+  onSubmitBluffBet,
+  onSubmitBluffSignals,
+  onAdvanceRelay,
+  onReadyNextRound,
+  onSendChatMessage,
   participants,
   goals,
   roomiMessages,
   chatMessages,
-  onSendChatMessage,
+  focusRanking = [],
   room,
   currentSession,
-  videoJoin,
-  focusRanking
+  currentGame,
+  privateMission,
+  videoJoin
 }: StudyRoomProps) {
-  const studyParticipants = participantsInStudyRoom(participants);
-  const gridColumns = Math.max(1, Math.ceil(Math.sqrt(studyParticipants.length || 1)));
-  const gridStyle = { '--tile-cols': gridColumns } as CSSProperties;
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const localStreamRef = useRef<MediaStream | null>(null);
-  const pendingCameraStateRef = useRef<boolean | undefined>(undefined);
-  const {
-    callObject,
-    localMedia,
-    participantsByRoomiId,
-    status: dailyStatus,
-    restart: restartDailyRoom
-  } = useDailyRoom(videoJoin);
-  const [isMicOn, setIsMicOn] = useState(true);
-  const [isCameraOn, setIsCameraOn] = useState(true);
-  const [isHostMenuOpen, setIsHostMenuOpen] = useState(false);
-  const [isChatOpen, setIsChatOpen] = useState(false);
-  const [isEndConfirmOpen, setIsEndConfirmOpen] = useState(false);
-  const [dismissedFocusMessageId, setDismissedFocusMessageId] = useState<string>();
-  const [timestamp, setTimestamp] = useState(() => Date.now());
-  const [localAnalysisTrack, setLocalAnalysisTrack] = useState<MediaStreamTrack | null>(null);
-  const [chatInput, setChatInput] = useState('');
-  const chatListRef = useRef<HTMLDivElement>(null);
-  const lastReportedFocusStatusRef = useRef<ParticipantStatus | null>(null);
-  const currentParticipant =
-    studyParticipants.find((participant) => participant.id === currentParticipantId) ??
-    studyParticipants[0];
-  const plannedSeconds = (currentSession?.plannedMinutes ?? room.settings.sessionMinutes) * 60;
-  const remainingSeconds = currentSession
-    ? remainingSessionSeconds(currentSession, timestamp)
-    : plannedSeconds;
-  // The server already sends personal messages only to their recipient. Keep the
-  // same rule in the view as a defensive guard for local/demo room state.
-  const latestRoomiMessage = [...roomiMessages]
-    .reverse()
-    .find(
-      (message) =>
-        !message.targetParticipantId || message.targetParticipantId === currentParticipantId
-    );
-  const focusRecoveryMessage = [...roomiMessages]
-    .reverse()
-    .find(
-      (message) =>
-        message.kind === 'focus_recovery' &&
-        message.targetParticipantId === currentParticipantId &&
-        message.id !== dismissedFocusMessageId
-    );
-  // 집중 흐트러짐을 확인하는 동안엔 걱정스러운 표정, 그 외엔 메시지 종류에 맞춘 표정.
-  const panelMood: RoomiMood = focusRecoveryMessage
-    ? 'sad'
-    : moodForRoomiMessage(latestRoomiMessage);
-  const dailyLocalVideoTrack = useMemo(() => {
-    if (!videoJoin) {
-      return null;
-    }
-
-    const participant = participantsByRoomiId.get(currentParticipantId);
-    if (participant?.tracks?.video?.state !== 'playable') {
-      return null;
-    }
-
-    return participant.tracks.video.track ?? participant.tracks.video.persistentTrack ?? null;
-  }, [currentParticipantId, participantsByRoomiId, videoJoin]);
-  const focusAnalysisTrack = videoJoin ? dailyLocalVideoTrack : localAnalysisTrack;
-  const focusIdentity = useMemo(
-    () => ({
-      userId: currentParticipant?.userId ?? currentParticipantId,
-      sessionId: currentSession?.id ?? room.id
-    }),
-    [currentParticipant?.userId, currentParticipantId, currentSession?.id, room.id]
-  );
-  const {
-    status: focusDetectionStatus,
-    error: focusDetectionError,
-    focusSnapshot,
-    detectionSnapshot,
-    mlPrediction,
-    mlStatus,
-    mlError
-  } = useFocusDetection({
-    track: focusAnalysisTrack,
-    enabled: isCameraOn && Boolean(focusAnalysisTrack),
-    mode: 'ml',
-    identity: focusIdentity
+  const [timestamp, setTimestamp] = useState(Date.now());
+  const [audioOn, setAudioOn] = useState(true);
+  const [cameraOn, setCameraOn] = useState(true);
+  const [hostMenuOpen, setHostMenuOpen] = useState(false);
+  const [confirmEnd, setConfirmEnd] = useState(false);
+  const [bluffTargetId, setBluffTargetId] = useState('');
+  const [relayTargetId, setRelayTargetId] = useState('');
+  const [relaySimilarity, setRelaySimilarity] = useState(0.75);
+  const [chatDraft, setChatDraft] = useState('');
+  const [resultsOpen, setResultsOpen] = useState(false);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [missionState, setMissionState] = useState<KeyedMissionCounterState>({
+    missionKey: '',
+    count: 0,
+    previousActive: false
   });
-  const visibleFocusSnapshot =
-    mlPrediction && mlStatus === 'ready'
-      ? focusSnapshotFromMl(mlPrediction.response, focusSnapshot)
-      : focusSnapshot;
-  const visibleFocusStatus = focusLabelToParticipantStatus(visibleFocusSnapshot.label);
+  const [distractionCard, setDistractionCard] = useState<DistractionCard | null>(null);
+  const [distractionSolvedId, setDistractionSolvedId] = useState<string | null>(null);
+  const [distractionVisible, setDistractionVisible] = useState(true);
+  const [distractionWrong, setDistractionWrong] = useState(false);
+  const reportedMissionRef = useRef<{ missionId: string; count: number; success: boolean } | null>(null);
+  const { callObject, localMedia, participantsByRoomiId, restart } =
+    useDailyRoom(videoJoin);
+  const localDailyParticipant = participantsByRoomiId.get(currentParticipantId);
+  const localFallbackVideoTrack = getVideoTracks(localStream)[0] ?? null;
+  const dailyVideoTrack =
+    localDailyParticipant?.tracks?.video?.state === 'playable'
+      ? (localDailyParticipant.tracks.video.track ?? null)
+      : null;
+  const localVideoTrack = dailyVideoTrack ?? localFallbackVideoTrack;
+  const focusDetection = useFocusDetection({
+    enabled: cameraOn && typeof MediaStream !== 'undefined',
+    track: localVideoTrack ?? null,
+    mode: 'rule',
+    identity: {
+      userId: currentParticipantId,
+      sessionId: currentGame?.id ?? currentSession?.id ?? room.id
+    },
+    settings: studyRoomRuleSettings
+  });
+  const missionKey = currentGame && privateMission ? `${currentGame.round.id}:${privateMission.id}` : '';
 
   useEffect(() => {
     const interval = window.setInterval(() => setTimestamp(Date.now()), 1_000);
@@ -277,444 +343,681 @@ export function StudyRoom({
   }, []);
 
   useEffect(() => {
-    if (!callObject) {
-      return;
-    }
-
-    setIsMicOn(localMedia.audio);
-    const cameraState = reconcilePendingCameraState(
-      localMedia.video,
-      pendingCameraStateRef.current
+    const needsLocalCameraFallback = shouldUseLocalCameraFallback(
+      videoJoin,
+      cameraOn,
+      dailyVideoTrack
     );
-    pendingCameraStateRef.current = cameraState.pending;
-    setIsCameraOn(cameraState.cameraOn);
-  }, [callObject, localMedia.audio, localMedia.video]);
-
-  useEffect(() => {
-    if (videoJoin) {
-      return undefined;
-    }
+    if (!needsLocalCameraFallback || !navigator.mediaDevices?.getUserMedia) return undefined;
 
     let cancelled = false;
-
-    async function connectLocalMedia() {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-
-      if (cancelled) {
-        stream.getTracks().forEach((track) => track.stop());
-        return;
-      }
-
-      localStreamRef.current = stream;
-      setLocalAnalysisTrack(stream.getVideoTracks()[0] ?? null);
-
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
-    }
-
-    void connectLocalMedia();
+    void navigator.mediaDevices
+      .getUserMedia({ audio: true, video: true })
+      .then((stream) => {
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        setLocalStream(stream);
+      })
+      .catch(() => {});
 
     return () => {
       cancelled = true;
-      localStreamRef.current?.getTracks().forEach((track) => track.stop());
-      localStreamRef.current = null;
-      setLocalAnalysisTrack(null);
+      setLocalStream((stream) => {
+        stream?.getTracks().forEach((track) => track.stop());
+        return null;
+      });
     };
-  }, [videoJoin]);
+  }, [dailyVideoTrack, videoJoin]);
 
   useEffect(() => {
-    if (localVideoRef.current && localStreamRef.current) {
-      localVideoRef.current.srcObject = localStreamRef.current;
-    }
-  }, [isCameraOn]);
+    const nextStatus = focusLabelToParticipantStatus(focusDetection.focusSnapshot.label);
+    if (focusDetection.status === 'running') onUpdatePresence(nextStatus);
+  }, [focusDetection.focusSnapshot.label, focusDetection.status, onUpdatePresence]);
 
   useEffect(() => {
-    const list = chatListRef.current;
-    if (list) {
-      list.scrollTop = list.scrollHeight;
-    }
-  }, [chatMessages, isChatOpen]);
+    setMissionState({ missionKey, count: 0, previousActive: false });
+    reportedMissionRef.current = null;
+  }, [missionKey]);
 
-  const previousChatCountRef = useRef(chatMessages.length);
   useEffect(() => {
-    if (chatMessages.length > previousChatCountRef.current) {
-      setIsChatOpen(true);
+    const shouldShowDistraction =
+      currentGame?.kind === 'hidden_mission' &&
+      currentGame.status === 'in_round' &&
+      participants.length > 1;
+
+    if (!shouldShowDistraction || !currentGame) {
+      setDistractionCard(null);
+      setDistractionSolvedId(null);
+      setDistractionVisible(false);
+      setDistractionWrong(false);
+      return;
     }
-    previousChatCountRef.current = chatMessages.length;
-  }, [chatMessages]);
 
-  const submitChatMessage = () => {
-    const text = chatInput.trim();
-    if (!text) return;
+    const card = createDistractionCard(currentGame.round.id, currentGame.round.index);
+    setDistractionCard(card);
+    setDistractionSolvedId(null);
+    setDistractionVisible(true);
+    setDistractionWrong(false);
+  }, [currentGame?.id, currentGame?.kind, currentGame?.round.id, currentGame?.round.index, currentGame?.status, participants.length]);
 
-    onSendChatMessage(text);
-    setChatInput('');
-    setIsChatOpen(true);
-  };
+  const distractionLocksMission = Boolean(
+    distractionCard &&
+      currentGame?.kind === 'hidden_mission' &&
+      currentGame.status === 'in_round' &&
+      distractionSolvedId !== distractionCard.id
+  );
+
+  useEffect(() => {
+    if (
+      !privateMission ||
+      currentGame?.status !== 'in_round' ||
+      !focusDetection.expressionSignals ||
+      distractionLocksMission
+    ) return;
+
+    setMissionState((current) => {
+      const currentState =
+        current.missionKey === missionKey
+          ? current
+          : { missionKey, count: 0, previousActive: false };
+      const nextState = updateHiddenMissionCounter(
+        currentState,
+        privateMission.verify,
+        privateMission.target,
+        focusDetection.expressionSignals!
+      );
+      return { ...nextState, missionKey };
+    });
+  }, [currentGame?.status, distractionLocksMission, focusDetection.expressionSignals, missionKey, privateMission]);
+
+  useEffect(() => {
+    if (!privateMission || currentGame?.status !== 'in_round' || !onSubmitMissionResult) return;
+    if (missionState.missionKey !== missionKey) return;
+
+    const result = missionResultFromCounter({
+      playerId: currentParticipantId,
+      missionId: privateMission.id,
+      verify: privateMission.verify,
+      target: privateMission.target,
+      state: missionState
+    });
+    const previousReport = reportedMissionRef.current;
+    const alreadyReported =
+      previousReport?.missionId === privateMission.id &&
+      previousReport.count === result.count &&
+      previousReport.success === result.success;
+    if (alreadyReported) return;
+
+    if (result.count > 0 || result.success) {
+      reportedMissionRef.current = {
+        missionId: privateMission.id,
+        count: result.count,
+        success: result.success
+      };
+      onSubmitMissionResult(result);
+    }
+  }, [currentGame?.status, currentParticipantId, missionState, onSubmitMissionResult, privateMission]);
+
+  const displayParticipants = useMemo(() => {
+    const activeParticipants = participantsInStudyRoom(participants);
+
+    if (currentGame || room.status === 'studying' || room.status === 'break') {
+      return participants;
+    }
+
+    return activeParticipants.length > 0 ? activeParticipants : participants;
+  }, [currentGame, participants, room.status]);
+  const remainingSeconds = currentSession
+    ? remainingSessionSeconds(currentSession, timestamp)
+    : currentGame?.status === 'between_round' && currentGame.nextRoundStartsAt
+      ? Math.max(0, Math.ceil((Date.parse(currentGame.nextRoundStartsAt) - timestamp) / 1_000))
+      : currentGame?.round.endsAt
+        ? Math.max(0, Math.ceil((Date.parse(currentGame.round.endsAt) - timestamp) / 1_000))
+      : room.settings.sessionMinutes * 60;
+  const latestMessage = roomiMessages.at(-1);
+  const goalByParticipant = new Map(goals.map((goal) => [goal.participantId, goal]));
+  const myGoal = goalByParticipant.get(currentParticipantId);
+  const otherParticipants = participants.filter((participant) => participant.id !== currentParticipantId);
+  const selectableParticipants = otherParticipants.length > 0 ? otherParticipants : participants;
+  const activeBluffTargetId =
+    bluffTargetId || selectableParticipants[0]?.id || currentParticipantId;
+  const activeRelayTargetId =
+    relayTargetId || selectableParticipants[0]?.id || currentParticipantId;
+  const configuredGameKind = room.settings.defaultGameKind;
+  const myBluffBet = currentGame?.bluffBets?.find(
+    (bet) => bet.participantId === currentParticipantId
+  );
+  const isStudyMode = room.settings.activityKind === 'study';
+  const goalCardTitle = isStudyMode ? '공부 목표' : '플레이 스타일';
+  const emptyGoalText = isStudyMode ? '등록된 목표가 없어요' : '등록된 플레이 스타일이 없어요';
+  const ranking = rankGameScores(currentGame, participants);
+  const readyParticipantIds = new Set(currentGame?.nextRoundReadyParticipantIds ?? []);
+  const isNextRoundWaiting = currentGame?.status === 'between_round';
+  const isGameEnded = currentGame?.status === 'reveal';
+  const hasMarkedNextReady = readyParticipantIds.has(currentParticipantId);
+  const latestRoundWinner = currentGame ? roundWinnerName(currentGame, participants) : undefined;
+  const gameTimerLabel = isGameEnded ? '게임 상태' : isNextRoundWaiting ? '다음 라운드' : '현재 라운드';
+  const gameTimerValue = currentGame
+    ? isGameEnded
+      ? '게임 종료'
+      : isNextRoundWaiting
+      ? `${currentGame.round.index + 1}라운드 시작까지 ${formatSessionTime(remainingSeconds)}`
+      : `${currentGame.round.index}/${currentGame.totalRounds ?? 1}라운드`
+    : `${room.settings.roundCount ?? 1}라운드 예정`;
+  const tileCols = Math.min(2, Math.max(1, Math.ceil(Math.sqrt(displayParticipants.length))));
+  const visibleChatMessages = chatMessages.slice(-8);
 
   const toggleAudio = () => {
-    const next = !isMicOn;
-    if (callObject) {
-      callObject.setLocalAudio(next);
-    } else {
-      localStreamRef.current?.getAudioTracks().forEach((track) => {
-        track.enabled = next;
-      });
-    }
-    setIsMicOn(next);
+    callObject?.setLocalAudio(!audioOn);
+    getAudioTracks(localStream).forEach((track) => {
+      track.enabled = !audioOn;
+    });
+    setAudioOn((current) => !current);
   };
 
-  const toggleVideo = () => {
-    const next = !isCameraOn;
-    if (callObject) {
-      pendingCameraStateRef.current = next;
-      setDailyCameraEnabled(next, callObject, restartDailyRoom);
-    } else {
-      localStreamRef.current?.getVideoTracks().forEach((track) => {
-        track.enabled = next;
-      });
-    }
-    setIsCameraOn(next);
+  const toggleCamera = () => {
+    const next = !cameraOn;
+    if (callObject) setDailyCameraEnabled(next, callObject, restart);
+    getVideoTracks(localStream).forEach((track) => {
+      track.enabled = next;
+    });
+    setCameraOn(next);
   };
 
-  useEffect(() => {
-    if (!isCameraOn || focusDetectionStatus !== 'running') {
+  const answerDistractionCard = (choice: string) => {
+    if (!distractionCard) return;
+    if (choice === distractionCard.answer) {
+      setDistractionSolvedId(distractionCard.id);
+      setDistractionVisible(false);
+      setDistractionWrong(false);
       return;
     }
 
-    if (lastReportedFocusStatusRef.current === visibleFocusStatus) {
-      return;
-    }
+    setDistractionWrong(true);
+  };
 
-    lastReportedFocusStatusRef.current = visibleFocusStatus;
-    onUpdatePresence(visibleFocusStatus);
-  }, [focusDetectionStatus, isCameraOn, onUpdatePresence, visibleFocusStatus]);
-
-  useEffect(() => {
-    if (isCameraOn) {
-      return;
-    }
-
-    if (lastReportedFocusStatusRef.current === 'paused') {
-      return;
-    }
-
-    lastReportedFocusStatusRef.current = 'paused';
-    onUpdatePresence('paused');
-  }, [isCameraOn, onUpdatePresence]);
+  const submitChat = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const text = chatDraft.trim();
+    if (!text) return;
+    onSendChatMessage?.(text);
+    setChatDraft('');
+  };
 
   return (
-    <div className="screen screen--app">
+    <div className="screen screen--app screen--study">
       <div className="study__body">
-        <section className="study__stage">
-          <section className="study-timer-card" aria-label="집중 세션 타이머">
+        <main className="study__stage">
+          <section className="study-timer-card">
             <div>
-              <div className="study-timer__label">
-                집중 1라운드 · {room.settings.sessionMinutes}분 세션
-              </div>
-              <time className="study-timer__value" aria-label="남은 집중 시간">
-                {formatSessionTime(remainingSeconds)}
-              </time>
+              <span className="study-timer__label">{isStudyMode ? '공부 시간' : gameTimerLabel}</span>
+              <strong className={`study-timer__value${!isStudyMode ? ' study-timer__value--game' : ''}`}>
+                {isStudyMode ? (
+                  formatSessionTime(remainingSeconds)
+                ) : (
+                  <>
+                    {isNextRoundWaiting && latestRoundWinner && currentGame && (
+                      <span className="study-timer__round-winner">
+                        {currentGame.round.index}라운드 {latestRoundWinner} 우승
+                      </span>
+                    )}
+                    {gameTimerValue}
+                  </>
+                )}
+              </strong>
             </div>
             <div className="study-timer-card__meta">
-              <span>남은 시간</span>
               <span className="study-timer-card__participants">
-                <i />
-                {studyParticipants.length} / {room.settings.maxParticipants}명 집중 중
+                <i /> {displayParticipants.length}/{room.settings.maxParticipants}
               </span>
+              <span>
+                {isStudyMode
+                  ? '공부하기'
+                  : currentGame
+                    ? gameKindLabel(currentGame.kind)
+                    : '게임 시작 전'}
+              </span>
+              {!isStudyMode && isNextRoundWaiting && (
+                <button
+                  type="button"
+                  className="btn btn--primary btn--compact"
+                  disabled={hasMarkedNextReady}
+                  onClick={onReadyNextRound}
+                >
+                  {hasMarkedNextReady ? '준비 완료' : '다음 라운드 준비'}
+                </button>
+              )}
             </div>
           </section>
 
-          <div className="study__grid" style={gridStyle} aria-label="참가자 영상 영역">
-            {studyParticipants.map((participant) => {
-              const isMe = participant.id === currentParticipantId;
-              const isAway = participant.status === 'away' || participant.status === 'break';
-
-              return (
-                <div className={`tile${isMe ? ' tile--me' : ''}`} key={participant.id}>
-                {videoJoin ? (
-                  <DailyParticipantMedia
-                    isCameraOn={isCameraOn}
-                    participant={participantsByRoomiId.get(participant.id)}
-                    fallbackInitial={participantInitial(participant.nickname)}
-                    isMe={isMe}
-                  />
-                ) : isMe && isCameraOn ? (
-                  <video
-                    ref={localVideoRef}
-                    className="tile__video"
-                    autoPlay
-                    muted
-                    playsInline
-                    aria-label="내 웹캠 미리보기"
-                  />
-                ) : (
-                  <div className="tile__avatar">{participantInitial(participant.nickname)}</div>
-                )}
-                <div className="tile__foot">
-                  <span className="tile__name">
-                    {isMe ? (
-                      isMicOn ? (
-                        <Mic size={13} />
-                      ) : (
-                        <MicOff size={13} />
-                      )
-                    ) : (
-                      <Mic size={13} />
-                    )}
-                    {participant.nickname}
-                    {isMe && ' (나)'}
-                  </span>
-                  <span className="tile__status">
-                    <span className={`tile__dot${isAway ? ' tile__dot--away' : ''}`} />
-                    {statusLabel[participant.status]}
-                  </span>
+          <div className="study__grid-wrap">
+            {distractionCard && distractionSolvedId !== distractionCard.id && (
+              <button
+                type="button"
+                className="study-distraction-toggle"
+                onClick={() => setDistractionVisible((current) => !current)}
+              >
+                {distractionVisible ? '화상 타일 보기' : '방해 카드 보기'}
+                <span>미션 잠금</span>
+              </button>
+            )}
+            <section className="study__grid" style={{ '--tile-cols': tileCols } as CSSProperties}>
+              {displayParticipants.map((participant) => {
+                const isMe = participant.id === currentParticipantId;
+                const dailyParticipant = participantsByRoomiId.get(participant.id);
+                return (
+                  <article className={`tile${isMe ? ' tile--me' : ''}`} key={participant.id}>
+                    <DailyParticipantMedia
+                      fallbackInitial={participant.nickname.slice(0, 1).toUpperCase()}
+                      isCameraOn={isMe ? cameraOn : true}
+                      isMe={isMe}
+                      participant={dailyParticipant as DailyParticipantMediaLike | undefined}
+                      fallbackTrack={isMe ? localFallbackVideoTrack ?? undefined : undefined}
+                    />
+                    <footer className="tile__foot">
+                      <span className="tile__name">
+                        {participant.nickname}
+                        {isMe ? ' (나)' : ''}
+                      </span>
+                      <span className="tile__status">
+                        <i className={`tile__dot ${tileDotClass(participant.status)}`} />
+                        {participantStatusLabel(
+                          participant,
+                          isMe ? focusDetection.focusSnapshot : undefined
+                        )}
+                      </span>
+                    </footer>
+                  </article>
+                );
+              })}
+            </section>
+            {distractionCard && distractionVisible && distractionSolvedId !== distractionCard.id && (
+              <section
+                className={`study-distraction${distractionWrong ? ' study-distraction--wrong' : ''}`}
+                aria-label="루미 방해 카드"
+              >
+                <div className="study-distraction__panel">
+                  <span className="study-distraction__eyebrow">루미 방해 카드</span>
+                  <h2>{distractionCard.title}</h2>
+                  <p>{distractionCard.prompt}</p>
+                  <div className="study-distraction__choices">
+                    {distractionCard.choices.map((choice, index) => (
+                      <button
+                        type="button"
+                        className="btn btn--soft"
+                        key={`${choice}-${index}`}
+                        onClick={() => answerDistractionCard(choice)}
+                      >
+                        {choice}
+                      </button>
+                    ))}
+                  </div>
+                  {distractionWrong && (
+                    <p className="study-distraction__feedback">다시 골라야 미션 잠금이 풀려요.</p>
+                  )}
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => setDistractionVisible(false)}
+                  >
+                    잠깐 숨기기
+                  </button>
                 </div>
-              </div>
-              );
-            })}
+              </section>
+            )}
           </div>
-        </section>
+
+        </main>
 
         <aside className="study__panel">
-          {isChatOpen && (
-            <section className="chat-panel study-chat" aria-label="채팅">
-              <div className="chat-panel__head">
-                <span className="study-card__title">채팅</span>
-                <button
-                  type="button"
-                  className="chat-panel__close"
-                  aria-label="채팅 닫기"
-                  onClick={() => setIsChatOpen(false)}
-                >
-                  <X size={16} />
-                </button>
-              </div>
-              <div className="study-chat__list" ref={chatListRef}>
-                {chatMessages.length === 0 && (
-                  <p className="study-chat__empty">아직 메시지가 없어요.</p>
-                )}
-                {chatMessages.map((message) => {
-                  const isMe = message.participantId === currentParticipantId;
-                  return (
-                    <div
-                      className={`study-chat__message${isMe ? ' study-chat__message--me' : ''}`}
-                      key={message.id}
-                    >
-                      <span className="study-chat__author">{message.nickname}</span>
-                      <p className="study-chat__text">{message.text}</p>
-                    </div>
-                  );
-                })}
-              </div>
-              <form
-                className="study-chat__form"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  submitChatMessage();
-                }}
-              >
-                <input
-                  className="field study-chat__input"
-                  placeholder="메시지를 입력하세요"
-                  value={chatInput}
-                  onChange={(event) => setChatInput(event.target.value)}
-                  aria-label="채팅 메시지 입력"
-                />
-                <button type="submit" className="ctrl study-chat__send" aria-label="메시지 보내기">
-                  <Send size={16} />
-                </button>
-              </form>
-            </section>
-          )}
-
           <InviteCodeCard inviteCode={room.inviteCode} />
-          <section className="study-card study-lumi" aria-label="루미의 실시간 안내">
+
+          <section className="study-card study-lumi">
             <div className="study-lumi__head">
-              <RoomiMascot size={30} mood={panelMood} />
+              <RoomiMascot size={42} mood={privateMission ? 'wink' : 'curious'} />
               <div>
-                <strong>루미</strong>
-                <span>AI 스터디 운영자</span>
+                <strong>루미 진행자</strong>
+                <span>{currentGame ? '라운드 진행 중' : isStudyMode ? '공부 진행 중' : '게임 대기 중'}</span>
               </div>
-              <span className="study-lumi__live">LIVE</span>
+              <span className="study-lumi__live">실시간</span>
             </div>
-            <div
-              key={latestRoomiMessage?.id ?? 'default'}
-              className="study-lumi__bubble"
-              aria-live="polite"
-              aria-atomic="true"
-            >
-              <span className="study-lumi__label">{roomiMessageLabel(latestRoomiMessage)}</span>
+            <div className="study-lumi__bubble">
+              <span className="study-lumi__label">메시지</span>
               <p className="study-lumi__text">
-                {latestRoomiMessage?.text ??
-                  '좋아, 지금부터 목표 한 가지에만 집중해보자. 흐름이 끊기면 내가 먼저 알려줄게.'}
+                {latestMessage?.text ??
+                  (privateMission
+                    ? '공개 시간 전까지 미션은 비밀로 지켜줘.'
+                    : isStudyMode
+                      ? '오늘 목표에 맞춰 차분히 집중해보자.'
+                      : gameWaitingMessage(configuredGameKind))}
               </p>
             </div>
           </section>
 
-          <section className="study-card study-focus" aria-label="집중도 자동 감지">
-            <div className="study-card__title">집중도 자동 감지</div>
-            <div className={`focus-label focus-label--${visibleFocusSnapshot.label}`}>
-              {statusLabel[visibleFocusStatus]}
+          <section className="study-card study-chat" aria-label="채팅">
+            <h2 className="study-card__title">채팅</h2>
+            <div className="study-chat__messages">
+              {visibleChatMessages.map((message) => (
+                <div
+                  className={`study-chat__message${
+                    message.participantId === currentParticipantId ? ' study-chat__message--me' : ''
+                  }`}
+                  key={message.id}
+                >
+                  <span>{message.nickname}</span>
+                  <p>{message.text}</p>
+                </div>
+              ))}
+              {visibleChatMessages.length === 0 && (
+                <p className="study-focus__meta">아직 채팅이 없어요.</p>
+              )}
             </div>
-            <p className="study-focus__meta">
-              {focusDetectionStatus === 'running'
-                ? `${mlStatusLabel[mlStatus]} · 얼굴 ${detectionSnapshot.faces} · ${detectionSnapshot.fps} FPS`
-                : isCameraOn
-                  ? 'MediaPipe 준비 중'
-                  : '카메라 꺼짐'}
-            </p>
-            {(focusDetectionError || mlError) && (
-              <p className="study-focus__error">{focusDetectionError ?? mlError}</p>
-            )}
+            <form className="study-chat__form" onSubmit={submitChat}>
+              <input
+                aria-label="채팅 입력"
+                value={chatDraft}
+                maxLength={300}
+                onChange={(event) => setChatDraft(event.currentTarget.value)}
+                placeholder="대화 이어가기"
+              />
+              <button
+                type="submit"
+                className="btn btn--primary btn--icon"
+                aria-label="채팅 보내기"
+                disabled={!chatDraft.trim()}
+              >
+                <Send size={16} />
+              </button>
+            </form>
           </section>
 
-          {focusRanking.length > 0 && (
-            <section className="study-card" aria-label="실시간 집중 순위">
-              <div className="study-card__title">실시간 집중 순위</div>
-              <ol className="retro-ranking">
-                {focusRanking.map((entry, index) => {
-                  const isSelf = entry.participantId === currentParticipantId;
-
+          {isStudyMode ? (
+            <>
+              <section className="study-card">
+                <h2 className="study-card__title">{goalCardTitle}</h2>
+                {participants.map((participant) => {
+                  const goal = goalByParticipant.get(participant.id);
+                  const isMe = participant.id === currentParticipantId;
                   return (
-                    <li
-                      key={entry.participantId}
-                      className={`retro-ranking__row${isSelf ? ' retro-ranking__row--self' : ''}`}
-                    >
-                      <span className="retro-ranking__rank">{index + 1}</span>
-                      <span className="retro-ranking__who">
-                        {entry.nickname}
-                        {isSelf && ' (나)'}
-                        {entry.left && ' (나감)'}
-                      </span>
-                      <span className="retro-ranking__minutes">{entry.focusMinutes}분</span>
-                    </li>
+                    <div className="goal goal--stacked" key={participant.id}>
+                      <span className="goal__who">{participant.nickname}</span>
+                      <p className="goal__text">
+                        <strong className="goal__owner">
+                          {participant.nickname}
+                        </strong>
+                        <span className="goal__note">{goal?.rawText ?? emptyGoalText}</span>
+                      </p>
+                      {isMe && (
+                        <label className="goal__achieved">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(myGoal?.achieved)}
+                            onChange={(event) => onToggleGoalAchieved(event.currentTarget.checked)}
+                          />
+                          <Flag size={14} />
+                          달성
+                        </label>
+                      )}
+                    </div>
                   );
                 })}
-              </ol>
-            </section>
-          )}
+              </section>
 
-          {focusRecoveryMessage && (
-            <section className="confirm" role="dialog" aria-label="집중 확인" aria-modal="false">
-              <span className="confirm__label">루미 확인</span>
-              <div className="confirm__head">
-                <RoomiMascot size={22} mood="surprise" />
-                루미의 집중 확인
-              </div>
-              <p className="confirm__text">{focusRecoveryMessage.text}</p>
-              <div className="confirm__actions">
+              {focusRanking.length > 0 && (
+                <section className="study-card" aria-label="실시간 집중 순위">
+                  <h2 className="study-card__title">실시간 집중 순위</h2>
+                  <ol className="retro-ranking">
+                    {focusRanking.map((entry, index) => {
+                      const isSelf = entry.participantId === currentParticipantId;
+                      return (
+                        <li
+                          className={`retro-ranking__row${
+                            isSelf ? ' retro-ranking__row--self' : ''
+                          }`}
+                          key={entry.participantId}
+                        >
+                          <span className="retro-ranking__rank">{index + 1}</span>
+                          <span className="retro-ranking__who">
+                            {entry.nickname}
+                            {isSelf && ' (나)'}
+                            {entry.left && ' (나감)'}
+                          </span>
+                          <span className="retro-ranking__minutes">{entry.focusMinutes}분</span>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </section>
+              )}
+            </>
+          ) : (
+            <section className="study-card">
+              <div className="study-card__head">
+                <h2 className="study-card__title">현재 순위</h2>
                 <button
                   type="button"
-                  className="btn btn--primary"
-                  onClick={() => setDismissedFocusMessageId(focusRecoveryMessage.id)}
+                  className="text-button"
+                  onClick={() => setResultsOpen(true)}
                 >
-                  맞아
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--ghost"
-                  onClick={() => {
-                    setDismissedFocusMessageId(focusRecoveryMessage.id);
-                    void onStartBreak();
-                  }}
-                >
-                  오탐이야
+                  자세히 보기
                 </button>
               </div>
-            </section>
-          )}
-
-          <div className="study-card">
-            <div className="study-card__title">오늘 목표</div>
-            {participants.map((participant) => {
-              const goal = goals.find((item) => item.participantId === participant.id);
-              const isSelf = participant.id === currentParticipantId;
-
-              return (
-                <div className="goal" key={participant.id}>
-                  <span className="goal__who">{participant.nickname}</span>
-                  <span className="goal__text">
-                    {goal?.rawText ?? '아직 목표를 입력하지 않았어요.'}
-                  </span>
-                  {isSelf && goal && (
-                    <label className="goal__achieved">
-                      <input
-                        type="checkbox"
-                        checked={goal.achieved ?? false}
-                        onChange={(event) => onToggleGoalAchieved(event.target.checked)}
-                      />
-                      달성
-                    </label>
-                  )}
+              {ranking.map((entry) => (
+                <div className="goal game-rank-row" key={entry.participant.id}>
+                  <span className="goal__who">{entry.rank}위</span>
+                  <p className="goal__text">
+                    <strong className="goal__owner">{entry.participant.nickname}</strong>
+                    {isNextRoundWaiting && (
+                      <span className="goal__note game-rank-row__status">
+                        {readyParticipantIds.has(entry.participant.id) ? '다음 라운드 준비 완료' : '준비 대기 중'}
+                      </span>
+                    )}
+                  </p>
+                  <strong>{entry.points}</strong>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+              {!currentGame && <p className="study-focus__meta">게임이 시작되면 순위가 표시돼요.</p>}
+            </section>
+          )}
+
+          {!isStudyMode && (
+            <section className="study-card">
+              <h2 className="study-card__title">게임 조작</h2>
+              {!currentGame && isHost && (
+                <>
+                  <div className="goal">
+                    <span className="goal__who">
+                      <Play size={16} />
+                    </span>
+                    <p className="goal__text">
+                      {gameKindLabel(configuredGameKind)}
+                      <br />
+                      <span className="study-focus__meta">방을 만들 때 정한 게임이에요.</span>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn--primary btn--block"
+                    onClick={() => onStartGame?.(configuredGameKind)}
+                  >
+                    <Play size={16} /> {gameKindLabel(configuredGameKind)} 시작
+                  </button>
+                </>
+              )}
+              {!currentGame && !isHost && (
+                <p className="study-focus__meta">방장이 게임을 시작하기를 기다리는 중이에요.</p>
+              )}
+              {currentGame?.kind === 'hidden_mission' && currentGame.status === 'in_round' && (
+                privateMission ? (
+                  <div className="goal">
+                    <span className="goal__who">
+                      <EyeOff size={16} />
+                    </span>
+                    <p className="goal__text">
+                      {privateMission.prompt}
+                      <br />
+                      진행: {missionState.count}/{privateMission.target}
+                      {distractionLocksMission && (
+                        <>
+                          <br />
+                          <span className="study-focus__meta">방해 카드를 풀어야 미션이 다시 진행돼요.</span>
+                        </>
+                      )}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="study-focus__meta">개인 미션을 기다리는 중이에요.</p>
+                )
+              )}
+              {currentGame?.kind === 'poker_bluff' && (
+                <>
+                  <div className="goal">
+                    <span className="goal__who">판정</span>
+                    <select
+                      className="goal__text"
+                      aria-label="블러프 대상"
+                      value={activeBluffTargetId}
+                      onChange={(event) => setBluffTargetId(event.currentTarget.value)}
+                    >
+                      {selectableParticipants.map((participant) => (
+                        <option value={participant.id} key={participant.id}>
+                          {participant.nickname}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="session-end-modal__actions">
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      onClick={() => onSubmitBluffBet?.(activeBluffTargetId, false)}
+                    >
+                      버틸 것 같아요
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--primary"
+                      onClick={() => onSubmitBluffBet?.(activeBluffTargetId, true)}
+                    >
+                      흔들릴 것 같아요
+                    </button>
+                  </div>
+                  {myBluffBet && (
+                    <p className="study-focus__meta">
+                      내 판정: {participantName(participants, myBluffBet.targetId)} 님이{' '}
+                      {myBluffBet.predictsCrack ? '흔들릴 것 같아요' : '버틸 것 같아요'}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn--primary btn--block"
+                    onClick={() =>
+                      onSubmitBluffSignals?.(
+                        focusDetection.expressionSignals ?? emptyExpressionSignals()
+                      )
+                    }
+                  >
+                    표정 판정 보내기
+                  </button>
+                  {currentGame.bluffResult && (
+                    <p className="study-focus__meta">
+                      결과: {participantName(participants, currentGame.bluffResult.targetId)} 님이{' '}
+                      {currentGame.bluffResult.cracked
+                        ? `${tellLabel(currentGame.bluffResult.tell)} 신호에서 흔들렸어요`
+                        : '끝까지 버텼어요'}
+                    </p>
+                  )}
+                </>
+              )}
+              {currentGame?.kind === 'copycat_relay' && (
+                <>
+                  <div className="goal">
+                    <span className="goal__who">대상</span>
+                    <select
+                      className="goal__text"
+                      aria-label="릴레이 대상"
+                      value={activeRelayTargetId}
+                      onChange={(event) => setRelayTargetId(event.currentTarget.value)}
+                    >
+                      {selectableParticipants.map((participant) => (
+                        <option value={participant.id} key={participant.id}>
+                          {participant.nickname}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <label className="goal__achieved">
+                    유사도 {Math.round(relaySimilarity * 100)}%
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={Math.round(relaySimilarity * 100)}
+                      onChange={(event) => setRelaySimilarity(Number(event.currentTarget.value) / 100)}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="btn btn--primary btn--block"
+                    onClick={() => onAdvanceRelay?.(activeRelayTargetId, relaySimilarity)}
+                  >
+                    릴레이 넘기기
+                  </button>
+                  {(currentGame.relayLinks ?? []).map((link, index) => (
+                    <p className="study-focus__meta" key={`${link.fromId}-${link.toId}-${index}`}>
+                      {participantName(participants, link.fromId)} →{' '}
+                      {participantName(participants, link.toId)} - {Math.round(link.similarity * 100)}%
+                    </p>
+                  ))}
+                </>
+              )}
+            </section>
+          )}
 
         </aside>
       </div>
 
-      <div className="study__controls">
+      <div className="study__controls" aria-label="통화 조작">
         <button
           type="button"
-          className={`ctrl${isMicOn ? ' ctrl--active' : ' ctrl--muted'}`}
-          aria-label={isMicOn ? '마이크 끄기' : '마이크 켜기'}
-          aria-pressed={isMicOn}
+          className={`ctrl${audioOn && localMedia.audio ? ' ctrl--active' : ' ctrl--muted'}`}
           onClick={toggleAudio}
+          aria-label={audioOn ? '마이크 끄기' : '마이크 켜기'}
         >
-          {isMicOn ? <Mic size={20} /> : <MicOff size={20} />}
+          {audioOn ? <Mic size={20} /> : <MicOff size={20} />}
         </button>
         <button
           type="button"
-          className={`ctrl${isCameraOn ? ' ctrl--active' : ' ctrl--muted'}`}
-          aria-label={isCameraOn ? '카메라 끄기' : '카메라 켜기'}
-          aria-pressed={isCameraOn}
-          onClick={toggleVideo}
+          className={`ctrl${cameraOn ? ' ctrl--active' : ' ctrl--muted'}`}
+          onClick={toggleCamera}
+          aria-label={cameraOn ? '카메라 끄기' : '카메라 켜기'}
         >
-          {isCameraOn ? <Video size={20} /> : <VideoOff size={20} />}
+          {cameraOn ? <Video size={20} /> : <VideoOff size={20} />}
         </button>
-        <button
-          type="button"
-          className="ctrl"
-          aria-label="휴식"
-          onClick={() => void onStartBreak()}
-        >
-          <Coffee size={20} />
-        </button>
-
-        <button
-          type="button"
-          className={`ctrl${isChatOpen ? ' ctrl--active' : ''}`}
-          aria-expanded={isChatOpen}
-          aria-label={isChatOpen ? '채팅 닫기' : '채팅 열기'}
-          onClick={() => setIsChatOpen((isOpen) => !isOpen)}
-        >
-          <MessageCircle size={20} />
-        </button>
-
+        {isStudyMode && (
+          <button type="button" className="ctrl" onClick={() => void onStartBreak()} aria-label="휴식 시작">
+            <Coffee size={20} />
+          </button>
+        )}
         {isHost && (
           <div className="host-actions">
             <button
               type="button"
               className="ctrl"
-              aria-expanded={isHostMenuOpen}
               aria-label="방장 메뉴"
-              onClick={() => setIsHostMenuOpen((isOpen) => !isOpen)}
+              onClick={() => setHostMenuOpen((current) => !current)}
             >
               <MoreHorizontal size={20} />
             </button>
-            {isHostMenuOpen && (
-              <div className="host-menu" role="menu" aria-label="방장 전용 액션">
+            {hostMenuOpen && (
+              <div className="host-menu" role="menu">
                 <button
                   type="button"
                   className="host-menu__item host-menu__item--danger"
                   role="menuitem"
-                  onClick={() => {
-                    setIsHostMenuOpen(false);
-                    setIsEndConfirmOpen(true);
-                  }}
+                  onClick={() => setConfirmEnd(true)}
                 >
                   세션 종료
                 </button>
@@ -722,42 +1025,92 @@ export function StudyRoom({
             )}
           </div>
         )}
-        <button type="button" className="ctrl ctrl--leave" aria-label="나가기" onClick={onLeaveRoom}>
+        <button type="button" className="ctrl ctrl--leave" onClick={onLeaveRoom} aria-label="나가기">
           <LogOut size={20} />
         </button>
       </div>
 
-      {dailyStatus === 'joining' && <div className="study__call-status">화상 세션 연결 중</div>}
-      {dailyStatus === 'error' && (
-        <div className="study__call-status study__call-status--error">
-          화상 세션 연결에 실패했어요
-        </div>
-      )}
-
-      {isEndConfirmOpen && (
-        <div className="session-end-modal" role="dialog" aria-modal="true" aria-label="세션 종료 확인">
+      {confirmEnd && (
+        <div className="session-end-modal" role="dialog" aria-label="세션 종료 확인">
           <div className="session-end-modal__panel">
-            <div className="session-end-modal__title">모두의 세션을 종료할까요?</div>
+            <h2 className="session-end-modal__title">
+              {currentGame ? '라운드를 종료할까요?' : '공부를 종료할까요?'}
+            </h2>
             <p className="session-end-modal__text">
-              방장만 할 수 있는 액션이에요. 종료하면 모든 참가자가 회고 화면으로 이동해요.
+              {currentGame
+                ? '루미가 현재 게임 결과를 공개하고 회고 화면으로 이동해요.'
+                : '루미가 현재 공부 세션을 마무리하고 회고 화면으로 이동해요.'}
             </p>
             <div className="session-end-modal__actions">
-              <button
-                type="button"
-                className="btn btn--ghost"
-                onClick={() => setIsEndConfirmOpen(false)}
-              >
+              <button type="button" className="btn btn--ghost" onClick={() => setConfirmEnd(false)}>
                 취소
               </button>
-              <button
-                type="button"
-                className="btn btn--danger"
-                onClick={() => {
-                  setIsEndConfirmOpen(false);
-                  onEndSession();
-                }}
-              >
+              <button type="button" className="btn btn--danger" onClick={onEndSession}>
                 세션 종료
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {resultsOpen && (
+        <div className="session-end-modal" role="dialog" aria-label="게임 결과 상세">
+          <div className="session-end-modal__panel game-results-modal">
+            <h2 className="session-end-modal__title">게임 결과 상세</h2>
+            <section className="game-results__section">
+              <h3>종합 순위</h3>
+              {ranking.map((entry) => (
+                <div className="game-results__row" key={entry.participant.id}>
+                  <span>{entry.rank}위</span>
+                  <strong>{entry.participant.nickname}</strong>
+                  <b>{entry.points}점</b>
+                </div>
+              ))}
+              {ranking.length === 0 && <p className="study-focus__meta">아직 점수가 없어요.</p>}
+            </section>
+            {isNextRoundWaiting && (
+              <section className="game-results__section">
+                <h3>다음 라운드 준비</h3>
+                {participants.map((participant) => (
+                  <div className="game-results__row" key={participant.id}>
+                    <strong>{participant.nickname}</strong>
+                    <span>{readyParticipantIds.has(participant.id) ? '준비 완료' : '대기 중'}</span>
+                  </div>
+                ))}
+              </section>
+            )}
+            <section className="game-results__section">
+              <h3>라운드별 결과</h3>
+              {(currentGame?.completedRounds ?? []).map((round) => (
+                <div className="game-results__round" key={round.roundIndex}>
+                  <strong>{round.roundIndex}라운드</strong>
+                  {rankScores(round.scores, participants).map((entry) => (
+                    <div className="game-results__row" key={entry.participant.id}>
+                      <span>{entry.rank}위</span>
+                      <span>{entry.participant.nickname}</span>
+                      <b>{entry.points}점</b>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              {(currentGame?.completedRounds ?? []).length === 0 && (
+                <p className="study-focus__meta">완료된 라운드가 아직 없어요.</p>
+              )}
+            </section>
+            <section className="game-results__section">
+              <h3>오늘의 플레이 스타일</h3>
+              {participants.map((participant) => {
+                const goal = goalByParticipant.get(participant.id);
+                return (
+                  <div className="game-results__row" key={participant.id}>
+                    <strong>{participant.nickname}</strong>
+                    <span>{goal?.rawText ?? emptyGoalText}</span>
+                  </div>
+                );
+              })}
+            </section>
+            <div className="session-end-modal__actions">
+              <button type="button" className="btn btn--primary" onClick={() => setResultsOpen(false)}>
+                닫기
               </button>
             </div>
           </div>
@@ -767,71 +1120,103 @@ export function StudyRoom({
   );
 }
 
-export function DailyParticipantMedia({
-  fallbackInitial,
-  isCameraOn,
-  isMe,
-  participant
-}: {
-  fallbackInitial: string;
-  isCameraOn: boolean;
-  isMe: boolean;
-  participant?: {
-    tracks?: {
-      audio?: { persistentTrack?: MediaStreamTrack; state?: string; track?: MediaStreamTrack };
-      video?: { persistentTrack?: MediaStreamTrack; state?: string; track?: MediaStreamTrack };
-    };
-  };
-}) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const videoTrack = participant?.tracks?.video?.track ?? participant?.tracks?.video?.persistentTrack;
-  const audioTrack = participant?.tracks?.audio?.track ?? participant?.tracks?.audio?.persistentTrack;
-  const isVideoPlayable = participant?.tracks?.video?.state === 'playable';
-  const shouldShowVideo = Boolean(isVideoPlayable && (isCameraOn || !isMe));
+function rankGameScores(game: GameSession | undefined, participants: Participant[]) {
+  return rankScores(game?.scores ?? [], participants);
+}
 
-  useEffect(() => {
-    if (!videoRef.current || !videoTrack || !shouldShowVideo) {
-      return;
-    }
+function roundWinnerName(game: GameSession, participants: Participant[]) {
+  const completedRounds = game.completedRounds ?? [];
+  const latestRound = completedRounds.at(-1);
+  if (!latestRound) return undefined;
 
-    videoRef.current.srcObject = new MediaStream([videoTrack]);
-    void videoRef.current.play().catch((error) => {
-      console.error('Daily video playback failed:', error);
-    });
-    return () => {
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
-    };
-  }, [shouldShowVideo, videoTrack]);
-
-  useEffect(() => {
-    if (!audioRef.current || !audioTrack || isMe) {
-      return;
-    }
-
-    audioRef.current.srcObject = new MediaStream([audioTrack]);
-    void audioRef.current.play().catch((error) => {
-      console.error('Daily audio playback failed:', error);
-    });
-  }, [audioTrack, isMe]);
-
-  return (
-    <>
-      {shouldShowVideo ? (
-        <video
-          ref={videoRef}
-          className="tile__video"
-          autoPlay
-          muted={isMe}
-          playsInline
-          aria-label={isMe ? '내 웹캠 미리보기' : undefined}
-        />
-      ) : (
-        <div className="tile__avatar">{fallbackInitial}</div>
-      )}
-      {!isMe && <audio ref={audioRef} autoPlay />}
-    </>
+  const previousRound = completedRounds.at(-2);
+  const previousScores = new Map(
+    previousRound?.scores.map((score) => [score.participantId, score.points]) ?? []
   );
+  const roundScores = latestRound.scores.map((score) => ({
+    participantId: score.participantId,
+    points: score.points - (previousScores.get(score.participantId) ?? 0)
+  }));
+  const winner = rankScores(roundScores, participants)[0];
+  return winner && winner.points > 0 ? winner.participant.nickname : undefined;
+}
+
+function rankScores(scores: GameSession['scores'], participants: Participant[]) {
+  const participantOrder = new Map(participants.map((participant, index) => [participant.id, index]));
+  return scores
+    .map((score) => {
+      const participant = participants.find((item) => item.id === score.participantId);
+      return participant ? { participant, points: score.points } : undefined;
+    })
+    .filter((entry): entry is { participant: Participant; points: number } => Boolean(entry))
+    .sort(
+      (left, right) =>
+        right.points - left.points ||
+        (participantOrder.get(left.participant.id) ?? 0) -
+          (participantOrder.get(right.participant.id) ?? 0)
+    )
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+}
+
+function gameKindLabel(kind: GameSession['kind']) {
+  if (kind === 'hidden_mission') return '숨은 표정 미션';
+  if (kind === 'poker_bluff') return '포커페이스 블러프';
+  return '카피캣 릴레이';
+}
+
+function gameWaitingMessage(kind: GameKind) {
+  if (kind === 'hidden_mission') {
+    return '숨은 표정 미션을 시작하면 각자 비밀 미션을 받고 표정 카운트가 열려.';
+  }
+  if (kind === 'poker_bluff') {
+    return '포커페이스 블러프를 시작하면 누가 흔들릴지 예측하고 보이는 신호로 판정해.';
+  }
+  return '카피캣 릴레이를 시작하면 표정과 제스처를 이어받아 얼마나 비슷한지 겨뤄.';
+}
+
+function tellLabel(tell: 'smile' | 'jaw' | 'brow' | null) {
+  if (tell === 'smile') return '미소';
+  if (tell === 'jaw') return '입 벌림';
+  if (tell === 'brow') return '눈썹';
+  return '보이는 표정';
+}
+
+function participantName(participants: Participant[], participantId: string) {
+  return participants.find((participant) => participant.id === participantId)?.nickname ?? '참가자';
+}
+
+function emptyExpressionSignals(): ExpressionSignals {
+  return {
+    timestamp: Date.now(),
+    smile: 0,
+    jawOpen: 0,
+    winkLeft: false,
+    winkRight: false,
+    browRaise: 0,
+    cheekPuff: 0,
+    mouthPucker: 0,
+    headYaw: 0,
+    headPitch: 0,
+    headRoll: 0
+  };
+}
+
+function createDistractionCard(roundId: string, roundIndex: number): DistractionCard {
+  const template = distractionCards[(Math.max(1, roundIndex) - 1) % distractionCards.length]!;
+  return {
+    id: `${roundId}:${template.kind}`,
+    ...template
+  };
+}
+
+function getAudioTracks(stream: MediaStream | null): MediaStreamTrack[] {
+  if (!stream) return [];
+  if (typeof stream.getAudioTracks === 'function') return stream.getAudioTracks();
+  return typeof stream.getTracks === 'function' ? stream.getTracks() : [];
+}
+
+function getVideoTracks(stream: MediaStream | null): MediaStreamTrack[] {
+  if (!stream) return [];
+  if (typeof stream.getVideoTracks === 'function') return stream.getVideoTracks();
+  return typeof stream.getTracks === 'function' ? stream.getTracks() : [];
 }

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { VideoProvider } from '../video/daily-video-provider';
 import { InMemoryRoomStore } from '../adapters/storage/in-memory-room-store';
-import { RoomService } from './room-service';
+import { hiddenMissionTemplates, RoomService } from './room-service';
 
 function createService() {
   return new RoomService(new InMemoryRoomStore());
@@ -319,6 +319,20 @@ describe('RoomService.startBreak', () => {
     );
   });
 
+  it('rejects starting a break in game mode rooms', () => {
+    const service = createService();
+    const created = service.createRoom({
+      nickname: 'host',
+      settings: { activityKind: 'poker_bluff', defaultGameKind: 'poker_bluff' }
+    });
+    const host = created.participants[0];
+    service.startSession(created.room.id, host.id);
+
+    expect(() => service.startBreak(created.room.id, host.id)).toThrow(
+      'Breaks are only available in study mode'
+    );
+  });
+
   it('rejects starting a break with no active study session', () => {
     const service = createService();
     const created = service.createRoom({ nickname: 'host' });
@@ -491,6 +505,206 @@ describe('RoomService.setGoalAchieved', () => {
 
     expect(() => service.setGoalAchieved(created.room.id, host.id, true)).toThrow(
       'Goal not found'
+    );
+  });
+});
+
+describe('RoomService face party games', () => {
+  it('keeps hidden mission templates curated', () => {
+    expect(hiddenMissionTemplates).toHaveLength(14);
+    expect(hiddenMissionTemplates.map((mission) => mission.verify)).not.toContain(
+      'cheek_puff_count'
+    );
+    expect(hiddenMissionTemplates.map((mission) => mission.verify)).not.toContain(
+      'no_jaw_open'
+    );
+    expect(hiddenMissionTemplates.map((mission) => mission.verify)).toEqual(
+      expect.arrayContaining(['jaw_open_count', 'nod_count'])
+    );
+    expect(hiddenMissionTemplates.map((mission) => mission.prompt)).not.toContain(
+      '생각하는 척하며 볼을 3번 부풀리기'
+    );
+  });
+
+  it('starts hidden mission with private missions and server-owned scores', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0]!;
+    const joined = service.joinRoom({ nickname: 'member', inviteCode: created.room.inviteCode });
+    const member = joined.participants.at(-1)!;
+    const assigned: string[] = [];
+    service.onMissionAssigned((_roomId, mission) => assigned.push(mission.playerId));
+
+    const game = service.startGame(created.room.id, host.id, 'hidden_mission');
+
+    expect(game.kind).toBe('hidden_mission');
+    expect(game.status).toBe('in_round');
+    expect(game.missions).toHaveLength(2);
+    expect(game.missions?.map((mission) => mission.playerId).sort()).toEqual(
+      [host.id, member.id].sort()
+    );
+    expect(game.scores).toEqual([
+      { participantId: host.id, points: 0 },
+      { participantId: member.id, points: 0 }
+    ]);
+    expect(assigned.sort()).toEqual([host.id, member.id].sort());
+  });
+
+  it('assigns varied hidden mission prompts in a round', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    service.joinRoom({ nickname: 'member-1', inviteCode: created.room.inviteCode });
+    service.joinRoom({ nickname: 'member-2', inviteCode: created.room.inviteCode });
+    service.joinRoom({ nickname: 'member-3', inviteCode: created.room.inviteCode });
+    const host = created.participants[0]!;
+
+    const game = service.startGame(created.room.id, host.id, 'hidden_mission');
+    const prompts = new Set(game.missions?.map((mission) => mission.prompt));
+
+    expect(game.missions).toHaveLength(4);
+    expect(prompts.size).toBeGreaterThan(1);
+    expect(game.missions?.every((mission) => mission.prompt.length > 0)).toBe(true);
+  });
+
+  it('records mission result and awards points on reveal', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0]!;
+    const game = service.startGame(created.room.id, host.id, 'hidden_mission');
+    const mission = game.missions![0]!;
+
+    service.recordMissionResult(created.room.id, {
+      playerId: host.id,
+      missionId: mission.id,
+      count: mission.target,
+      success: true
+    });
+    const revealed = service.revealGame(created.room.id, host.id, game.id);
+
+    expect(revealed.status).toBe('reveal');
+    expect(revealed.scores.find((score) => score.participantId === host.id)?.points).toBe(10);
+  });
+
+  it('uses room round count and waits between rounds after a mission success', () => {
+    const service = createService();
+    const created = service.createRoom({
+      nickname: 'host',
+      settings: { activityKind: 'hidden_mission', roundCount: 3 }
+    });
+    const host = created.participants[0]!;
+    const game = service.startGame(created.room.id, host.id, 'hidden_mission');
+    const mission = game.missions![0]!;
+
+    const waiting = service.recordMissionResult(created.room.id, {
+      playerId: host.id,
+      missionId: mission.id,
+      count: mission.target,
+      success: true
+    });
+
+    expect(waiting.totalRounds).toBe(3);
+    expect(waiting.status).toBe('between_round');
+    expect(waiting.completedRounds).toHaveLength(1);
+    expect(waiting.scores.find((score) => score.participantId === host.id)?.points).toBe(10);
+    expect(waiting.nextRoundStartsAt).toBeTruthy();
+  });
+
+  it('starts the next round when all active participants are ready', () => {
+    const service = createService();
+    const created = service.createRoom({
+      nickname: 'host',
+      settings: { activityKind: 'hidden_mission', roundCount: 2 }
+    });
+    const host = created.participants[0]!;
+    const joined = service.joinRoom({ nickname: 'member', inviteCode: created.room.inviteCode });
+    const member = joined.participants.at(-1)!;
+    const game = service.startGame(created.room.id, host.id, 'hidden_mission');
+    const mission = game.missions!.find((item) => item.playerId === host.id)!;
+    const waiting = service.recordMissionResult(created.room.id, {
+      playerId: host.id,
+      missionId: mission.id,
+      count: mission.target,
+      success: true
+    });
+
+    service.markNextRoundReady(created.room.id, host.id, waiting.id);
+    const nextRound = service.markNextRoundReady(created.room.id, member.id, waiting.id);
+
+    expect(nextRound.status).toBe('in_round');
+    expect(nextRound.round.index).toBe(2);
+    expect(nextRound.missionResults).toEqual([]);
+    expect(nextRound.nextRoundReadyParticipantIds).toEqual([]);
+    const nextMission = nextRound.missions!.find((item) => item.playerId === host.id)!;
+    expect(nextMission.id).not.toBe(mission.id);
+    expect(nextMission.prompt).not.toBe(mission.prompt);
+  });
+
+  it('awards partial hidden mission points by progress ratio', () => {
+    const service = createService();
+    const created = service.createRoom({
+      nickname: 'host',
+      settings: { activityKind: 'hidden_mission', roundCount: 2 }
+    });
+    const host = created.participants[0]!;
+    const game = service.startGame(created.room.id, host.id, 'hidden_mission');
+    const mission = game.missions!.find((item) => item.playerId === host.id)!;
+    const progressCount = Math.max(1, Math.floor(mission.target / 2));
+
+    service.recordMissionResult(created.room.id, {
+      playerId: host.id,
+      missionId: mission.id,
+      count: progressCount,
+      success: false
+    });
+    const revealed = service.revealGame(created.room.id, host.id, game.id);
+    const expectedPoints = Math.round((progressCount / mission.target) * 10);
+
+    expect(revealed.scores.find((score) => score.participantId === host.id)?.points).toBe(
+      expectedPoints
+    );
+  });
+
+  it('replaces a hidden mission when a player returns from the waiting room', () => {
+    const service = createService();
+    const created = service.createRoom({
+      nickname: 'host',
+      settings: { activityKind: 'hidden_mission' }
+    });
+    const host = created.participants[0]!;
+    const game = service.startGame(created.room.id, host.id, 'hidden_mission');
+    const previousMission = game.missions!.find((mission) => mission.playerId === host.id)!;
+
+    service.updateParticipantStatus(created.room.id, host.id, 'online');
+    const snapshot = service.updateParticipantStatus(created.room.id, host.id, 'focused');
+    const replacement = snapshot.currentGame?.missions?.find(
+      (mission) => mission.playerId === host.id
+    );
+
+    expect(replacement?.id).not.toBe(previousMission.id);
+    expect(replacement?.prompt).not.toBe(previousMission.prompt);
+  });
+
+  it('rejects non-host game start', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const joined = service.joinRoom({ nickname: 'member', inviteCode: created.room.inviteCode });
+    const member = joined.participants.at(-1)!;
+
+    expect(() => service.startGame(created.room.id, member.id, 'hidden_mission')).toThrow(
+      'Only the host can start the game'
+    );
+  });
+
+  it('rejects non-host game reveal', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const joined = service.joinRoom({ nickname: 'member', inviteCode: created.room.inviteCode });
+    const host = created.participants[0]!;
+    const member = joined.participants.at(-1)!;
+    const game = service.startGame(created.room.id, host.id, 'hidden_mission');
+
+    expect(() => service.revealGame(created.room.id, member.id, game.id)).toThrow(
+      'Only the host can reveal the game'
     );
   });
 });

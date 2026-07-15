@@ -2,7 +2,10 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import {
   realtimeEvents,
-  type FocusRankingBroadcast,
+  type ChatMessage,
+  type GameSession,
+  type HiddenMission,
+  type MissionResult,
   type RoomiMessage,
   type RoomSnapshot
 } from '@roomi/shared';
@@ -41,17 +44,26 @@ describe('realtime gateway', () => {
     return new Promise((resolve) => client.once(event, resolve));
   }
 
-  function onceFocusRanking(client: Socket): Promise<FocusRankingBroadcast> {
-    return new Promise((resolve) =>
-      client.once(realtimeEvents.server.focusRankingUpdated, resolve)
-    );
+  function collectRoomiMessages(client: Socket, count: number): Promise<RoomiMessage[]> {
+    const messages: RoomiMessage[] = [];
+    return new Promise((resolve) => {
+      const handler = (message: RoomiMessage) => {
+        messages.push(message);
+        if (messages.length >= count) {
+          client.off(realtimeEvents.server.roomiMessage, handler);
+          resolve(messages);
+        }
+      };
+      client.on(realtimeEvents.server.roomiMessage, handler);
+    });
   }
 
   beforeEach(async () => {
     roomService = new RoomService(new InMemoryRoomStore());
     httpServer = createServer();
     registerRealtimeGateway(httpServer, roomService, new RoomiOrchestrator(), {
-      focusRecoveryDelayMs: 0
+      focusRecoveryDelayMs: 0,
+      distractedRecoveryDelayMs: 20
     });
     await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
     port = (httpServer.address() as AddressInfo).port;
@@ -190,129 +202,183 @@ describe('realtime gateway', () => {
     expect(memberSnapshot.roomiMessages).toHaveLength(1);
   });
 
-  it('broadcasts a live focus ranking update to everyone in the room when a status changes', async () => {
+  it('privately checks in with a participant who stays distracted', async () => {
     const created = roomService.createRoom({ nickname: 'host' });
     const started = roomService.startSession(created.room.id, created.participants[0].id);
     const joined = roomService.joinRoom({ nickname: 'member', inviteCode: started.room.inviteCode });
     const member = joined.participants.at(-1)!;
-    const [hostClient, memberClient] = await Promise.all([connectClient(), connectClient()]);
-    await Promise.all([
-      subscribe(hostClient, started.room.id, created.participants[0].id),
-      subscribe(memberClient, started.room.id, member.id)
-    ]);
+    const memberClient = await connectClient();
+    await subscribe(memberClient, started.room.id, member.id);
 
-    const hostRanking = onceFocusRanking(hostClient);
-    const memberRanking = onceFocusRanking(memberClient);
+    const message = new Promise<RoomiMessage>((resolve) =>
+      memberClient.once(realtimeEvents.server.roomiMessage, resolve)
+    );
 
+    memberClient.emit(realtimeEvents.client.updateStatus, {
+      roomId: started.room.id,
+      participantId: member.id,
+      status: 'distracted'
+    });
+
+    const received = await message;
+
+    expect(received.kind).toBe('focus_recovery');
+    expect(received.targetParticipantId).toBe(member.id);
+    // A distraction reading is a guess, so the nudge has to ask rather than tell.
+    expect(received.text).toContain('?');
+  });
+
+  it('stays quiet when a distracted participant recovers before the delay elapses', async () => {
+    const created = roomService.createRoom({ nickname: 'host' });
+    const started = roomService.startSession(created.room.id, created.participants[0].id);
+    const joined = roomService.joinRoom({ nickname: 'member', inviteCode: started.room.inviteCode });
+    const member = joined.participants.at(-1)!;
+    const memberClient = await connectClient();
+    await subscribe(memberClient, started.room.id, member.id);
+
+    let received = false;
+    memberClient.on(realtimeEvents.server.roomiMessage, () => {
+      received = true;
+    });
+
+    memberClient.emit(realtimeEvents.client.updateStatus, {
+      roomId: started.room.id,
+      participantId: member.id,
+      status: 'distracted'
+    });
     memberClient.emit(realtimeEvents.client.updateStatus, {
       roomId: started.room.id,
       participantId: member.id,
       status: 'focused'
     });
 
-    const [hostPayload, memberPayload] = await Promise.all([hostRanking, memberRanking]);
+    await new Promise((resolve) => setTimeout(resolve, 80));
 
-    expect(hostPayload.roomId).toBe(started.room.id);
-    expect(hostPayload.ranking.map((entry) => entry.participantId)).toContain(member.id);
-    expect(memberPayload).toEqual(hostPayload);
+    expect(received).toBe(false);
   });
 
-  it('does not broadcast a focus ranking update before the session has started', async () => {
+  it('runs a hidden mission game from start to result reveal over sockets', async () => {
     const created = roomService.createRoom({ nickname: 'host' });
-    const hostId = created.participants[0].id;
-    const client = await connectClient();
-    await subscribe(client, created.room.id, hostId);
+    const joined = roomService.joinRoom({ nickname: 'member', inviteCode: created.room.inviteCode });
+    const host = created.participants[0]!;
+    const member = joined.participants.at(-1)!;
+    const [hostClient, memberClient] = await Promise.all([connectClient(), connectClient()]);
+    await Promise.all([
+      subscribe(hostClient, created.room.id, host.id),
+      subscribe(memberClient, created.room.id, member.id)
+    ]);
 
-    let receivedRanking = false;
-    client.once(realtimeEvents.server.focusRankingUpdated, () => {
-      receivedRanking = true;
-    });
-
-    const update = once(client, realtimeEvents.server.roomUpdated);
-    client.emit(realtimeEvents.client.updateStatus, {
-      roomId: created.room.id,
-      participantId: hostId,
-      status: 'online'
-    });
-    await update;
-    await new Promise((resolve) => setTimeout(resolve, 20));
-
-    expect(receivedRanking).toBe(false);
-  });
-});
-
-describe('realtime gateway focus ranking heartbeat', () => {
-  let httpServer: HttpServer;
-  let roomService: RoomService;
-  let port: number;
-  const clients: Socket[] = [];
-
-  function connectClient(): Promise<Socket> {
-    const client = createClient(`http://localhost:${port}`, {
-      transports: ['websocket']
-    });
-    clients.push(client);
-    return new Promise((resolve) => client.on('connect', () => resolve(client)));
-  }
-
-  function subscribe(
-    client: Socket,
-    roomId: string,
-    participantId: string
-  ): Promise<RoomSnapshot | undefined> {
-    return new Promise((resolve) => {
-      client.emit(realtimeEvents.client.subscribeRoom, { roomId, participantId }, resolve);
-    });
-  }
-
-  function onceFocusRanking(client: Socket): Promise<FocusRankingBroadcast> {
-    return new Promise((resolve) =>
-      client.once(realtimeEvents.server.focusRankingUpdated, resolve)
+    const hostMission = new Promise<HiddenMission>((resolve) =>
+      hostClient.once(realtimeEvents.server.missionAssign, resolve)
     );
-  }
+    const memberMission = new Promise<HiddenMission>((resolve) =>
+      memberClient.once(realtimeEvents.server.missionAssign, resolve)
+    );
+    const roundBegin = new Promise<GameSession>((resolve) =>
+      memberClient.once(realtimeEvents.server.gameRoundBegin, resolve)
+    );
+    const roomiMessages = collectRoomiMessages(memberClient, 3);
 
-  beforeEach(async () => {
-    roomService = new RoomService(new InMemoryRoomStore());
-    httpServer = createServer();
-    registerRealtimeGateway(httpServer, roomService, new RoomiOrchestrator(), {
-      focusRecoveryDelayMs: 0,
-      focusRankingHeartbeatMs: 20
+    hostClient.emit(realtimeEvents.client.startGame, {
+      roomId: created.room.id,
+      participantId: host.id,
+      kind: 'hidden_mission'
     });
-    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
-    port = (httpServer.address() as AddressInfo).port;
-  });
 
-  afterEach(async () => {
-    clients.forEach((client) => client.disconnect());
-    clients.length = 0;
-    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
-  });
+    const [game, privateHostMission, privateMemberMission] = await Promise.all([
+      roundBegin,
+      hostMission,
+      memberMission
+    ]);
+    expect(game.kind).toBe('hidden_mission');
+    expect(privateHostMission.playerId).toBe(host.id);
+    expect(privateMemberMission.playerId).toBe(member.id);
 
-  it('keeps broadcasting ranking updates on a heartbeat even with no status change', async () => {
-    const created = roomService.createRoom({ nickname: 'host' });
-    const started = roomService.startSession(created.room.id, created.participants[0].id);
-    const client = await connectClient();
-    await subscribe(client, started.room.id, created.participants[0].id);
-
-    const payload = await onceFocusRanking(client);
-    expect(payload.roomId).toBe(started.room.id);
-  });
-
-  it('stops the heartbeat once the session ends', async () => {
-    const created = roomService.createRoom({ nickname: 'host' });
-    const started = roomService.startSession(created.room.id, created.participants[0].id);
-    const client = await connectClient();
-    await subscribe(client, started.room.id, created.participants[0].id);
-    await onceFocusRanking(client);
-
-    roomService.endSession(started.room.id, created.participants[0].id);
-
-    let receivedAfterEnd = false;
-    client.once(realtimeEvents.server.focusRankingUpdated, () => {
-      receivedAfterEnd = true;
+    const nearSuccessResult: MissionResult = {
+      playerId: host.id,
+      missionId: privateHostMission.id,
+      count: privateHostMission.target - 1,
+      success: false
+    };
+    const nearSuccessBroadcast = new Promise<MissionResult>((resolve) =>
+      memberClient.once(realtimeEvents.server.missionResult, resolve)
+    );
+    hostClient.emit(realtimeEvents.client.reportExpression, {
+      roomId: created.room.id,
+      participantId: host.id,
+      gameId: game.id,
+      roundId: game.round.id,
+      missionResult: nearSuccessResult
     });
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    await expect(nearSuccessBroadcast).resolves.toEqual(nearSuccessResult);
 
-    expect(receivedAfterEnd).toBe(false);
+    const missionResult: MissionResult = {
+      playerId: host.id,
+      missionId: privateHostMission.id,
+      count: privateHostMission.target,
+      success: true
+    };
+    const resultBroadcast = new Promise<MissionResult>((resolve) =>
+      memberClient.once(realtimeEvents.server.missionResult, resolve)
+    );
+    hostClient.emit(realtimeEvents.client.reportExpression, {
+      roomId: created.room.id,
+      participantId: host.id,
+      gameId: game.id,
+      roundId: game.round.id,
+      missionResult
+    });
+    await expect(resultBroadcast).resolves.toEqual(missionResult);
+
+    const reveal = new Promise<GameSession>((resolve) =>
+      memberClient.once(realtimeEvents.server.gameReveal, resolve)
+    );
+    hostClient.emit(realtimeEvents.client.revealGame, {
+      roomId: created.room.id,
+      participantId: host.id,
+      gameId: game.id
+    });
+
+    const revealed = await reveal;
+    expect(revealed.status).toBe('reveal');
+    expect(revealed.scores.find((score) => score.participantId === host.id)?.points).toBe(10);
+    await expect(roomiMessages).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'game_intro' }),
+        expect.objectContaining({
+          kind: 'round_prompt',
+          text: '누군가 거의 미션을 끝낸 것 같은데...?'
+        }),
+        expect.objectContaining({ kind: 'game_reveal' })
+      ])
+    );
+  });
+
+  it('broadcasts room chat and lets Roomi react with bounded chat context', async () => {
+    const created = roomService.createRoom({ nickname: 'host' });
+    const host = created.participants[0]!;
+    const hostClient = await connectClient();
+    await subscribe(hostClient, created.room.id, host.id);
+    const game = roomService.startGame(created.room.id, host.id, 'hidden_mission');
+
+    const chatBroadcast = new Promise<ChatMessage>((resolve) =>
+      hostClient.once(realtimeEvents.server.chatMessage, resolve)
+    );
+    const roomiMessage = new Promise<RoomiMessage>((resolve) =>
+      hostClient.once(realtimeEvents.server.roomiMessage, resolve)
+    );
+
+    hostClient.emit(realtimeEvents.client.sendChatMessage, {
+      roomId: created.room.id,
+      participantId: host.id,
+      text: '요즘 제일 애매하게 웃겼던 일 있어?'
+    });
+
+    const chat = await chatBroadcast;
+    expect(chat.nickname).toBe('host');
+    expect(chat.text).toBe('요즘 제일 애매하게 웃겼던 일 있어?');
+    await expect(roomiMessage).resolves.toEqual(
+      expect.objectContaining({ roomId: game.roomId, kind: 'round_prompt' })
+    );
   });
 });

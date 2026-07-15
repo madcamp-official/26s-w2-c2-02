@@ -21,6 +21,11 @@ import {
   type LandmarkPoint,
   type RuleSettings
 } from './focus-pipeline';
+import {
+  expressionSignalsFromBlendshapes,
+  type BlendshapeCategory
+} from './expression-pipeline';
+import type { ExpressionSignals } from '@roomi/shared';
 
 /**
  * Drives the MediaPipe face landmarker over a caller-supplied video track and
@@ -108,6 +113,7 @@ export function useFocusDetection({
   const [mlPrediction, setMlPrediction] = useState<MlPredictionSnapshot | null>(null);
   const [mlStatus, setMlStatus] = useState<MlPredictionStatus>('idle');
   const [mlError, setMlError] = useState<string | null>(null);
+  const [expressionSignals, setExpressionSignals] = useState<ExpressionSignals | null>(null);
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -198,6 +204,12 @@ export function useFocusDetection({
     const now = performance.now();
     const result = landmarker.detectForVideo(video, now);
     const landmarks = result.faceLandmarks as LandmarkPoint[][];
+    const blendshapeCategories = result.faceBlendshapes?.[0]?.categories as
+      | BlendshapeCategory[]
+      | undefined;
+    const matrix = result.facialTransformationMatrixes?.[0]?.data as
+      | readonly number[]
+      | undefined;
     const lastFrameAt = lastFrameAtRef.current;
     const fps = lastFrameAt ? Math.round(1000 / Math.max(1, now - lastFrameAt)) : 0;
     lastFrameAtRef.current = now;
@@ -209,7 +221,8 @@ export function useFocusDetection({
       landmarks[0],
       currentSettings,
       now,
-      previousNoseRef.current
+      previousNoseRef.current,
+      matrix
     );
     previousNoseRef.current = landmarks[0]?.[1] ?? previousNoseRef.current;
     signalWindowRef.current = updateSignalWindow(
@@ -226,6 +239,9 @@ export function useFocusDetection({
     });
     const ruleSnapshot = classifyFocus(signalWindowRef.current, currentSettings);
     setFocusSnapshot(ruleSnapshot);
+    setExpressionSignals(
+      expressionSignalsFromBlendshapes(blendshapeCategories, matrix, Date.now())
+    );
     void maybePredictWithMl(signalWindowRef.current, ruleSnapshot, now);
 
     frameRef.current = requestAnimationFrame(detectFrame);
@@ -302,6 +318,7 @@ export function useFocusDetection({
       setMlPrediction(null);
       setMlStatus('idle');
       setMlError(null);
+      setExpressionSignals(null);
     };
   }, [detectFrame, enabled, track]);
 
@@ -321,7 +338,8 @@ export function useFocusDetection({
     detectionSnapshot,
     mlPrediction,
     mlStatus,
-    mlError
+    mlError,
+    expressionSignals
   };
 }
 
