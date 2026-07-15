@@ -83,6 +83,8 @@ export type RoomiMessage = {
 export type FocusRankingEntry = {
   participantId: string;
   focusMinutes: number;
+  nickname: string;
+  left: boolean;
 };
 
 export type SessionSummary = {

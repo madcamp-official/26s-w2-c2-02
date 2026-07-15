@@ -18,6 +18,7 @@
 | `POST` | `/sessions/break/start` | Host pauses a room-wide break (`roomId`, `participantId`). Only valid when `room.settings.breakMode === 'room'` and a study session is active. Sets `room.status = 'break'`, `currentSession.mode = 'break'`, `currentSession.breakEndsAt` (now + `breakMinutes`), and every participant's status to `break`. `403` for non-host, `409` if the mode is individual or no study session is active. Individual-mode breaks skip this endpoint entirely and use `participant:update-status` with `status: 'break'` instead, so only the acting participant's status changes. |
 | `POST` | `/sessions/break/end` | Host ends a room-wide break (`roomId`, `participantId`). Sets `room.status = 'studying'`, `currentSession.mode = 'study'`, clears `breakEndsAt`, resets every participant to `focused`, and broadcasts a `break_return` Roomi message. `403` for non-host, `409` if no break is active. |
 | `POST` | `/sessions/break/extend` | Host pushes `currentSession.breakEndsAt` out by `minutes` (default `5`) (`roomId`, `participantId`, `minutes?`). `403` for non-host, `409` if no break is active. |
+| `POST` | `/sessions/end` | Host ends the active session (`roomId`, `participantId`). Sets `room.status = 'ended'`, settles every tracked participant's accumulated focus time, and attaches a `SessionSummary` (with the focus ranking below and a Roomi-generated retrospective) to `currentSession.summary`. Broadcasts a `summary` Roomi message. `403` for non-host, `409` if no session is active, `404` for unknown room. |
 | `GET` | `/rooms/:inviteCode` | Read a room snapshot by invite code. |
 
 Invite codes are 6-character uppercase alphanumeric strings. Roomi excludes ambiguous characters (`0`, `O`, `1`, `I`, `L`) and normalizes user input before lookup.
@@ -38,6 +39,25 @@ Invite codes are 6-character uppercase alphanumeric strings. Roomi excludes ambi
 
 The renderer uses `currentParticipantId` to mark the local participant, drive camera/mic controls, and decide whether host-only actions should be visible.
 When Daily credentials are configured, `videoJoin` contains a Daily room URL and participant meeting token. The API creates one private Daily room per Roomi room and issues a token per participant with the Roomi participant id as Daily `user_id`. If Daily room or token creation fails, the REST request returns `503` and rolls back the participant instead of returning a local-only video session.
+
+`POST /sessions/end` attaches a `SessionSummary` to `currentSession.summary`:
+
+```ts
+{
+  focusMinutes: number;
+  goalCompletionRate: number;
+  goalFeedback?: string;
+  lumiComment?: string;
+  ranking?: Array<{
+    participantId: string;
+    focusMinutes: number;
+    nickname: string;
+    left: boolean;
+  }>;
+}
+```
+
+`ranking` is derived from MediaPipe-driven focus detection: the renderer reports focus-label changes through `participant:update-status`, and the API accrues wall-clock time while a participant's status is `focused`, sorted from most to least focused. A participant who leaves mid-session keeps their entry (`left: true`) with focus time frozen at the moment they left, instead of disappearing from the ranking or continuing to accrue after they're gone.
 
 ## Renderer session behavior
 

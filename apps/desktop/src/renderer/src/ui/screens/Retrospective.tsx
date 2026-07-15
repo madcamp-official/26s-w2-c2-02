@@ -101,8 +101,9 @@ export function Retrospective({
                     >
                       <span className="retro-ranking__rank">{index + 1}</span>
                       <span className="retro-ranking__who">
-                        {participant?.nickname ?? '알 수 없음'}
+                        {participant?.nickname ?? entry.nickname}
                         {isSelf && ' (나)'}
+                        {entry.left && ' (나감)'}
                       </span>
                       <span className="retro-ranking__minutes">{entry.focusMinutes}분</span>
                     </li>

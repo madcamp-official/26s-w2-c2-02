@@ -522,9 +522,38 @@ describe('RoomService focus ranking', () => {
     service.endSession(created.room.id, host.id);
 
     expect(service.getFocusRanking(created.room.id)).toEqual([
-      { participantId: member.id, focusMinutes: 10 },
-      { participantId: host.id, focusMinutes: 8 }
+      { participantId: member.id, focusMinutes: 10, nickname: 'member', left: false },
+      { participantId: host.id, focusMinutes: 8, nickname: 'host', left: false }
     ]);
+  });
+
+  it('freezes focus time at the moment a participant leaves and keeps them ranked', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-13T00:00:00.000Z'));
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    const joined = service.joinRoom({ nickname: 'member', inviteCode: created.room.inviteCode });
+    const member = joined.participants.at(-1)!;
+
+    service.startSession(created.room.id, host.id);
+    service.updateParticipantStatus(created.room.id, member.id, 'focused');
+
+    vi.setSystemTime(new Date('2026-07-13T00:05:00.000Z'));
+    service.leaveRoom(created.room.id, member.id);
+
+    // Time that passes after leaving must not count toward focus, even though
+    // the tracker entry is kept around for the final ranking.
+    vi.setSystemTime(new Date('2026-07-13T00:15:00.000Z'));
+    service.endSession(created.room.id, host.id);
+
+    const ranking = service.getFocusRanking(created.room.id);
+    expect(ranking.find((entry) => entry.participantId === member.id)).toEqual({
+      participantId: member.id,
+      focusMinutes: 5,
+      nickname: 'member',
+      left: true
+    });
   });
 
   it('lazily tracks a participant who joins and goes focused mid-session', () => {

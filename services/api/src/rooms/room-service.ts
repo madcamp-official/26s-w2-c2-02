@@ -32,6 +32,8 @@ type FocusTrackerEntry = {
   focusedSeconds: number;
   lastStatusChangeAt: number;
   status: ParticipantStatus;
+  nickname: string;
+  left: boolean;
 };
 
 export class RoomService {
@@ -161,7 +163,10 @@ export class RoomService {
       throw new Error('Room not found');
     }
 
-    this.touchFocusTracker(roomId, participantId, status, Date.now());
+    const nickname =
+      snapshot.participants.find((participant) => participant.id === participantId)?.nickname ??
+      'Unknown';
+    this.touchFocusTracker(roomId, participantId, status, Date.now(), nickname);
 
     snapshot.participants = snapshot.participants.map((participant) =>
       participant.id === participantId
@@ -273,7 +278,9 @@ export class RoomService {
       tracker.set(participant.id, {
         focusedSeconds: 0,
         lastStatusChangeAt: nowMs,
-        status: participant.status
+        status: participant.status,
+        nickname: participant.nickname,
+        left: false
       });
     });
 
@@ -451,7 +458,9 @@ export class RoomService {
     return Array.from(tracker.entries())
       .map(([participantId, entry]) => ({
         participantId,
-        focusMinutes: Math.round(entry.focusedSeconds / 60)
+        focusMinutes: Math.round(entry.focusedSeconds / 60),
+        nickname: entry.nickname,
+        left: entry.left
       }))
       .sort((left, right) => right.focusMinutes - left.focusMinutes);
   }
@@ -500,6 +509,8 @@ export class RoomService {
     const leavingParticipant = snapshot.participants.find(
       (participant) => participant.id === participantId
     );
+
+    this.freezeFocusTracker(roomId, participantId);
 
     snapshot.participants = snapshot.participants.filter(
       (participant) => participant.id !== participantId
@@ -631,7 +642,8 @@ export class RoomService {
     roomId: string,
     participantId: string,
     status: ParticipantStatus,
-    nowMs: number
+    nowMs: number,
+    nickname: string
   ): void {
     let tracker = this.focusTrackers.get(roomId);
 
@@ -645,7 +657,19 @@ export class RoomService {
     if (!entry) {
       // Lazy init covers a participant who joins mid-session, or the first status
       // change of any kind for a room with no tracker yet.
-      tracker.set(participantId, { focusedSeconds: 0, lastStatusChangeAt: nowMs, status });
+      tracker.set(participantId, {
+        focusedSeconds: 0,
+        lastStatusChangeAt: nowMs,
+        status,
+        nickname,
+        left: false
+      });
+      return;
+    }
+
+    // A stray update after the participant already left (e.g. a late in-flight
+    // request) must not resurrect their tracker or steal more focus time.
+    if (entry.left) {
       return;
     }
 
@@ -653,7 +677,24 @@ export class RoomService {
     entry.status = status;
   }
 
+  // Settles focus time up to the moment a participant leaves, then locks the
+  // entry so endSession's blanket accrual pass can't count post-leave time.
+  private freezeFocusTracker(roomId: string, participantId: string): void {
+    const entry = this.focusTrackers.get(roomId)?.get(participantId);
+
+    if (!entry || entry.left) {
+      return;
+    }
+
+    this.accrueFocusedSeconds(entry, Date.now());
+    entry.left = true;
+  }
+
   private accrueFocusedSeconds(entry: FocusTrackerEntry, nowMs: number): void {
+    if (entry.left) {
+      return;
+    }
+
     if (entry.status === 'focused') {
       entry.focusedSeconds += Math.max(0, (nowMs - entry.lastStatusChangeAt) / 1000);
     }
