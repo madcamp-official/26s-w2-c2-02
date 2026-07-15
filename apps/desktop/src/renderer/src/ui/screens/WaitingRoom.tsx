@@ -6,7 +6,8 @@ import {
   type Goal,
   type GoalRefinement,
   type Participant,
-  type Room
+  type Room,
+  type RoomActivityKind
 } from '@roomi/shared';
 import type { ScreenProps } from './types';
 
@@ -29,6 +30,11 @@ const gameLabel: Record<GameKind, string> = {
   copycat_relay: '카피캣 릴레이'
 };
 
+const activityLabel: Record<RoomActivityKind, string> = {
+  study: '공부하기',
+  ...gameLabel
+};
+
 /** Waiting Room · 대기실 (Figma 70:41). Renders two modes by room.status. */
 export function WaitingRoom({
   room,
@@ -43,6 +49,7 @@ export function WaitingRoom({
   onLeaveRoom
 }: WaitingRoomProps) {
   const inProgress = room.status === 'studying' || room.status === 'break';
+  const isStudyMode = room.settings.activityKind === 'study';
   const readyCount = participants.filter((participant) => participant.isReady).length;
   const myGoal = goals.find((goal) => goal.participantId === currentParticipantId);
   const hasGoal = Boolean(myGoal?.rawText.trim());
@@ -123,7 +130,7 @@ export function WaitingRoom({
         id: participant.id,
         name: participant.nickname,
         sub: participant.role === 'host' ? '방장' : '',
-        status: isStudying ? '공부 중' : participant.isReady ? '준비완료' : '준비 중',
+        status: isStudying ? (isStudyMode ? '공부 중' : '참여 중') : participant.isReady ? '준비완료' : '준비 중',
         tone: isStudying || participant.isReady ? 'green' : 'muted',
         initial: participant.nickname.slice(0, 1)
       };
@@ -152,7 +159,11 @@ export function WaitingRoom({
               <div>
                 {inProgress && <span className="badge badge--blue">진행 중</span>}
                 <h1 className="waiting__title">
-                  {inProgress ? '이미 공부 중이에요' : '다 같이 목표를 정해볼까요?'}
+                  {inProgress
+                    ? isStudyMode
+                      ? '이미 공부 중이에요'
+                      : '이미 게임이 진행 중이에요'
+                    : '다 같이 목표를 정해볼까요?'}
                 </h1>
               </div>
             </div>
@@ -160,7 +171,9 @@ export function WaitingRoom({
           </div>
           <p className="waiting__subtitle">
             {inProgress
-              ? '목표만 정하면 진행 중인 세션에 바로 합류할 수 있어요.'
+              ? isStudyMode
+                ? '목표만 정하면 진행 중인 세션에 바로 합류할 수 있어요.'
+                : '목표만 정하면 진행 중인 게임방에 바로 합류할 수 있어요.'
               : '각자 목표를 적으면 루미가 세션 안에 끝낼 수 있는 크기로 다듬어줘요.'}
           </p>
           {sessionActionError && (
@@ -222,9 +235,9 @@ export function WaitingRoom({
           </p>
 
           <div className="waiting-game">
-            <span className="waiting-game__label">선택한 게임</span>
-            <strong>{gameLabel[room.settings.defaultGameKind]}</strong>
-            <span>{room.settings.sessionMinutes}분 라운드</span>
+            <span className="waiting-game__label">선택한 방식</span>
+            <strong>{activityLabel[room.settings.activityKind]}</strong>
+            <span>{room.settings.sessionMinutes}분 {isStudyMode ? '집중' : '라운드'}</span>
           </div>
 
           <div className="people">

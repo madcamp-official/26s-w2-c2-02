@@ -305,6 +305,10 @@ export class RoomService {
       throw new Error('Only the host can start a break');
     }
 
+    if (snapshot.room.settings.activityKind !== 'study') {
+      throw new Error('Breaks are only available in study mode');
+    }
+
     if (snapshot.room.settings.breakMode !== 'room') {
       throw new Error('Break mode is not room-wide');
     }

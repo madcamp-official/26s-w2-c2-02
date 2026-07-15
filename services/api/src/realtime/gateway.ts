@@ -304,7 +304,7 @@ export function registerRealtimeGateway(
       event: result.success ? 'mission_success' : 'mission_fail',
       actorNickname: actor?.nickname,
       points: result.success ? 10 : undefined,
-      visibleSignals: [`mission count ${result.count}`],
+      visibleSignals: [`미션 집계 ${result.count}회`],
       tone: 'playful'
     });
     roomService.addRoomiMessage({ roomId, kind: 'round_prompt', text });
@@ -335,7 +335,7 @@ export function registerRealtimeGateway(
       event: result.cracked ? 'bluff_cracked' : 'bluff_held',
       actorNickname: target?.nickname,
       points: result.cracked ? undefined : 8,
-      visibleSignals: result.tell ? [result.tell] : ['steady timing'],
+      visibleSignals: result.tell ? [visibleTellLabel(result.tell)] : ['흔들림 없는 타이밍'],
       tone: 'playful'
     });
     roomService.addRoomiMessage({ roomId, kind: 'tell_hint', text });
@@ -356,7 +356,7 @@ export function registerRealtimeGateway(
       actorNickname: actor?.nickname,
       targetNickname: target?.nickname,
       points: Math.round(Math.max(0, Math.min(1, similarity)) * 10),
-      visibleSignals: [`${Math.round(Math.max(0, Math.min(1, similarity)) * 100)}% similarity`],
+      visibleSignals: [`유사도 ${Math.round(Math.max(0, Math.min(1, similarity)) * 100)}%`],
       tone: 'playful'
     });
     roomService.addRoomiMessage({ roomId, kind: 'round_prompt', text });
@@ -395,14 +395,21 @@ function toFacePartyGameKind(kind: GameSession['kind']): FacePartyGameKind {
 
 function visibleSignalsForGame(game: GameSession): string[] {
   if (game.kind === 'hidden_mission') {
-    return (game.missionResults ?? []).map((result) => `mission count ${result.count}`);
+    return (game.missionResults ?? []).map((result) => `미션 집계 ${result.count}회`);
   }
   if (game.kind === 'poker_bluff') {
-    return game.bluffResult?.tell ? [game.bluffResult.tell] : [];
+    return game.bluffResult?.tell ? [visibleTellLabel(game.bluffResult.tell)] : [];
   }
   return (game.relayLinks ?? []).map(
-    (link) => `${Math.round(link.similarity * 100)}% similarity`
+    (link) => `유사도 ${Math.round(link.similarity * 100)}%`
   );
+}
+
+function visibleTellLabel(tell: NonNullable<GameSession['bluffResult']>['tell']): string {
+  if (tell === 'smile') return '미소';
+  if (tell === 'jaw') return '입 벌림';
+  if (tell === 'brow') return '눈썹 움직임';
+  return '보이는 표정 신호';
 }
 
 function logGameMessageFailure(error: unknown) {

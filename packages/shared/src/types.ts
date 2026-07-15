@@ -4,6 +4,8 @@ export type RoomStatus = 'waiting' | 'studying' | 'break' | 'ended';
 
 export type GameKind = 'hidden_mission' | 'poker_bluff' | 'copycat_relay';
 
+export type RoomActivityKind = 'study' | GameKind;
+
 export type GameStatus = 'lobby' | 'in_round' | 'guessing' | 'reveal' | 'ended';
 
 export type ParticipantStatus =
@@ -21,6 +23,7 @@ export type User = {
 };
 
 export type RoomSettings = {
+  activityKind: RoomActivityKind;
   defaultGameKind: GameKind;
   sessionMinutes: number;
   breakMode: 'room' | 'individual';

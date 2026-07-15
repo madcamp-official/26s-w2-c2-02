@@ -358,6 +358,7 @@ describe('App screen router', () => {
 
 function defaultTestRoomSettings() {
   return {
+    activityKind: 'study',
     authMode: 'nickname_code',
     breakMode: 'room',
     breakMinutes: 10,

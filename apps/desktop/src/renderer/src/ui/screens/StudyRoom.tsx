@@ -71,12 +71,21 @@ interface StudyRoomProps extends ScreenProps {
 }
 
 const statusLabel: Record<ParticipantStatus, string> = {
-  online: 'Lobby',
-  focused: 'Playing',
-  distracted: 'Reacting',
-  away: 'Away',
-  break: 'Break',
-  paused: 'Paused'
+  online: '대기',
+  focused: '참여 중',
+  distracted: '반응 중',
+  away: '자리 비움',
+  break: '휴식',
+  paused: '일시정지'
+};
+
+const dailyStatusLabel: Record<string, string> = {
+  idle: '대기',
+  joining: '입장 중',
+  joined: '연결됨',
+  left: '연결 종료',
+  error: '오류',
+  local: '로컬'
 };
 
 export function participantsInStudyRoom(participants: Participant[]) {
@@ -328,6 +337,7 @@ export function StudyRoom({
   const myBluffBet = currentGame?.bluffBets?.find(
     (bet) => bet.participantId === currentParticipantId
   );
+  const isStudyMode = room.settings.activityKind === 'study';
   const tileCols = Math.min(2, Math.max(1, Math.ceil(Math.sqrt(displayParticipants.length))));
 
   const toggleAudio = () => {
@@ -353,14 +363,20 @@ export function StudyRoom({
         <main className="study__stage">
           <section className="study-timer-card">
             <div>
-              <span className="study-timer__label">Face party round</span>
+              <span className="study-timer__label">{isStudyMode ? '공부 시간' : '게임 라운드'}</span>
               <strong className="study-timer__value">{formatSessionTime(remainingSeconds)}</strong>
             </div>
             <div className="study-timer-card__meta">
               <span className="study-timer-card__participants">
                 <i /> {displayParticipants.length}/{room.settings.maxParticipants}
               </span>
-              <span>{currentGame ? gameKindLabel(currentGame.kind) : 'No game running'}</span>
+              <span>
+                {isStudyMode
+                  ? '공부하기'
+                  : currentGame
+                    ? gameKindLabel(currentGame.kind)
+                    : '게임 시작 전'}
+              </span>
             </div>
           </section>
 
@@ -395,7 +411,9 @@ export function StudyRoom({
           </section>
 
           <div className={`study__call-status${status === 'error' ? ' study__call-status--error' : ''}`}>
-            {videoJoin ? `Daily: ${status}` : 'Local demo mode. Video joins after the API is available.'}
+            {videoJoin
+              ? `화상 연결: ${dailyStatusLabel[status] ?? status}`
+              : '로컬 데모 모드예요. 중앙 API가 연결되면 화상 입장이 열려요.'}
           </div>
         </main>
 
@@ -406,198 +424,208 @@ export function StudyRoom({
             <div className="study-lumi__head">
               <RoomiMascot size={42} mood={privateMission ? 'wink' : 'curious'} />
               <div>
-                <strong>Roomi host</strong>
-                <span>{currentGame ? 'Round live' : 'Waiting for game'}</span>
+                <strong>루미 진행자</strong>
+                <span>{currentGame ? '라운드 진행 중' : isStudyMode ? '공부 진행 중' : '게임 대기 중'}</span>
               </div>
-              <span className="study-lumi__live">LIVE</span>
+              <span className="study-lumi__live">실시간</span>
             </div>
             <div className="study-lumi__bubble">
-              <span className="study-lumi__label">Prompt</span>
+              <span className="study-lumi__label">메시지</span>
               <p className="study-lumi__text">
                 {latestMessage?.text ??
                   (privateMission
-                    ? 'Keep your mission secret until the reveal.'
-                    : 'Start a hidden mission round and watch the faces.')}
+                    ? '공개 시간 전까지 미션은 비밀로 지켜줘.'
+                    : isStudyMode
+                      ? '오늘 목표에 맞춰 차분히 집중해보자.'
+                      : '방장이 게임을 시작하면 표정 라운드가 열려.')}
               </p>
             </div>
           </section>
 
-          <section className="study-card">
-            <h2 className="study-card__title">Game controls</h2>
-            {!currentGame && isHost && (
-              <>
-                <div className="goal">
-                  <span className="goal__who">
-                    <Play size={16} />
-                  </span>
-                  <p className="goal__text">
-                    {gameKindLabel(configuredGameKind)}
-                    <br />
-                    <span className="study-focus__meta">Configured when this room was created.</span>
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn--primary btn--block"
-                  onClick={() => onStartGame?.(configuredGameKind)}
-                >
-                  <Play size={16} /> Start {gameKindLabel(configuredGameKind)}
-                </button>
-              </>
-            )}
-            {!currentGame && !isHost && (
-              <p className="study-focus__meta">Waiting for the host.</p>
-            )}
-            {currentGame?.kind === 'hidden_mission' && (
-              privateMission ? (
-                <div className="goal">
-                  <span className="goal__who">
-                    <EyeOff size={16} />
-                  </span>
-                  <p className="goal__text">
-                    {privateMission.prompt}
-                    <br />
-                    Count: {missionState.count}/{privateMission.target}
-                  </p>
-                </div>
-              ) : (
-                <p className="study-focus__meta">Waiting for a private mission.</p>
-              )
-            )}
-            {currentGame?.kind === 'poker_bluff' && (
-              <>
-                <div className="goal">
-                  <span className="goal__who">Bet</span>
-                  <select
-                    className="goal__text"
-                    aria-label="Bluff target"
-                    value={activeBluffTargetId}
-                    onChange={(event) => setBluffTargetId(event.currentTarget.value)}
-                  >
-                    {selectableParticipants.map((participant) => (
-                      <option value={participant.id} key={participant.id}>
-                        {participant.nickname}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="session-end-modal__actions">
+          {!isStudyMode && (
+            <section className="study-card">
+              <h2 className="study-card__title">게임 조작</h2>
+              {!currentGame && isHost && (
+                <>
+                  <div className="goal">
+                    <span className="goal__who">
+                      <Play size={16} />
+                    </span>
+                    <p className="goal__text">
+                      {gameKindLabel(configuredGameKind)}
+                      <br />
+                      <span className="study-focus__meta">방을 만들 때 정한 게임이에요.</span>
+                    </p>
+                  </div>
                   <button
                     type="button"
-                    className="btn btn--ghost"
-                    onClick={() => onSubmitBluffBet?.(activeBluffTargetId, false)}
+                    className="btn btn--primary btn--block"
+                    onClick={() => onStartGame?.(configuredGameKind)}
                   >
-                    Will hold
+                    <Play size={16} /> {gameKindLabel(configuredGameKind)} 시작
                   </button>
+                </>
+              )}
+              {!currentGame && !isHost && (
+                <p className="study-focus__meta">방장이 게임을 시작하기를 기다리는 중이에요.</p>
+              )}
+              {currentGame?.kind === 'hidden_mission' && (
+                privateMission ? (
+                  <div className="goal">
+                    <span className="goal__who">
+                      <EyeOff size={16} />
+                    </span>
+                    <p className="goal__text">
+                      {privateMission.prompt}
+                      <br />
+                      진행: {missionState.count}/{privateMission.target}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="study-focus__meta">개인 미션을 기다리는 중이에요.</p>
+                )
+              )}
+              {currentGame?.kind === 'poker_bluff' && (
+                <>
+                  <div className="goal">
+                    <span className="goal__who">판정</span>
+                    <select
+                      className="goal__text"
+                      aria-label="블러프 대상"
+                      value={activeBluffTargetId}
+                      onChange={(event) => setBluffTargetId(event.currentTarget.value)}
+                    >
+                      {selectableParticipants.map((participant) => (
+                        <option value={participant.id} key={participant.id}>
+                          {participant.nickname}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="session-end-modal__actions">
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      onClick={() => onSubmitBluffBet?.(activeBluffTargetId, false)}
+                    >
+                      버틸 것 같아요
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--primary"
+                      onClick={() => onSubmitBluffBet?.(activeBluffTargetId, true)}
+                    >
+                      흔들릴 것 같아요
+                    </button>
+                  </div>
+                  {myBluffBet && (
+                    <p className="study-focus__meta">
+                      내 판정: {participantName(participants, myBluffBet.targetId)} 님이{' '}
+                      {myBluffBet.predictsCrack ? '흔들릴 것 같아요' : '버틸 것 같아요'}
+                    </p>
+                  )}
                   <button
                     type="button"
-                    className="btn btn--primary"
-                    onClick={() => onSubmitBluffBet?.(activeBluffTargetId, true)}
+                    className="btn btn--primary btn--block"
+                    onClick={() =>
+                      onSubmitBluffSignals?.(
+                        focusDetection.expressionSignals ?? emptyExpressionSignals()
+                      )
+                    }
                   >
-                    Will crack
+                    표정 판정 보내기
                   </button>
-                </div>
-                {myBluffBet && (
-                  <p className="study-focus__meta">
-                    Your bet: {participantName(participants, myBluffBet.targetId)}{' '}
-                    {myBluffBet.predictsCrack ? 'cracks' : 'holds'}
-                  </p>
-                )}
-                <button
-                  type="button"
-                  className="btn btn--primary btn--block"
-                  onClick={() =>
-                    onSubmitBluffSignals?.(
-                      focusDetection.expressionSignals ?? emptyExpressionSignals()
-                    )
-                  }
-                >
-                  Submit tell check
-                </button>
-                {currentGame.bluffResult && (
-                  <p className="study-focus__meta">
-                    Result: {participantName(participants, currentGame.bluffResult.targetId)}{' '}
-                    {currentGame.bluffResult.cracked ? `cracked on ${currentGame.bluffResult.tell}` : 'held'}
-                  </p>
-                )}
-              </>
-            )}
-            {currentGame?.kind === 'copycat_relay' && (
-              <>
-                <div className="goal">
-                  <span className="goal__who">To</span>
-                  <select
-                    className="goal__text"
-                    aria-label="Relay target"
-                    value={activeRelayTargetId}
-                    onChange={(event) => setRelayTargetId(event.currentTarget.value)}
+                  {currentGame.bluffResult && (
+                    <p className="study-focus__meta">
+                      결과: {participantName(participants, currentGame.bluffResult.targetId)} 님이{' '}
+                      {currentGame.bluffResult.cracked
+                        ? `${tellLabel(currentGame.bluffResult.tell)} 신호에서 흔들렸어요`
+                        : '끝까지 버텼어요'}
+                    </p>
+                  )}
+                </>
+              )}
+              {currentGame?.kind === 'copycat_relay' && (
+                <>
+                  <div className="goal">
+                    <span className="goal__who">대상</span>
+                    <select
+                      className="goal__text"
+                      aria-label="릴레이 대상"
+                      value={activeRelayTargetId}
+                      onChange={(event) => setRelayTargetId(event.currentTarget.value)}
+                    >
+                      {selectableParticipants.map((participant) => (
+                        <option value={participant.id} key={participant.id}>
+                          {participant.nickname}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <label className="goal__achieved">
+                    유사도 {Math.round(relaySimilarity * 100)}%
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={Math.round(relaySimilarity * 100)}
+                      onChange={(event) => setRelaySimilarity(Number(event.currentTarget.value) / 100)}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="btn btn--primary btn--block"
+                    onClick={() => onAdvanceRelay?.(activeRelayTargetId, relaySimilarity)}
                   >
-                    {selectableParticipants.map((participant) => (
-                      <option value={participant.id} key={participant.id}>
-                        {participant.nickname}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <label className="goal__achieved">
-                  Similarity {Math.round(relaySimilarity * 100)}%
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={Math.round(relaySimilarity * 100)}
-                    onChange={(event) => setRelaySimilarity(Number(event.currentTarget.value) / 100)}
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="btn btn--primary btn--block"
-                  onClick={() => onAdvanceRelay?.(activeRelayTargetId, relaySimilarity)}
-                >
-                  Advance relay
-                </button>
-                {(currentGame.relayLinks ?? []).map((link, index) => (
-                  <p className="study-focus__meta" key={`${link.fromId}-${link.toId}-${index}`}>
-                    {participantName(participants, link.fromId)} to{' '}
-                    {participantName(participants, link.toId)} - {Math.round(link.similarity * 100)}%
-                  </p>
-                ))}
-              </>
-            )}
-          </section>
+                    릴레이 넘기기
+                  </button>
+                  {(currentGame.relayLinks ?? []).map((link, index) => (
+                    <p className="study-focus__meta" key={`${link.fromId}-${link.toId}-${index}`}>
+                      {participantName(participants, link.fromId)} →{' '}
+                      {participantName(participants, link.toId)} - {Math.round(link.similarity * 100)}%
+                    </p>
+                  ))}
+                </>
+              )}
+            </section>
+          )}
 
-          <section className="study-card">
-            <h2 className="study-card__title">Scoreboard</h2>
-            {(currentGame?.scores ?? []).map((score) => {
-              const participant = participants.find((item) => item.id === score.participantId);
-              return (
-                <div className="goal" key={score.participantId}>
-                  <span className="goal__who">{participant?.nickname.slice(0, 2) ?? '??'}</span>
-                  <p className="goal__text">{participant?.nickname ?? 'Player'}</p>
-                  <strong>{score.points}</strong>
-                </div>
-              );
-            })}
-            {!currentGame && <p className="study-focus__meta">Scores appear after the round starts.</p>}
-            {myScore && <p className="study-focus__meta">Your score: {myScore.points}</p>}
-          </section>
+          {!isStudyMode && (
+            <section className="study-card">
+              <h2 className="study-card__title">점수판</h2>
+              {(currentGame?.scores ?? []).map((score) => {
+                const participant = participants.find((item) => item.id === score.participantId);
+                return (
+                  <div className="goal" key={score.participantId}>
+                    <span className="goal__who">{participant?.nickname.slice(0, 2) ?? '??'}</span>
+                    <p className="goal__text">{participant?.nickname ?? '참가자'}</p>
+                    <strong>{score.points}</strong>
+                  </div>
+                );
+              })}
+              {!currentGame && <p className="study-focus__meta">라운드가 시작되면 점수가 표시돼요.</p>}
+              {myScore && <p className="study-focus__meta">내 점수: {myScore.points}</p>}
+            </section>
+          )}
 
-          <section className="study-card">
-            <h2 className="study-card__title">Personal goal</h2>
-            <label className="goal__achieved">
-              <input
-                type="checkbox"
-                checked={Boolean(myGoal?.achieved)}
-                onChange={(event) => onToggleGoalAchieved(event.currentTarget.checked)}
-              />
-              <Flag size={14} />
-              {myGoal?.rawText ?? 'No goal submitted'}
-            </label>
-          </section>
+          {isStudyMode && (
+            <section className="study-card">
+              <h2 className="study-card__title">개인 목표</h2>
+              <label className="goal__achieved">
+                <input
+                  type="checkbox"
+                  checked={Boolean(myGoal?.achieved)}
+                  onChange={(event) => onToggleGoalAchieved(event.currentTarget.checked)}
+                />
+                <Flag size={14} />
+                {myGoal?.rawText ?? '등록된 목표가 없어요'}
+              </label>
+            </section>
+          )}
         </aside>
       </div>
 
-      <div className="study__controls" aria-label="Call controls">
+      <div className="study__controls" aria-label="통화 조작">
         <button
           type="button"
           className={`ctrl${audioOn && localMedia.audio ? ' ctrl--active' : ' ctrl--muted'}`}
@@ -614,9 +642,11 @@ export function StudyRoom({
         >
           {cameraOn ? <Video size={20} /> : <VideoOff size={20} />}
         </button>
-        <button type="button" className="ctrl" onClick={() => void onStartBreak()} aria-label="Break">
-          <Coffee size={20} />
-        </button>
+        {isStudyMode && (
+          <button type="button" className="ctrl" onClick={() => void onStartBreak()} aria-label="휴식 시작">
+            <Coffee size={20} />
+          </button>
+        )}
         {isHost && (
           <div className="host-actions">
             <button
@@ -649,13 +679,17 @@ export function StudyRoom({
       {confirmEnd && (
         <div className="session-end-modal" role="dialog" aria-label="세션 종료 확인">
           <div className="session-end-modal__panel">
-            <h2 className="session-end-modal__title">End this round?</h2>
+            <h2 className="session-end-modal__title">
+              {currentGame ? '라운드를 종료할까요?' : '공부를 종료할까요?'}
+            </h2>
             <p className="session-end-modal__text">
-              Roomi will reveal the current game state and move everyone to the recap.
+              {currentGame
+                ? '루미가 현재 게임 결과를 공개하고 회고 화면으로 이동해요.'
+                : '루미가 현재 공부 세션을 마무리하고 회고 화면으로 이동해요.'}
             </p>
             <div className="session-end-modal__actions">
               <button type="button" className="btn btn--ghost" onClick={() => setConfirmEnd(false)}>
-                Cancel
+                취소
               </button>
               <button type="button" className="btn btn--danger" onClick={onEndSession}>
                 세션 종료
@@ -669,13 +703,20 @@ export function StudyRoom({
 }
 
 function gameKindLabel(kind: GameSession['kind']) {
-  if (kind === 'hidden_mission') return 'Hidden mission';
-  if (kind === 'poker_bluff') return 'Poker-face bluff';
-  return 'Copycat relay';
+  if (kind === 'hidden_mission') return '숨은 표정 미션';
+  if (kind === 'poker_bluff') return '포커페이스 블러프';
+  return '카피캣 릴레이';
+}
+
+function tellLabel(tell: 'smile' | 'jaw' | 'brow' | null) {
+  if (tell === 'smile') return '미소';
+  if (tell === 'jaw') return '입 벌림';
+  if (tell === 'brow') return '눈썹';
+  return '보이는 표정';
 }
 
 function participantName(participants: Participant[], participantId: string) {
-  return participants.find((participant) => participant.id === participantId)?.nickname ?? 'Player';
+  return participants.find((participant) => participant.id === participantId)?.nickname ?? '참가자';
 }
 
 function emptyExpressionSignals(): ExpressionSignals {

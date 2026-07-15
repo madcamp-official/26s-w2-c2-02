@@ -319,6 +319,20 @@ describe('RoomService.startBreak', () => {
     );
   });
 
+  it('rejects starting a break in game mode rooms', () => {
+    const service = createService();
+    const created = service.createRoom({
+      nickname: 'host',
+      settings: { activityKind: 'poker_bluff', defaultGameKind: 'poker_bluff' }
+    });
+    const host = created.participants[0];
+    service.startSession(created.room.id, host.id);
+
+    expect(() => service.startBreak(created.room.id, host.id)).toThrow(
+      'Breaks are only available in study mode'
+    );
+  });
+
   it('rejects starting a break with no active study session', () => {
     const service = createService();
     const created = service.createRoom({ nickname: 'host' });

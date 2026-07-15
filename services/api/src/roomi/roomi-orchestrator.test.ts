@@ -142,7 +142,7 @@ describe('RoomiOrchestrator face party games', () => {
     const generator: TextGenerator = {
       generateText: async (prompt) => {
         calls.push(prompt);
-        return 'During the round, scratch your cheek once before answering.';
+        return '라운드 중 대답하기 전에 볼을 한 번 가볍게 만져.';
       }
     };
     const orchestrator = new RoomiOrchestrator(generator);
@@ -153,10 +153,11 @@ describe('RoomiOrchestrator face party games', () => {
       roundSeconds: 45
     });
 
-    expect(prompt).toBe('During the round, scratch your cheek once before answering.');
+    expect(prompt).toBe('라운드 중 대답하기 전에 볼을 한 번 가볍게 만져.');
     expect(calls[0]).toContain('snack debate');
-    expect(calls[0]).toContain('no emotion claims');
-    expect(calls[0]).toContain('no lie detection');
+    expect(calls[0]).toContain('한국어 한 문장');
+    expect(calls[0]).toContain('감정');
+    expect(calls[0]).toContain('거짓말 탐지');
   });
 
   it('falls back to a hidden mission template without emotion or lie claims', async () => {
@@ -170,8 +171,8 @@ describe('RoomiOrchestrator face party games', () => {
 
     expect(prompt).toContain('Joon');
     expect(prompt).toContain('movie night');
-    expect(prompt).toContain('visible cue');
-    expect(prompt).not.toMatch(/emotion|lie|truth/i);
+    expect(prompt).toContain('턱');
+    expect(prompt).not.toMatch(/감정|거짓말|진실/);
   });
 
   it('parses poker bluff questions and visible-signal tell hints from the generator', async () => {
@@ -179,11 +180,11 @@ describe('RoomiOrchestrator face party games', () => {
       generatorReturning(
         [
           'QUESTIONS:',
-          '- What detail changed first?',
-          '- Who else was there?',
+          '- 처음 바뀐 디테일은 뭐였어?',
+          '- 그때 또 누가 있었어?',
           'HINTS:',
-          '- Watch for pauses before concrete details.',
-          '- Compare gesture timing with the story timeline.'
+          '- 구체적인 말을 하기 전 멈칫하는 타이밍을 보세요.',
+          '- 손짓과 이야기 순서가 맞는지 비교해보세요.'
         ].join('\n')
       )
     );
@@ -195,10 +196,10 @@ describe('RoomiOrchestrator face party games', () => {
     });
 
     expect(prompt).toEqual({
-      questions: ['What detail changed first?', 'Who else was there?'],
+      questions: ['처음 바뀐 디테일은 뭐였어?', '그때 또 누가 있었어?'],
       tellHints: [
-        'Watch for pauses before concrete details.',
-        'Compare gesture timing with the story timeline.'
+        '구체적인 말을 하기 전 멈칫하는 타이밍을 보세요.',
+        '손짓과 이야기 순서가 맞는지 비교해보세요.'
       ]
     });
   });
@@ -215,18 +216,18 @@ describe('RoomiOrchestrator face party games', () => {
     expect(prompt.questions).toHaveLength(2);
     expect(prompt.tellHints).toHaveLength(2);
     expect(prompt.questions[0]).toContain('cafeteria');
-    expect(prompt.tellHints.join(' ')).toMatch(/pauses|gestures|eye contact|visible/i);
-    expect(prompt.tellHints.join(' ')).not.toMatch(/lying|emotion/i);
+    expect(prompt.tellHints.join(' ')).toMatch(/타이밍|손짓|시선|보이는/);
+    expect(prompt.tellHints.join(' ')).not.toMatch(/거짓말|감정/);
   });
 
   it('uses generated copycat seeds as a bounded list', async () => {
     const orchestrator = new RoomiOrchestrator(
-      generatorReturning(['1. statue face', '2. tiny nod', '3. eyebrow raise'].join('\n'))
+      generatorReturning(['1. 조각상처럼 멈춘 표정', '2. 아주 작은 끄덕임', '3. 눈썹 살짝 올리기'].join('\n'))
     );
 
     const seeds = await orchestrator.generateCopycatSeedExpressions({ count: 2 });
 
-    expect(seeds).toEqual(['statue face', 'tiny nod']);
+    expect(seeds).toEqual(['조각상처럼 멈춘 표정', '아주 작은 끄덕임']);
   });
 
   it('falls back to copycat seed expressions with visible prompts only', async () => {
@@ -240,7 +241,7 @@ describe('RoomiOrchestrator face party games', () => {
 
     expect(seeds).toHaveLength(3);
     expect(seeds.join(' ')).toContain('team lunch');
-    expect(seeds.join(' ')).not.toMatch(/emotion|diagnosis|lie/i);
+    expect(seeds.join(' ')).not.toMatch(/감정|진단|거짓말/);
   });
 
   it('generates game intro, reveal, and summary fallbacks with privacy language', async () => {
@@ -261,12 +262,12 @@ describe('RoomiOrchestrator face party games', () => {
       visibleSignals: ['facial movement']
     });
 
-    expect(intro).toContain('Poker Bluff');
-    expect(intro).toContain('No emotion or lie claims');
+    expect(intro).toContain('포커페이스 블러프');
+    expect(intro).toContain('눈에 보이는 단서');
     expect(reveal).toContain('Ara');
     expect(reveal).toContain('gesture timing');
-    expect(summary).toContain('visible signals');
-    expect([intro, reveal, summary].join(' ')).not.toMatch(/detected emotion|detected lie/i);
+    expect(summary).toContain('보이는 신호');
+    expect([intro, reveal, summary].join(' ')).not.toMatch(/감정을 탐지|거짓말을 탐지/);
   });
 
   it('generates live game reaction fallbacks for player actions', async () => {
@@ -276,12 +277,12 @@ describe('RoomiOrchestrator face party games', () => {
       game: 'poker_bluff',
       event: 'bluff_cracked',
       actorNickname: 'Mina',
-      visibleSignals: ['smile'],
+      visibleSignals: ['미소'],
       tone: 'playful'
     });
 
     expect(reaction).toContain('Mina');
-    expect(reaction).toContain('smile');
-    expect(reaction).not.toMatch(/detected emotion|detected lie/i);
+    expect(reaction).toContain('미소');
+    expect(reaction).not.toMatch(/감정을 탐지|거짓말을 탐지/);
   });
 });

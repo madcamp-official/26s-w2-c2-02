@@ -75,6 +75,7 @@ const now = () => new Date().toISOString();
 const LOCAL_ROOMI_MESSAGE_LIMIT = 20;
 
 const defaultRoomSettings: RoomSettings = {
+  activityKind: 'study',
   defaultGameKind: 'hidden_mission',
   sessionMinutes: 50,
   breakMode: 'room',
@@ -89,7 +90,7 @@ const defaultRoomSettings: RoomSettings = {
   detectionPauseAllowed: true
 };
 
-const fallbackRoom: RoomDraft = createRoomDraft('Player', defaultRoomSettings);
+const fallbackRoom: RoomDraft = createRoomDraft('참가자', defaultRoomSettings);
 
 function createParticipant(input: {
   id: string;
@@ -201,19 +202,19 @@ function createLocalGame(room: Room, participants: Participant[], kind: GameKind
   const timestamp = now();
   const gameId = `game-${Date.now()}`;
   const templates: Array<Omit<HiddenMission, 'id' | 'playerId'>> = [
-    { prompt: 'Wink 2 times without being obvious', verify: 'wink_count', target: 2 },
-    { prompt: 'Slip in 3 tiny winks while listening', verify: 'wink_count', target: 3 },
-    { prompt: 'Wink 4 times when someone else talks', verify: 'wink_count', target: 4 },
-    { prompt: 'Smile naturally 3 times', verify: 'smile_count', target: 3 },
-    { prompt: 'React with a small smile 4 times', verify: 'smile_count', target: 4 },
-    { prompt: 'Quietly smile 5 times without calling it out', verify: 'smile_count', target: 5 },
-    { prompt: 'Do not open your mouth wide this round', verify: 'no_jaw_open', target: 0 },
-    { prompt: 'Hold back every big jaw-open reaction', verify: 'no_jaw_open', target: 0 },
-    { prompt: 'Raise your brows 3 times', verify: 'brow_count', target: 3 },
-    { prompt: 'Add 4 subtle brow raises as reactions', verify: 'brow_count', target: 4 },
-    { prompt: 'Raise your brows 5 times', verify: 'brow_count', target: 5 },
-    { prompt: 'Puff your cheeks 2 times', verify: 'cheek_puff_count', target: 2 },
-    { prompt: 'Sneak in 3 tiny cheek puffs', verify: 'cheek_puff_count', target: 3 }
+    { prompt: '들키지 않게 윙크 2번 하기', verify: 'wink_count', target: 2 },
+    { prompt: '듣는 척하며 짧은 윙크 3번 섞기', verify: 'wink_count', target: 3 },
+    { prompt: '다른 사람이 말할 때 윙크 4번 넣기', verify: 'wink_count', target: 4 },
+    { prompt: '자연스럽게 미소 3번 짓기', verify: 'smile_count', target: 3 },
+    { prompt: '작은 미소 리액션 4번 하기', verify: 'smile_count', target: 4 },
+    { prompt: '아무 말 없이 조용히 미소 5번 만들기', verify: 'smile_count', target: 5 },
+    { prompt: '이번 라운드 동안 입 크게 벌리지 않기', verify: 'no_jaw_open', target: 0 },
+    { prompt: '큰 리액션이 나와도 입 벌림을 참기', verify: 'no_jaw_open', target: 0 },
+    { prompt: '눈썹을 살짝 3번 올리기', verify: 'brow_count', target: 3 },
+    { prompt: '반응할 때 눈썹을 4번 들어 올리기', verify: 'brow_count', target: 4 },
+    { prompt: '카메라 쪽으로 눈썹을 5번 올리기', verify: 'brow_count', target: 5 },
+    { prompt: '볼을 조용히 2번 부풀리기', verify: 'cheek_puff_count', target: 2 },
+    { prompt: '아무도 모르게 짧은 볼 부풀리기 3번 하기', verify: 'cheek_puff_count', target: 3 }
   ];
   const shuffled = [...templates].sort(() => Math.random() - 0.5);
 
@@ -364,7 +365,11 @@ export function App() {
   }, [activeRoom.room.status, screen]);
 
   useEffect(() => {
-    if (activeRoom.room.status === 'break' && screen === 'study') {
+    if (
+      activeRoom.room.settings.activityKind === 'study' &&
+      activeRoom.room.status === 'break' &&
+      screen === 'study'
+    ) {
       go('break');
       return;
     }
@@ -376,13 +381,13 @@ export function App() {
     ) {
       go('study');
     }
-  }, [activeRoom.room.settings.breakMode, activeRoom.room.status, screen]);
+  }, [activeRoom.room.settings.activityKind, activeRoom.room.settings.breakMode, activeRoom.room.status, screen]);
 
   const createRoom = async (settings: RoomSettings) => {
     if (createRoomLockRef.current) return;
     createRoomLockRef.current = true;
     setIsCreatingRoom(true);
-    const input = { nickname: nickname || 'Player', settings };
+    const input = { nickname: nickname || '참가자', settings };
     setCreateError(undefined);
 
     try {
@@ -402,7 +407,7 @@ export function App() {
     if (joinRoomLockRef.current) return;
     joinRoomLockRef.current = true;
     setIsJoiningRoom(true);
-    const input = { nickname: nickname || 'Player', inviteCode: normalizeInviteCode(joinCode) };
+    const input = { nickname: nickname || '참가자', inviteCode: normalizeInviteCode(joinCode) };
     setJoinError(undefined);
 
     try {
@@ -471,6 +476,7 @@ export function App() {
     kind: GameKind = roomDraft?.room.settings.defaultGameKind ?? 'hidden_mission'
   ) => {
     if (!roomDraft) return;
+    if (roomDraft.room.settings.activityKind === 'study') return;
 
     if (roomDraft.realtime === 'server') {
       startGame(socketRef.current, {
@@ -500,7 +506,7 @@ export function App() {
       return appendLocalRoomiMessage(
         next,
         'game_intro',
-        `${gameLabel(kind)} is live. Watch the table and react with visible moves only.`
+        `${gameLabel(kind)} 시작! 눈에 보이는 표정과 움직임만 보고 가볍게 반응해보자.`
       );
     });
   };
@@ -589,6 +595,7 @@ export function App() {
 
   const startCurrentBreak = async () => {
     if (!roomDraft) return;
+    if (roomDraft.room.settings.activityKind !== 'study') return;
     if (roomDraft.room.settings.breakMode === 'individual') {
       setCurrentSessionPresence('break');
       go('break');
@@ -627,6 +634,7 @@ export function App() {
 
   const endCurrentBreak = async () => {
     if (!roomDraft) return;
+    if (roomDraft.room.settings.activityKind !== 'study') return;
     if (roomDraft.room.settings.breakMode === 'individual') {
       setCurrentSessionPresence('focused');
       go('study');
@@ -664,7 +672,12 @@ export function App() {
   };
 
   const extendCurrentBreak = async () => {
-    if (!roomDraft || roomDraft.room.settings.breakMode !== 'room' || !isHost) return;
+    if (
+      !roomDraft ||
+      roomDraft.room.settings.activityKind !== 'study' ||
+      roomDraft.room.settings.breakMode !== 'room' ||
+      !isHost
+    ) return;
     if (roomDraft.realtime === 'server') {
       try {
         const snapshot = await extendBreak({
@@ -723,8 +736,8 @@ export function App() {
         next,
         'round_prompt',
         result.success
-          ? `${actor} slipped the secret mission through with ${result.count} counted moves.`
-          : `${actor}'s secret mission is on the board with ${result.count} counted moves.`
+          ? `${actor}의 비밀 미션 성공! 집계된 움직임은 ${result.count}번이야.`
+          : `${actor}의 비밀 미션 기록이 공개됐어. 집계된 움직임은 ${result.count}번이야.`
       );
     });
   };
@@ -770,7 +783,7 @@ export function App() {
       return appendLocalRoomiMessage(
         next,
         'tell_hint',
-        `${actor} placed a bluff read on ${target}. Keep it to timing, gestures, and visible expression shifts.`
+        `${actor}가 ${target}에게 블러프 판정을 걸었어. 타이밍, 제스처, 보이는 표정 변화만 보자.`
       );
     });
   };
@@ -830,8 +843,8 @@ export function App() {
         next,
         'tell_hint',
         cracked
-          ? `${actor}'s poker face cracked on ${tell ?? 'a visible signal'}.`
-          : `${actor} held the poker face. +8 points.`
+          ? `${actor}의 포커페이스가 ${bluffTellLabel(tell)}에서 흔들렸어.`
+          : `${actor}가 포커페이스를 지켰어. +8점.`
       );
     });
   };
@@ -875,7 +888,7 @@ export function App() {
       return appendLocalRoomiMessage(
         next,
         'round_prompt',
-        `${actor} passed the relay to ${target} at ${similarityPercent}% similarity.`
+        `${actor}가 ${target}에게 릴레이를 넘겼어. 유사도는 ${similarityPercent}%야.`
       );
     });
   };
@@ -930,12 +943,12 @@ export function App() {
         : undefined;
       const winnerName = winner
         ? participantNickname(current.participants, winner.participantId)
-        : 'The table';
+        : '이번 방';
       return currentGame
         ? appendLocalRoomiMessage(
             next,
             'game_reveal',
-            `${winnerName} leads the reveal. Scores are final for this round.`
+            `${winnerName}이 이번 공개 결과에서 앞섰어. 이번 라운드 점수가 확정됐어.`
           )
         : next;
     });
@@ -993,7 +1006,7 @@ export function App() {
             onPermissionChange={setMediaPermission}
             onReady={() => {
               if (!roomDraft) {
-                setRoomDraft(joinRoomDraft(nickname || 'Player', joinCode || fallbackRoom.room.inviteCode));
+                setRoomDraft(joinRoomDraft(nickname || '참가자', joinCode || fallbackRoom.room.inviteCode));
               }
               go('waiting');
             }}
@@ -1121,13 +1134,20 @@ function appendLocalRoomiMessage(
 }
 
 function participantNickname(participants: Participant[], participantId: string) {
-  return participants.find((participant) => participant.id === participantId)?.nickname ?? 'Someone';
+  return participants.find((participant) => participant.id === participantId)?.nickname ?? '참가자';
+}
+
+function bluffTellLabel(tell: BluffTell): string {
+  if (tell === 'smile') return '미소';
+  if (tell === 'jaw') return '입 벌림';
+  if (tell === 'brow') return '눈썹 움직임';
+  return '보이는 신호';
 }
 
 function gameLabel(kind: GameKind) {
-  if (kind === 'hidden_mission') return 'Hidden Mission';
-  if (kind === 'poker_bluff') return 'Poker Bluff';
-  return 'Copycat Relay';
+  if (kind === 'hidden_mission') return '숨은 표정 미션';
+  if (kind === 'poker_bluff') return '포커페이스 블러프';
+  return '카피캣 릴레이';
 }
 
 function resolvePrivateMission(current: RoomDraft, game: GameSession | undefined) {

@@ -56,21 +56,24 @@ The server owns round timing through `currentSession.startedAt`,
 clock from those timestamps, so late joiners and reconnecting players see the
 same remaining time without each client becoming its own timer authority.
 
-Face party games use `currentGame` on the room snapshot and Socket.IO events for
-round changes. The room's `defaultGameKind` is selected during room creation and
-shown again in the waiting room; the active room starts that configured game
-instead of choosing a mode from the live controls. The API starts rounds, stores
-hidden missions and scores, sends private mission assignments only to the
-matching participant, and broadcasts public game snapshots without hidden
-mission text until reveal. The renderer uses local expression signals to update
-mission progress, while the API remains the authority for multiplayer results.
+Rooms store `settings.activityKind` to distinguish the original study-room flow
+from face party game rooms. `study` enables study goals and break controls;
+`hidden_mission`, `poker_bluff`, and `copycat_relay` hide break controls and use
+`currentGame` plus Socket.IO events for round changes. The room's
+`defaultGameKind` is selected during room creation and shown again in the waiting
+room; the active game room starts that configured game instead of choosing a
+mode from the live controls. The API starts rounds, stores hidden missions and
+scores, sends private mission assignments only to the matching participant, and
+broadcasts public game snapshots without hidden mission text until reveal. The
+renderer uses local expression signals to update mission progress, while the API
+remains the authority for multiplayer results.
 
-Roomi's live game host lines are generated on the API side for game start,
-mission results, bluff bets/results, relay progress, and reveal. The
-orchestrator calls the configured LLM when available and uses template fallback
-messages otherwise. These prompts only receive player nicknames, game actions,
-scores, and visible expression signal labels; raw video frames and facial
-landmarks stay out of the LLM path.
+Roomi's live game host lines are generated on the API side in Korean for game
+start, mission results, bluff bets/results, relay progress, and reveal. The
+orchestrator calls the configured LLM when available and uses Korean template
+fallback messages otherwise. These prompts only receive player nicknames, game
+actions, scores, and visible expression signal labels; raw video frames and
+facial landmarks stay out of the LLM path.
 
 When the central API is unavailable, the desktop renderer can enter a local
 single-machine demo room so UI and local expression work can continue. That path

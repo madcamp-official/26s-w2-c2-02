@@ -182,6 +182,32 @@ describe('DailyParticipantMedia', () => {
 });
 
 describe('StudyRoom hidden mission progress', () => {
+  it('shows break control only in study mode', () => {
+    const participant = createParticipant('participant-host', 'Host');
+    const onStartBreak = vi.fn();
+
+    const { rerender } = render(
+      <StudyRoom
+        {...baseStudyRoomProps(participant)}
+        room={createRoom('hidden_mission', 'study')}
+        onStartBreak={onStartBreak}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '휴식 시작' }));
+    expect(onStartBreak).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <StudyRoom
+        {...baseStudyRoomProps(participant)}
+        room={createRoom('hidden_mission', 'hidden_mission')}
+        onStartBreak={onStartBreak}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: '휴식 시작' })).not.toBeInTheDocument();
+  });
+
   it('starts the room-configured game mode', () => {
     const participant = createParticipant('participant-host', 'Host');
     const onStartGame = vi.fn();
@@ -195,7 +221,7 @@ describe('StudyRoom hidden mission progress', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start Poker-face bluff' }));
+    fireEvent.click(screen.getByRole('button', { name: '포커페이스 블러프 시작' }));
 
     expect(onStartGame).toHaveBeenCalledWith('poker_bluff');
   });
@@ -249,19 +275,19 @@ describe('StudyRoom hidden mission progress', () => {
     };
 
     const { rerender } = render(<StudyRoom {...props} />);
-    expect(screen.getByText(/Count: 0\/2/)).toBeInTheDocument();
+    expect(screen.getByText(/진행: 0\/2/)).toBeInTheDocument();
 
     focusDetectionMock.snapshot.expressionSignals = expressionSignal({ smile: 0.8 });
     rerender(<StudyRoom {...props} />);
-    await waitFor(() => expect(screen.getByText(/Count: 1\/2/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/진행: 1\/2/)).toBeInTheDocument());
 
     focusDetectionMock.snapshot.expressionSignals = expressionSignal({ smile: 0.1 });
     rerender(<StudyRoom {...props} />);
-    await waitFor(() => expect(screen.getByText(/Count: 1\/2/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/진행: 1\/2/)).toBeInTheDocument());
 
     focusDetectionMock.snapshot.expressionSignals = expressionSignal({ smile: 0.8 });
     rerender(<StudyRoom {...props} />);
-    await waitFor(() => expect(screen.getByText(/Count: 2\/2/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/진행: 2\/2/)).toBeInTheDocument());
     expect(props.onSubmitMissionResult).toHaveBeenCalledWith({
       playerId: participant.id,
       missionId: privateMission.id,
@@ -288,8 +314,8 @@ describe('StudyRoom hidden mission progress', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Will crack' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Submit tell check' }));
+    fireEvent.click(screen.getByRole('button', { name: '흔들릴 것 같아요' }));
+    fireEvent.click(screen.getByRole('button', { name: '표정 판정 보내기' }));
 
     expect(onSubmitBluffBet).toHaveBeenCalledWith(member.id, true);
     expect(onSubmitBluffSignals).toHaveBeenCalledWith(
@@ -313,7 +339,7 @@ describe('StudyRoom hidden mission progress', () => {
     );
 
     fireEvent.change(screen.getByRole('slider'), { target: { value: '82' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Advance relay' }));
+    fireEvent.click(screen.getByRole('button', { name: '릴레이 넘기기' }));
 
     expect(onAdvanceRelay).toHaveBeenCalledWith(member.id, 0.82);
   });
@@ -338,12 +364,16 @@ function baseStudyRoomProps(participant: Participant) {
   };
 }
 
-function createRoom(defaultGameKind: Room['settings']['defaultGameKind'] = 'hidden_mission'): Room {
+function createRoom(
+  defaultGameKind: Room['settings']['defaultGameKind'] = 'hidden_mission',
+  activityKind: Room['settings']['activityKind'] = defaultGameKind
+): Room {
   return {
     id: 'room-1',
     inviteCode: 'ABC123',
     hostUserId: 'user-host',
     settings: {
+      activityKind,
       defaultGameKind,
       sessionMinutes: 10,
       breakMinutes: 5,
