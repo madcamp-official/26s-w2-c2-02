@@ -170,7 +170,7 @@ export function buildSplashHtml(mascotDataUri: string = winkMascotDataUri): stri
         <img class="splash__mascot" src="${mascotDataUri}" alt="" draggable="false" />
       </div>
       <div class="splash__title">루미</div>
-      <div class="splash__tagline">친구들과 함께 켜두는 AI 운영 스터디룸</div>
+      <div class="splash__tagline">친구들과 함께 켜두는 AI 플레이룸</div>
       <div class="splash__dots" aria-hidden="true">
         <span></span><span></span><span></span>
       </div>
