@@ -2,6 +2,7 @@ import cors from 'cors';
 import express from 'express';
 import type {
   CreateRoomInput,
+  GameKind,
   GoalAchievedInput,
   GoalRefineInput,
   JoinRoomInput,
@@ -99,13 +100,21 @@ export function createApp(
     try {
       const { roomId, participantId } = request.body as SessionStartInput;
       const snapshot = roomService.startSession(roomId, participantId);
-      const text = await roomiOrchestrator.generateStartMessage({
-        sessionMinutes: snapshot.currentSession?.plannedMinutes ?? snapshot.room.settings.sessionMinutes,
-        goalCount: snapshot.goals.length
-      });
+      const isStudyMode = snapshot.room.settings.activityKind === 'study';
+      const text = isStudyMode
+        ? await roomiOrchestrator.generateStartMessage({
+            sessionMinutes: snapshot.currentSession?.plannedMinutes ?? snapshot.room.settings.sessionMinutes,
+            goalCount: snapshot.goals.length
+          })
+        : await roomiOrchestrator.generateGameIntroMessage({
+            game: toFacePartyGameKind(snapshot.room.settings.defaultGameKind),
+            playerCount: snapshot.participants.length,
+            playStyles: snapshot.goals.map((goal) => goal.rawText.trim()).filter(Boolean),
+            tone: 'playful'
+          });
       roomService.addRoomiMessage({
         roomId: snapshot.room.id,
-        kind: 'start',
+        kind: isStudyMode ? 'start' : 'game_intro',
         text
       });
       response.json(roomService.snapshotForParticipant(roomId, participantId));
@@ -286,6 +295,11 @@ export function createApp(
 function hasRequestBody(method: string) {
   const normalizedMethod = method.toUpperCase();
   return normalizedMethod !== 'GET' && normalizedMethod !== 'HEAD';
+}
+
+function toFacePartyGameKind(kind: GameKind) {
+  if (kind === 'copycat_relay') return 'copycat';
+  return kind;
 }
 
 function statusForRoomError(message: string, fallback: number) {

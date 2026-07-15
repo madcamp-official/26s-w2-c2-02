@@ -18,7 +18,7 @@
   font-size: 24px;
   font-weight: 800;
   color: var(--heading);
-  letter-spacing: -0.3px;
+  letter-spacing: 0;
 }
 
 .create__subtitle {
@@ -83,10 +83,14 @@
 }
 
 .create__game-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  display: flex;
   gap: 12px;
   margin-top: 12px;
+  padding-bottom: 6px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scroll-snap-type: x proximity;
 }
 
 .create-opt {
@@ -132,9 +136,19 @@
 }
 
 .create-game {
-  display: flex;
+  display: grid;
+  align-content: start;
   gap: 12px;
-  min-height: 132px;
+  flex: 0 0 232px;
+  min-height: 126px;
+  scroll-snap-align: start;
+}
+
+.create-game__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 .create-game__icon {
@@ -258,7 +272,8 @@
   }
 
   .create__game-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-right: -22px;
+    padding-right: 22px;
   }
 
   .toggle-row,
@@ -269,11 +284,6 @@
   }
 }
 
-@media (max-width: 520px) {
-  .create__game-grid {
-    grid-template-columns: 1fr;
-  }
-}
 
 .invite__code {
   font-size: 22px;

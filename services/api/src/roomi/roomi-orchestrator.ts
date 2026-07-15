@@ -86,6 +86,7 @@ export type FacePartyGameMessageInput = {
 
 export type FacePartyGameReactionInput = FacePartyGameMessageInput & {
   event:
+    | 'mission_progress'
     | 'mission_success'
     | 'mission_fail'
     | 'bluff_bet'
@@ -378,6 +379,9 @@ export class RoomiOrchestrator {
 
     if (input.event === 'mission_success') {
       return `${actor}의 비밀 미션 성공${signals}.${points}${actorStyle}`;
+    }
+    if (input.event === 'mission_progress') {
+      return `${actor}의 비밀 미션 카운트가 올라갔어${signals}. 아직 공개 전이니까 자연스럽게 이어가자.${actorStyle}`;
     }
     if (input.event === 'mission_fail') {
       return `${actor}의 비밀 미션 기록이 공개됐어${signals}. 공개 때 참고할 단서가 됐어.${actorStyle}`;

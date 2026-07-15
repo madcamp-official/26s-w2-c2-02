@@ -280,6 +280,14 @@ describe('StudyRoom hidden mission progress', () => {
     focusDetectionMock.snapshot.expressionSignals = expressionSignal({ smile: 0.8 });
     rerender(<StudyRoom {...props} />);
     await waitFor(() => expect(screen.getByText(/진행: 1\/2/)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(props.onSubmitMissionResult).toHaveBeenCalledWith({
+        playerId: participant.id,
+        missionId: privateMission.id,
+        count: 1,
+        success: false
+      })
+    );
 
     focusDetectionMock.snapshot.expressionSignals = expressionSignal({ smile: 0.1 });
     rerender(<StudyRoom {...props} />);
@@ -288,12 +296,81 @@ describe('StudyRoom hidden mission progress', () => {
     focusDetectionMock.snapshot.expressionSignals = expressionSignal({ smile: 0.8 });
     rerender(<StudyRoom {...props} />);
     await waitFor(() => expect(screen.getByText(/진행: 2\/2/)).toBeInTheDocument());
-    expect(props.onSubmitMissionResult).toHaveBeenCalledWith({
-      playerId: participant.id,
-      missionId: privateMission.id,
-      count: 2,
-      success: true
-    });
+    await waitFor(() =>
+      expect(props.onSubmitMissionResult).toHaveBeenCalledWith({
+        playerId: participant.id,
+        missionId: privateMission.id,
+        count: 2,
+        success: true
+      })
+    );
+  });
+
+  it('shows every participant goal in study mode', () => {
+    const host = createParticipant('participant-host', 'Host');
+    const member = { ...createParticipant('participant-member', 'Member'), role: 'member' as const };
+
+    render(
+      <StudyRoom
+        {...baseStudyRoomProps(host)}
+        room={createRoom('hidden_mission', 'study')}
+        participants={[host, member]}
+        goals={[
+          {
+            id: 'goal-host',
+            roomId: 'room-1',
+            participantId: host.id,
+            rawText: '수학 문제 10개',
+            createdAt: '2026-07-15T00:00:00.000Z'
+          },
+          {
+            id: 'goal-member',
+            roomId: 'room-1',
+            participantId: member.id,
+            rawText: '영어 단어 50개',
+            createdAt: '2026-07-15T00:00:00.000Z'
+          }
+        ]}
+      />
+    );
+
+    expect(screen.getByRole('heading', { name: '공부 목표' })).toBeInTheDocument();
+    expect(screen.getByText('수학 문제 10개')).toBeInTheDocument();
+    expect(screen.getByText('영어 단어 50개')).toBeInTheDocument();
+  });
+
+  it('shows every participant play style before a game starts', () => {
+    const host = createParticipant('participant-host', 'Host');
+    const member = { ...createParticipant('participant-member', 'Member'), role: 'member' as const };
+
+    render(
+      <StudyRoom
+        {...baseStudyRoomProps(host)}
+        room={createRoom('poker_bluff', 'poker_bluff')}
+        participants={[host, member]}
+        goals={[
+          {
+            id: 'style-host',
+            roomId: 'room-1',
+            participantId: host.id,
+            rawText: '의심받을수록 더 침착한 척하기',
+            createdAt: '2026-07-15T00:00:00.000Z'
+          },
+          {
+            id: 'style-member',
+            roomId: 'room-1',
+            participantId: member.id,
+            rawText: '괜히 자신감 넘치는 분석가처럼 말하기',
+            createdAt: '2026-07-15T00:00:00.000Z'
+          }
+        ]}
+      />
+    );
+
+    expect(screen.getByRole('heading', { name: '플레이 스타일' })).toBeInTheDocument();
+    expect(screen.getByText('의심받을수록 더 침착한 척하기')).toBeInTheDocument();
+    expect(screen.getByText('괜히 자신감 넘치는 분석가처럼 말하기')).toBeInTheDocument();
+    expect(screen.getByText(/포커페이스 블러프를 시작하면/)).toBeInTheDocument();
   });
 
   it('submits poker bluff bets and expression checks from the game controls', () => {

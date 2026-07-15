@@ -303,7 +303,7 @@ export function registerRealtimeGateway(
     const actor = snapshot?.participants.find((participant) => participant.id === result.playerId);
     const text = await roomiOrchestrator.generateGameReactionMessage({
       game: 'hidden_mission',
-      event: result.success ? 'mission_success' : 'mission_fail',
+      event: result.success ? 'mission_success' : result.count > 0 ? 'mission_progress' : 'mission_fail',
       actorNickname: actor?.nickname,
       actorPlayStyle: playStyleFor(snapshot, result.playerId),
       points: result.success ? 10 : undefined,

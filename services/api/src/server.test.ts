@@ -115,6 +115,30 @@ describe('POST /sessions', () => {
     expect(messages[0]?.kind).toBe('start');
   });
 
+  it('uses a game-specific Roomi message when starting a game-mode room', async () => {
+    const created = roomService.createRoom({
+      nickname: 'host',
+      settings: {
+        activityKind: 'poker_bluff',
+        defaultGameKind: 'poker_bluff'
+      }
+    });
+    const host = created.participants[0];
+    roomService.submitGoal(created.room.id, host.id, '의심받을수록 더 침착한 척하기');
+    const messages: RoomiMessage[] = [];
+    roomService.onRoomiMessage((message) => messages.push(message));
+
+    const response = await startSession({ roomId: created.room.id, participantId: host.id });
+    const snapshot = (await response.json()) as RoomSnapshot;
+
+    expect(response.status).toBe(200);
+    expect(snapshot.room.status).toBe('studying');
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.kind).toBe('game_intro');
+    expect(messages[0]?.text).toContain('포커페이스 블러프');
+    expect(messages[0]?.text).toContain('플레이 스타일');
+  });
+
   it('returns 403 when a non-host tries to start', async () => {
     const created = roomService.createRoom({ nickname: 'host' });
     const joined = roomService.joinRoom({

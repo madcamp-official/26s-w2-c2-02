@@ -73,7 +73,9 @@ its product meaning depends on `activityKind`. Study rooms treat it as the
 participant's study goal. Game rooms treat it as that player's "today's play
 style", can ask Roomi to recommend one through `/goals/refine` with
 `mode: 'play_style'`, and pass the saved style into game host-message prompts so
-Roomi can reference player-authored characters during live reactions.
+Roomi can reference player-authored characters during live reactions. The active
+video room renders these saved goals/styles for every participant, not just the
+local player.
 
 Roomi's live game host lines are generated on the API side in Korean for game
 start, mission results, bluff bets/results, relay progress, and reveal. The
@@ -81,6 +83,8 @@ orchestrator calls the configured LLM when available and uses Korean template
 fallback messages otherwise. These prompts only receive player nicknames, game
 actions, scores, participant-authored play styles, and visible expression signal
 labels; raw video frames and facial landmarks stay out of the LLM path.
+Hidden mission clients report intermediate count increases as well as final
+success, so Roomi can react as soon as a visible mission action is detected.
 
 When the central API is unavailable, the desktop renderer can enter a local
 single-machine demo room so UI and local expression work can continue. That path

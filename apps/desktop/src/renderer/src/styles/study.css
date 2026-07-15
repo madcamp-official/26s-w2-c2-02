@@ -208,6 +208,7 @@
 
 .goal {
   display: flex;
+  align-items: flex-start;
   gap: 10px;
   padding: 10px 0;
   border-top: 1px solid var(--border-soft);
@@ -229,6 +230,23 @@
   flex: 1;
   font-size: 13px;
   color: var(--text);
+}
+
+.goal--stacked .goal__text {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.goal__owner {
+  font-size: 12px;
+  color: var(--heading);
+}
+
+.goal__note {
+  color: var(--text-muted);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .goal__achieved {

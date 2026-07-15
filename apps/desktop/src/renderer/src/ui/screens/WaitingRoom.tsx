@@ -174,7 +174,7 @@ export function WaitingRoom({
               <RoomiMascot size={56} mood={isRefining ? 'curious' : 'angry'} />
               <div>
                 {inProgress && <span className="badge badge--blue">진행 중</span>}
-                <h1 className="waiting__title">
+                <h1 className={`waiting__title${!isStudyMode && !inProgress ? ' waiting__title--game' : ''}`}>
                   {inProgress
                     ? isStudyMode
                       ? '이미 공부 중이에요'

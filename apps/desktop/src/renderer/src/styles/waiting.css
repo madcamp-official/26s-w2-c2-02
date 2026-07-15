@@ -36,7 +36,12 @@
   font-size: 28px;
   font-weight: 800;
   color: var(--heading);
-  letter-spacing: -0.4px;
+  letter-spacing: 0;
+}
+
+.waiting__title--game {
+  font-size: 24px;
+  letter-spacing: 0;
 }
 
 .waiting__subtitle {

@@ -234,7 +234,9 @@ describe('WaitingRoom', () => {
     };
     render(<WaitingRoom {...props} />);
 
-    expect(screen.getByRole('heading', { level: 1, name: '오늘의 플레이 스타일을 정해볼까요?' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: '오늘의 플레이 스타일을 정해볼까요?' })).toHaveClass(
+      'waiting__title--game'
+    );
     expect(screen.getByLabelText('오늘의 플레이 스타일')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '게임 시작하기' })).toBeDisabled();
     expect(

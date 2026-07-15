@@ -316,4 +316,20 @@ describe('RoomiOrchestrator face party games', () => {
     expect(reaction).toContain('미소');
     expect(reaction).not.toMatch(/감정을 탐지|거짓말을 탐지/);
   });
+
+  it('generates a hidden mission progress reaction before success', async () => {
+    const orchestrator = new RoomiOrchestrator();
+
+    const reaction = await orchestrator.generateGameReactionMessage({
+      game: 'hidden_mission',
+      event: 'mission_progress',
+      actorNickname: '소요',
+      visibleSignals: ['미션 집계 1회'],
+      tone: 'playful'
+    });
+
+    expect(reaction).toContain('소요');
+    expect(reaction).toContain('카운트');
+    expect(reaction).toContain('미션 집계 1회');
+  });
 });

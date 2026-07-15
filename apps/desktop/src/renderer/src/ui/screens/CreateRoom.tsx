@@ -111,13 +111,13 @@ export function CreateRoom({ error, isCreating = false, onCreateRoom, go }: Crea
                   className={`create-opt create-game${activityKind === kind ? ' create-opt--active' : ''}`}
                   onClick={() => setActivityKind(kind)}
                 >
-                  <span className="create-game__icon">
-                    <Icon size={18} />
-                  </span>
-                  <span>
+                  <span className="create-game__head">
+                    <span className="create-game__icon">
+                      <Icon size={18} />
+                    </span>
                     <span className="create-opt__title">{title}</span>
-                    <span className="create-opt__desc">{desc}</span>
                   </span>
+                  <span className="create-opt__desc">{desc}</span>
                 </button>
               ))}
             </div>

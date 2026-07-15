@@ -752,7 +752,9 @@ export function App() {
         'round_prompt',
         result.success
           ? `${actor}의 비밀 미션 성공! 집계된 움직임은 ${result.count}번이야.`
-          : `${actor}의 비밀 미션 기록이 공개됐어. 집계된 움직임은 ${result.count}번이야.`
+          : result.count > 0
+            ? `${actor}의 비밀 미션 카운트가 올라갔어. 집계된 움직임은 ${result.count}번이야.`
+            : `${actor}의 비밀 미션 기록이 공개됐어. 집계된 움직임은 ${result.count}번이야.`
       );
     });
   };

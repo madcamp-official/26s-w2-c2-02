@@ -64,6 +64,9 @@ and rolls back the participant instead of returning a local-only video session.
   and use `/goals/refine` to narrow the goal. Game rooms label it as `오늘의
   플레이 스타일`, allow empty-text recommendations from Roomi, and require a
   saved style before entering the active game room.
+- The active video room shows every participant's saved study goal or play
+  style. In game rooms, the pre-round Roomi message is based on the configured
+  `defaultGameKind` instead of the study-session start copy.
 - In the active room, the host can start `hidden_mission`, `poker_bluff`, or
   `copycat_relay` when `room.settings.activityKind` is a game kind. The desktop
   app sends `room.settings.defaultGameKind`, which is chosen during room
@@ -112,7 +115,7 @@ Client events are defined in `packages/shared/src/realtime-events.ts`.
 | `goal:submit` | client to server | Legacy prompt/mission text update. Mirrors `POST /rooms/:roomId/goals` and broadcasts `room:updated`. |
 | `participant:update-status` | client to server | Publish player presence and local face-analysis state. Compatibility statuses include `online`, `focused`, `distracted`, `away`, `break`, and `paused`. |
 | `game:start` | client to server | Host starts a face party game (`hidden_mission`, `poker_bluff`, or `copycat_relay`) for game-mode rooms. The desktop app normally sends the room's `defaultGameKind`. The server creates `currentGame`, assigns any private missions, and broadcasts `game:round-begin`. |
-| `expression:report` | client to server | Submit local expression-derived game results. Hidden mission rounds send a `missionResult`; poker bluff rounds send `signals` so the server can calculate `bluffResult`. |
+| `expression:report` | client to server | Submit local expression-derived game results. Hidden mission rounds send a `missionResult` whenever a mission count advances or completes; poker bluff rounds send `signals` so the server can calculate `bluffResult`. |
 | `bluff:bet` | client to server | Submit a player's guess for an expression bluff target. |
 | `relay:advance` | client to server | Submit one relay mirror step with prompt, player expression signals, and similarity score. |
 | `game:reveal` | client to server | Host reveals the current game and asks the server to finalize scores. |

@@ -219,7 +219,7 @@ export function StudyRoom({
     count: 0,
     previousActive: false
   });
-  const reportedMissionRef = useRef<string | null>(null);
+  const reportedMissionRef = useRef<{ missionId: string; count: number; success: boolean } | null>(null);
   const { callObject, localMedia, participantsByRoomiId, status, restart } =
     useDailyRoom(videoJoin);
   const localDailyParticipant = participantsByRoomiId.get(currentParticipantId);
@@ -293,7 +293,6 @@ export function StudyRoom({
 
   useEffect(() => {
     if (!privateMission || !onSubmitMissionResult) return;
-    if (reportedMissionRef.current === privateMission.id) return;
 
     const result = missionResultFromCounter({
       playerId: currentParticipantId,
@@ -302,9 +301,19 @@ export function StudyRoom({
       target: privateMission.target,
       state: missionState
     });
+    const previousReport = reportedMissionRef.current;
+    const alreadyReported =
+      previousReport?.missionId === privateMission.id &&
+      previousReport.count === result.count &&
+      previousReport.success === result.success;
+    if (alreadyReported) return;
 
-    if (result.success || privateMission.verify === 'no_jaw_open') {
-      reportedMissionRef.current = privateMission.id;
+    if (result.count > 0 || result.success || privateMission.verify === 'no_jaw_open') {
+      reportedMissionRef.current = {
+        missionId: privateMission.id,
+        count: result.count,
+        success: result.success
+      };
       onSubmitMissionResult(result);
     }
   }, [currentParticipantId, missionState, onSubmitMissionResult, privateMission]);
@@ -338,6 +347,8 @@ export function StudyRoom({
     (bet) => bet.participantId === currentParticipantId
   );
   const isStudyMode = room.settings.activityKind === 'study';
+  const goalCardTitle = isStudyMode ? '공부 목표' : '플레이 스타일';
+  const emptyGoalText = isStudyMode ? '등록된 목표가 없어요' : '등록된 플레이 스타일이 없어요';
   const tileCols = Math.min(2, Math.max(1, Math.ceil(Math.sqrt(displayParticipants.length))));
 
   const toggleAudio = () => {
@@ -437,9 +448,39 @@ export function StudyRoom({
                     ? '공개 시간 전까지 미션은 비밀로 지켜줘.'
                     : isStudyMode
                       ? '오늘 목표에 맞춰 차분히 집중해보자.'
-                      : '방장이 게임을 시작하면 표정 라운드가 열려.')}
+                      : gameWaitingMessage(configuredGameKind))}
               </p>
             </div>
+          </section>
+
+          <section className="study-card">
+            <h2 className="study-card__title">{goalCardTitle}</h2>
+            {participants.map((participant) => {
+              const goal = goalByParticipant.get(participant.id);
+              const isMe = participant.id === currentParticipantId;
+              return (
+                <div className="goal goal--stacked" key={participant.id}>
+                  <span className="goal__who">{participant.nickname.slice(0, 2)}</span>
+                  <p className="goal__text">
+                    <strong className="goal__owner">
+                      {participant.nickname}
+                    </strong>
+                    <span className="goal__note">{goal?.rawText ?? emptyGoalText}</span>
+                  </p>
+                  {isStudyMode && isMe && (
+                    <label className="goal__achieved">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(myGoal?.achieved)}
+                        onChange={(event) => onToggleGoalAchieved(event.currentTarget.checked)}
+                      />
+                      <Flag size={14} />
+                      달성
+                    </label>
+                  )}
+                </div>
+              );
+            })}
           </section>
 
           {!isStudyMode && (
@@ -608,20 +649,6 @@ export function StudyRoom({
             </section>
           )}
 
-          {isStudyMode && (
-            <section className="study-card">
-              <h2 className="study-card__title">개인 목표</h2>
-              <label className="goal__achieved">
-                <input
-                  type="checkbox"
-                  checked={Boolean(myGoal?.achieved)}
-                  onChange={(event) => onToggleGoalAchieved(event.currentTarget.checked)}
-                />
-                <Flag size={14} />
-                {myGoal?.rawText ?? '등록된 목표가 없어요'}
-              </label>
-            </section>
-          )}
         </aside>
       </div>
 
@@ -706,6 +733,16 @@ function gameKindLabel(kind: GameSession['kind']) {
   if (kind === 'hidden_mission') return '숨은 표정 미션';
   if (kind === 'poker_bluff') return '포커페이스 블러프';
   return '카피캣 릴레이';
+}
+
+function gameWaitingMessage(kind: GameKind) {
+  if (kind === 'hidden_mission') {
+    return '숨은 표정 미션을 시작하면 각자 비밀 미션을 받고 표정 카운트가 열려.';
+  }
+  if (kind === 'poker_bluff') {
+    return '포커페이스 블러프를 시작하면 누가 흔들릴지 예측하고 보이는 신호로 판정해.';
+  }
+  return '카피캣 릴레이를 시작하면 표정과 제스처를 이어받아 얼마나 비슷한지 겨뤄.';
 }
 
 function tellLabel(tell: 'smile' | 'jaw' | 'brow' | null) {
