@@ -206,7 +206,12 @@ function roomSessionToDraft(session: RoomSession): RoomDraft {
   };
 }
 
-function createLocalGame(room: Room, participants: Participant[], kind: GameKind): GameSession {
+function createLocalGame(
+  room: Room,
+  participants: Participant[],
+  kind: GameKind,
+  previousMissions: HiddenMission[] = []
+): GameSession {
   const timestamp = now();
   const gameId = `game-${Date.now()}`;
   const templates: Array<Omit<HiddenMission, 'id' | 'playerId'>> = [
@@ -249,11 +254,20 @@ function createLocalGame(room: Room, participants: Participant[], kind: GameKind
     })),
     missions:
       kind === 'hidden_mission'
-        ? participants.map((participant, index) => ({
-            id: `mission-${gameId}-${participant.id}-${index}`,
-            playerId: participant.id,
-            ...shuffled[index % shuffled.length]!
-          }))
+        ? participants.map((participant, index) => {
+            const previousPrompt = previousMissions.find(
+              (mission) => mission.playerId === participant.id
+            )?.prompt;
+            let template = shuffled[index % shuffled.length]!;
+            if (template.prompt === previousPrompt) {
+              template = shuffled[(index + 1) % shuffled.length]!;
+            }
+            return {
+              id: `mission-${gameId}-${participant.id}-${index}`,
+              playerId: participant.id,
+              ...template
+            };
+          })
         : [],
     missionResults: [],
     bluffBets: kind === 'poker_bluff' ? [] : undefined,
@@ -655,7 +669,12 @@ export function App() {
       );
       if (participant?.status !== 'online') return current;
 
-      const freshGame = createLocalGame(current.room, current.participants, 'hidden_mission');
+      const freshGame = createLocalGame(
+        current.room,
+        current.participants,
+        'hidden_mission',
+        current.currentGame.missions
+      );
       const replacement = freshGame.missions?.find(
         (mission) => mission.playerId === current.currentParticipantId
       );
@@ -878,7 +897,7 @@ export function App() {
       return appendLocalRoomiMessage(
         next,
         'round_prompt',
-        `${chatMessage.nickname} 말 좋다. 그 흐름으로 조금만 더 이어가보자.`
+        `${chatMessage.nickname}, 그 얘기에서 제일 먼저 떠오른 장면이 뭔지 하나만 더 말해줘.`
       );
     });
   };
@@ -1334,7 +1353,7 @@ function finishLocalGameRound(game: GameSession, forceReveal = false): GameSessi
 }
 
 function startNextLocalRound(room: Room, participants: Participant[], game: GameSession): GameSession {
-  const freshGame = createLocalGame(room, participants, game.kind);
+  const freshGame = createLocalGame(room, participants, game.kind, game.missions);
   const timestamp = now();
   return {
     ...game,

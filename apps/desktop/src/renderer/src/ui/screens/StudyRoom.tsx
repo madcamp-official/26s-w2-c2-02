@@ -64,6 +64,10 @@ type DistractionCard = {
   answer: string;
 };
 
+type KeyedMissionCounterState = MissionCounterState & {
+  missionKey: string;
+};
+
 interface StudyRoomProps extends ScreenProps {
   currentParticipantId: string;
   isHost: boolean;
@@ -299,7 +303,8 @@ export function StudyRoom({
   const [chatDraft, setChatDraft] = useState('');
   const [resultsOpen, setResultsOpen] = useState(false);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [missionState, setMissionState] = useState<MissionCounterState>({
+  const [missionState, setMissionState] = useState<KeyedMissionCounterState>({
+    missionKey: '',
     count: 0,
     previousActive: false
   });
@@ -327,6 +332,7 @@ export function StudyRoom({
     },
     settings: studyRoomRuleSettings
   });
+  const missionKey = currentGame && privateMission ? `${currentGame.round.id}:${privateMission.id}` : '';
 
   useEffect(() => {
     const interval = window.setInterval(() => setTimestamp(Date.now()), 1_000);
@@ -368,9 +374,9 @@ export function StudyRoom({
   }, [focusDetection.focusSnapshot.label, focusDetection.status, onUpdatePresence]);
 
   useEffect(() => {
-    setMissionState({ count: 0, previousActive: false });
+    setMissionState({ missionKey, count: 0, previousActive: false });
     reportedMissionRef.current = null;
-  }, [currentGame?.round.id, privateMission?.id]);
+  }, [missionKey]);
 
   useEffect(() => {
     const shouldShowDistraction =
@@ -408,18 +414,24 @@ export function StudyRoom({
       distractionLocksMission
     ) return;
 
-    setMissionState((current) =>
-      updateHiddenMissionCounter(
-        current,
+    setMissionState((current) => {
+      const currentState =
+        current.missionKey === missionKey
+          ? current
+          : { missionKey, count: 0, previousActive: false };
+      const nextState = updateHiddenMissionCounter(
+        currentState,
         privateMission.verify,
         privateMission.target,
         focusDetection.expressionSignals!
-      )
-    );
-  }, [currentGame?.status, distractionLocksMission, focusDetection.expressionSignals, privateMission]);
+      );
+      return { ...nextState, missionKey };
+    });
+  }, [currentGame?.status, distractionLocksMission, focusDetection.expressionSignals, missionKey, privateMission]);
 
   useEffect(() => {
     if (!privateMission || currentGame?.status !== 'in_round' || !onSubmitMissionResult) return;
+    if (missionState.missionKey !== missionKey) return;
 
     const result = missionResultFromCounter({
       playerId: currentParticipantId,

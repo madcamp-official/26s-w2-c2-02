@@ -400,7 +400,7 @@ describe('RoomiOrchestrator face party games', () => {
     const orchestrator = new RoomiOrchestrator({
       generateText: async (prompt) => {
         prompts.push(prompt);
-        return '그 얘기 재밌다. 주제는 이어가고 미션은 계속 숨겨보자.';
+        return '편의점 계산 실수라면, 뒤늦게 알아챈 순간이 제일 민망했겠다.';
       }
     });
 
@@ -415,9 +415,10 @@ describe('RoomiOrchestrator face party games', () => {
       tone: 'playful'
     });
 
-    expect(reaction).toContain('주제');
+    expect(reaction).toContain('계산 실수');
     expect(prompts[0]).toContain('최근 채팅');
     expect(prompts[0]).toContain('채훈: 오늘 제일 애매했던 일부터 말해볼까?');
     expect(prompts[0]).toContain('전체 대화 로그를 요약하지 말고');
+    expect(prompts[0]).toContain('새 채팅을 그대로 반복하거나 바꿔 말하지 마');
   });
 });

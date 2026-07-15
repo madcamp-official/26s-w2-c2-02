@@ -442,9 +442,9 @@ export class RoomiOrchestrator {
 
   private templateChatReactionMessage(input: FacePartyChatReactionInput): string {
     if (input.game === 'hidden_mission') {
-      return `${input.latestNickname} 말 좋다. 그 주제로 조금만 더 이어가면서, 미션은 계속 자연스럽게 숨겨보자.`;
+      return `${input.latestNickname}, 그럼 그때 제일 당황했던 포인트가 뭐였는지 하나만 더 말해줘.`;
     }
-    return `${input.latestNickname} 말에 맞춰서 흐름을 이어가보자. 보이는 리액션도 같이 살펴볼게.`;
+    return `${input.latestNickname}, 그 얘기에서 가장 먼저 떠오른 장면이 뭔지 하나만 더 말해줘.`;
   }
 
   private templateGameSummaryMessage(input: FacePartyGameMessageInput): string {
@@ -548,6 +548,8 @@ export class RoomiOrchestrator {
       `참가자 플레이 스타일: ${(input.playStyles ?? []).join(', ') || '제공 없음'}`,
       `톤: ${input.tone ?? '장난스럽고 가벼움'}`,
       '규칙: 반드시 한국어로만 출력. 전체 대화 로그를 요약하지 말고 최근 채팅 흐름에만 반응해. 참가자 이름과 직접 쓴 말만 사용하고 감정, 거짓말, 의도, 호감, 건강, 정체성 특성을 추론하지 마.',
+      '새 채팅을 그대로 반복하거나 바꿔 말하지 마. 질문이면 짧게 답하고, 진술이면 그 내용에 관련된 구체적인 후속 질문이나 코멘트를 해.',
+      '답변은 새 채팅보다 새 정보가 많아야 해. "그 얘기", "그 주제", "말 좋다"처럼 내용 없는 진행 멘트만 쓰지 마.',
       input.game === 'hidden_mission'
         ? '숨은 표정 미션에서는 대화가 끊기지 않게 주제를 살짝 이어주고, 미션을 직접 공개하거나 카운트를 언급하지 마.'
         : '',

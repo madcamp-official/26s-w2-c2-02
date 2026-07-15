@@ -554,6 +554,93 @@ describe('StudyRoom hidden mission progress', () => {
     );
   });
 
+  it('does not submit a fresh round mission with the previous round counter', async () => {
+    const participant = createParticipant('participant-host', 'Host');
+    const room = createRoom('hidden_mission', 'hidden_mission');
+    const firstMission: HiddenMission = {
+      id: 'mission-1',
+      playerId: participant.id,
+      prompt: 'Smile once',
+      verify: 'smile_count',
+      target: 1
+    };
+    const secondMission: HiddenMission = {
+      ...firstMission,
+      id: 'mission-2',
+      prompt: 'Wink once',
+      verify: 'wink_count'
+    };
+    const currentGame: GameSession = {
+      id: 'game-1',
+      roomId: room.id,
+      kind: 'hidden_mission',
+      status: 'in_round',
+      round: {
+        id: 'round-1',
+        gameId: 'game-1',
+        index: 1,
+        status: 'in_round',
+        startedAt: '2026-07-15T00:00:00.000Z',
+        endsAt: '2026-07-15T00:02:00.000Z'
+      },
+      totalRounds: room.settings.roundCount,
+      completedRounds: [],
+      nextRoundReadyParticipantIds: [],
+      scores: [{ participantId: participant.id, points: 0 }],
+      missions: [firstMission],
+      missionResults: [],
+      createdAt: '2026-07-15T00:00:00.000Z',
+      updatedAt: '2026-07-15T00:00:00.000Z'
+    };
+    const props = {
+      currentParticipantId: participant.id,
+      isHost: true,
+      onEndSession: vi.fn(),
+      onLeaveRoom: vi.fn(),
+      onToggleGoalAchieved: vi.fn(),
+      onUpdatePresence: vi.fn(),
+      onStartBreak: vi.fn(),
+      onStartGame: vi.fn(),
+      onSubmitMissionResult: vi.fn(),
+      participants: [participant],
+      goals: [],
+      roomiMessages: [],
+      chatMessages: [],
+      room,
+      currentGame,
+      privateMission: firstMission,
+      go: vi.fn()
+    };
+
+    const { rerender } = render(<StudyRoom {...props} />);
+    focusDetectionMock.snapshot.expressionSignals = expressionSignal({ timestamp: 1_000, smile: 0.8 });
+    rerender(<StudyRoom {...props} />);
+    await waitFor(() =>
+      expect(props.onSubmitMissionResult).toHaveBeenCalledWith({
+        playerId: participant.id,
+        missionId: firstMission.id,
+        count: 1,
+        success: true
+      })
+    );
+
+    focusDetectionMock.snapshot.expressionSignals = null;
+    rerender(
+      <StudyRoom
+        {...props}
+        currentGame={{
+          ...currentGame,
+          round: { ...currentGame.round, id: 'round-2', index: 2 },
+          missions: [secondMission],
+          missionResults: []
+        }}
+        privateMission={secondMission}
+      />
+    );
+
+    await waitFor(() => expect(props.onSubmitMissionResult).toHaveBeenCalledTimes(1));
+  });
+
   it('shows every participant goal in study mode', () => {
     const host = createParticipant('participant-host', 'Host');
     const member = { ...createParticipant('participant-member', 'Member'), role: 'member' as const };
