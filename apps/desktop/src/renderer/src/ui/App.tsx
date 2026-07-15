@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import {
   createInviteCode,
   normalizeInviteCode,
+  type BluffBet,
+  type ExpressionSignals,
+  type GameKind,
   type GameSession,
   type Goal,
   type HiddenMission,
@@ -30,6 +33,7 @@ import { BreakReturn } from './screens/BreakReturn';
 import { Retrospective } from './screens/Retrospective';
 import type { ScreenId } from './screens/types';
 import {
+  advanceRelay,
   createRoomSession,
   createRoomSocket,
   endBreak,
@@ -37,6 +41,7 @@ import {
   extendBreak,
   joinRoomSession,
   leaveRoom,
+  placeBluffBet,
   refineGoal,
   reportExpression,
   revealGame,
@@ -189,7 +194,7 @@ function roomSessionToDraft(session: RoomSession): RoomDraft {
   };
 }
 
-function createLocalHiddenMissionGame(room: Room, participants: Participant[]): GameSession {
+function createLocalGame(room: Room, participants: Participant[], kind: GameKind): GameSession {
   const timestamp = now();
   const gameId = `game-${Date.now()}`;
   const templates: Array<Omit<HiddenMission, 'id' | 'playerId'>> = [
@@ -202,7 +207,7 @@ function createLocalHiddenMissionGame(room: Room, participants: Participant[]): 
   return {
     id: gameId,
     roomId: room.id,
-    kind: 'hidden_mission',
+    kind,
     status: 'in_round',
     round: {
       id: `round-${Date.now()}`,
@@ -216,12 +221,17 @@ function createLocalHiddenMissionGame(room: Room, participants: Participant[]): 
       participantId: participant.id,
       points: 0
     })),
-    missions: participants.map((participant, index) => ({
-      id: `mission-${participant.id}`,
-      playerId: participant.id,
-      ...templates[index % templates.length]!
-    })),
+    missions:
+      kind === 'hidden_mission'
+        ? participants.map((participant, index) => ({
+            id: `mission-${participant.id}`,
+            playerId: participant.id,
+            ...templates[index % templates.length]!
+          }))
+        : [],
     missionResults: [],
+    bluffBets: kind === 'poker_bluff' ? [] : undefined,
+    relayLinks: kind === 'copycat_relay' ? [] : undefined,
     createdAt: timestamp,
     updatedAt: timestamp
   };
@@ -277,10 +287,7 @@ export function App() {
                 roomiMessages: snapshot.roomiMessages,
                 currentSession: snapshot.currentSession,
                 currentGame: snapshot.currentGame,
-                privateMission:
-                  snapshot.currentGame?.missions?.find(
-                    (mission) => mission.playerId === current.currentParticipantId
-                  ) ?? current.privateMission
+                privateMission: resolvePrivateMission(current, snapshot.currentGame)
               }
             : current
         );
@@ -294,7 +301,13 @@ export function App() {
       },
       (game) => {
         setRoomDraft((current) =>
-          current && current.room.id === game.roomId ? { ...current, currentGame: game } : current
+          current && current.room.id === game.roomId
+            ? {
+                ...current,
+                currentGame: game,
+                privateMission: resolvePrivateMission(current, game)
+              }
+            : current
         );
       },
       (mission) => {
@@ -320,7 +333,13 @@ export function App() {
       },
       (game) => {
         setRoomDraft((current) =>
-          current && current.room.id === game.roomId ? { ...current, currentGame: game } : current
+          current && current.room.id === game.roomId
+            ? {
+                ...current,
+                currentGame: game,
+                privateMission: resolvePrivateMission(current, game)
+              }
+            : current
         );
       },
       (message) => console.warn(`Room realtime error: ${message}`)
@@ -435,21 +454,21 @@ export function App() {
       source: 'template' as const
     }));
 
-  const startCurrentGame = () => {
+  const startCurrentGame = (kind: GameKind = 'hidden_mission') => {
     if (!roomDraft) return;
 
     if (roomDraft.realtime === 'server') {
       startGame(socketRef.current, {
         roomId: roomDraft.room.id,
         participantId: roomDraft.currentParticipantId,
-        kind: 'hidden_mission'
+        kind
       });
       return;
     }
 
     setRoomDraft((current) => {
       if (!current) return current;
-      const game = createLocalHiddenMissionGame(current.room, current.participants);
+      const game = createLocalGame(current.room, current.participants, kind);
       return {
         ...current,
         room: { ...current.room, status: 'studying' },
@@ -487,12 +506,10 @@ export function App() {
             }
           : current
       );
-      startCurrentGame();
       go('study');
       return;
     }
 
-    const game = createLocalHiddenMissionGame(roomDraft.room, roomDraft.participants);
     setRoomDraft((current) =>
       current
         ? {
@@ -509,10 +526,8 @@ export function App() {
               plannedMinutes: current.room.settings.sessionMinutes,
               mode: 'study'
             },
-            currentGame: game,
-            privateMission: game.missions?.find(
-              (mission) => mission.playerId === current.currentParticipantId
-            )
+            currentGame: undefined,
+            privateMission: undefined
           }
         : current
     );
@@ -687,6 +702,136 @@ export function App() {
     );
   };
 
+  const submitCurrentBluffBet = (targetId: string, predictsCrack: boolean) => {
+    if (!roomDraft?.currentGame || roomDraft.currentGame.kind !== 'poker_bluff') return;
+    const bet: BluffBet = {
+      participantId: roomDraft.currentParticipantId,
+      targetId,
+      predictsCrack
+    };
+
+    if (roomDraft.realtime === 'server') {
+      placeBluffBet(socketRef.current, {
+        roomId: roomDraft.room.id,
+        participantId: roomDraft.currentParticipantId,
+        gameId: roomDraft.currentGame.id,
+        targetId,
+        predictsCrack
+      });
+      return;
+    }
+
+    setRoomDraft((current) =>
+      current?.currentGame?.kind === 'poker_bluff'
+        ? {
+            ...current,
+            currentGame: {
+              ...current.currentGame,
+              status: 'guessing',
+              round: { ...current.currentGame.round, status: 'guessing' },
+              bluffBets: [
+                ...(current.currentGame.bluffBets ?? []).filter(
+                  (item) => item.participantId !== bet.participantId
+                ),
+                bet
+              ],
+              updatedAt: now()
+            }
+          }
+        : current
+    );
+  };
+
+  const submitCurrentBluffSignals = (signals: ExpressionSignals) => {
+    if (!roomDraft?.currentGame || roomDraft.currentGame.kind !== 'poker_bluff') return;
+
+    if (roomDraft.realtime === 'server') {
+      reportExpression(socketRef.current, {
+        roomId: roomDraft.room.id,
+        participantId: roomDraft.currentParticipantId,
+        gameId: roomDraft.currentGame.id,
+        roundId: roomDraft.currentGame.round.id,
+        signals
+      });
+      return;
+    }
+
+    setRoomDraft((current) => {
+      if (!current?.currentGame || current.currentGame.kind !== 'poker_bluff') return current;
+      const cracked =
+        signals.smile >= 0.58 || signals.jawOpen >= 0.45 || signals.browRaise >= 0.5;
+      const tell =
+        signals.smile >= 0.58
+          ? 'smile'
+          : signals.jawOpen >= 0.45
+            ? 'jaw'
+            : signals.browRaise >= 0.5
+              ? 'brow'
+              : null;
+      const targetId = current.currentParticipantId;
+      const scores = current.currentGame.scores.map((score) => {
+        const matchedBet = current.currentGame?.bluffBets?.find(
+          (bet) => bet.participantId === score.participantId
+        );
+        const betPoints = matchedBet && matchedBet.predictsCrack === cracked ? 4 : 0;
+        const targetPoints = score.participantId === targetId && !cracked ? 8 : 0;
+        return { ...score, points: score.points + betPoints + targetPoints };
+      });
+
+      return {
+        ...current,
+        currentGame: {
+          ...current.currentGame,
+          bluffResult: {
+            targetId,
+            cracked,
+            tell,
+            heldMs: Math.max(0, Date.now() - signals.timestamp)
+          },
+          scores,
+          updatedAt: now()
+        }
+      };
+    });
+  };
+
+  const advanceCurrentRelay = (toId: string, similarity: number) => {
+    if (!roomDraft?.currentGame || roomDraft.currentGame.kind !== 'copycat_relay') return;
+    const link = {
+      fromId: roomDraft.currentParticipantId,
+      toId,
+      similarity: Math.max(0, Math.min(1, similarity))
+    };
+
+    if (roomDraft.realtime === 'server') {
+      advanceRelay(socketRef.current, {
+        roomId: roomDraft.room.id,
+        participantId: roomDraft.currentParticipantId,
+        gameId: roomDraft.currentGame.id,
+        link
+      });
+      return;
+    }
+
+    setRoomDraft((current) =>
+      current?.currentGame?.kind === 'copycat_relay'
+        ? {
+            ...current,
+            currentGame: {
+              ...current.currentGame,
+              relayLinks: [...(current.currentGame.relayLinks ?? []), link],
+              scores: current.currentGame.scores.map((score) =>
+                score.participantId === toId
+                  ? { ...score, points: score.points + Math.round(link.similarity * 10) }
+                  : score
+              ),
+              updatedAt: now()
+            }
+          }
+        : current
+    );
+  };
+
   const endCurrentSession = () => {
     if (!roomDraft) {
       go('retrospective');
@@ -838,6 +983,9 @@ export function App() {
             onStartBreak={startCurrentBreak}
             onStartGame={startCurrentGame}
             onSubmitMissionResult={submitCurrentMissionResult}
+            onSubmitBluffBet={submitCurrentBluffBet}
+            onSubmitBluffSignals={submitCurrentBluffSignals}
+            onAdvanceRelay={advanceCurrentRelay}
             go={go}
           />
         )}
@@ -881,4 +1029,17 @@ function snapshotToDraftPatch(snapshot: {
     currentSession: snapshot.currentSession,
     currentGame: snapshot.currentGame
   };
+}
+
+function resolvePrivateMission(current: RoomDraft, game: GameSession | undefined) {
+  const assignedMission = game?.missions?.find(
+    (mission) => mission.playerId === current.currentParticipantId
+  );
+
+  if (assignedMission) return assignedMission;
+  if (game?.kind === 'hidden_mission' && current.currentGame?.id === game.id) {
+    return current.privateMission;
+  }
+
+  return undefined;
 }

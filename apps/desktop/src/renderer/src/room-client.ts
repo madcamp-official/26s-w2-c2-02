@@ -12,6 +12,8 @@ import type {
   MissionResult,
   ParticipantReadyInput,
   ExpressionReportInput,
+  BluffBetInput,
+  RelayAdvanceInput,
   UpdateParticipantStatusInput,
   RoomiMessage,
   RoomSubscriptionInput,
@@ -146,6 +148,20 @@ export function reportExpression(
   input: ExpressionReportInput
 ) {
   socket?.emit(realtimeEvents.client.reportExpression, input);
+}
+
+export function placeBluffBet(
+  socket: Socket<ServerToClientEvents, ClientToServerEvents> | null,
+  input: BluffBetInput
+) {
+  socket?.emit(realtimeEvents.client.placeBluffBet, input);
+}
+
+export function advanceRelay(
+  socket: Socket<ServerToClientEvents, ClientToServerEvents> | null,
+  input: RelayAdvanceInput
+) {
+  socket?.emit(realtimeEvents.client.advanceRelay, input);
 }
 
 export function revealGame(

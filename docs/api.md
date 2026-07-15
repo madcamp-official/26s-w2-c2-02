@@ -56,6 +56,10 @@ and rolls back the participant instead of returning a local-only video session.
 - The lobby uses `room.status` as its route contract: `waiting` shows invite and
   host start controls, `studying` is the active game round, `break` is an
   intermission, and `ended` opens the results/recap flow.
+- In the active room, the host can start `hidden_mission`, `poker_bluff`, or
+  `copycat_relay`. The renderer exposes hidden mission progress, bluff
+  bet/tell-check controls, and relay target/similarity controls through the
+  shared Socket.IO events below.
 - The server owns the round timer through `currentSession.startedAt`,
   `currentSession.plannedMinutes`, and optional `breakEndsAt`. Clients calculate
   remaining time from server timestamps, so late joiners see the same clock.

@@ -13,6 +13,8 @@ import {
   VideoOff
 } from 'lucide-react';
 import {
+  type ExpressionSignals,
+  type GameKind,
   type GameSession,
   type Goal,
   type HiddenMission,
@@ -53,8 +55,11 @@ interface StudyRoomProps extends ScreenProps {
   onToggleGoalAchieved: (achieved: boolean) => void;
   onUpdatePresence: (status: ParticipantStatus) => void;
   onStartBreak: () => void | Promise<void>;
-  onStartGame?: () => void;
+  onStartGame?: (kind: GameKind) => void;
   onSubmitMissionResult?: (result: MissionResult) => void;
+  onSubmitBluffBet?: (targetId: string, predictsCrack: boolean) => void;
+  onSubmitBluffSignals?: (signals: ExpressionSignals) => void;
+  onAdvanceRelay?: (toId: string, similarity: number) => void;
   participants: Participant[];
   goals: Goal[];
   roomiMessages: RoomiMessage[];
@@ -180,6 +185,9 @@ export function StudyRoom({
   onStartBreak,
   onStartGame,
   onSubmitMissionResult,
+  onSubmitBluffBet,
+  onSubmitBluffSignals,
+  onAdvanceRelay,
   participants,
   goals,
   roomiMessages,
@@ -194,6 +202,10 @@ export function StudyRoom({
   const [cameraOn, setCameraOn] = useState(true);
   const [hostMenuOpen, setHostMenuOpen] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
+  const [selectedGameKind, setSelectedGameKind] = useState<GameKind>('hidden_mission');
+  const [bluffTargetId, setBluffTargetId] = useState('');
+  const [relayTargetId, setRelayTargetId] = useState('');
+  const [relaySimilarity, setRelaySimilarity] = useState(0.75);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [missionState, setMissionState] = useState<MissionCounterState>({
     count: 0,
@@ -307,6 +319,15 @@ export function StudyRoom({
   const goalByParticipant = new Map(goals.map((goal) => [goal.participantId, goal]));
   const myGoal = goalByParticipant.get(currentParticipantId);
   const myScore = currentGame?.scores.find((score) => score.participantId === currentParticipantId);
+  const otherParticipants = participants.filter((participant) => participant.id !== currentParticipantId);
+  const selectableParticipants = otherParticipants.length > 0 ? otherParticipants : participants;
+  const activeBluffTargetId =
+    bluffTargetId || selectableParticipants[0]?.id || currentParticipantId;
+  const activeRelayTargetId =
+    relayTargetId || selectableParticipants[0]?.id || currentParticipantId;
+  const myBluffBet = currentGame?.bluffBets?.find(
+    (bet) => bet.participantId === currentParticipantId
+  );
   const tileCols = Math.min(2, Math.max(1, Math.ceil(Math.sqrt(displayParticipants.length))));
 
   const toggleAudio = () => {
@@ -402,27 +423,151 @@ export function StudyRoom({
           </section>
 
           <section className="study-card">
-            <h2 className="study-card__title">My secret mission</h2>
-            {privateMission ? (
-              <div className="goal">
-                <span className="goal__who">
-                  <EyeOff size={16} />
-                </span>
-                <p className="goal__text">
-                  {privateMission.prompt}
-                  <br />
-                  Count: {missionState.count}/{privateMission.target}
-                </p>
-              </div>
-            ) : (
-              <p className="study-focus__meta">
-                {isHost ? 'Start a round to assign private missions.' : 'Waiting for the host.'}
-              </p>
-            )}
+            <h2 className="study-card__title">Game controls</h2>
             {!currentGame && isHost && (
-              <button type="button" className="btn btn--primary btn--block" onClick={onStartGame}>
-                <Play size={16} /> Start hidden mission
-              </button>
+              <>
+                <div className="goal">
+                  <span className="goal__who">
+                    <Play size={16} />
+                  </span>
+                  <select
+                    className="goal__text"
+                    aria-label="Game mode"
+                    value={selectedGameKind}
+                    onChange={(event) => setSelectedGameKind(event.currentTarget.value as GameKind)}
+                  >
+                    <option value="hidden_mission">Hidden mission</option>
+                    <option value="poker_bluff">Poker-face bluff</option>
+                    <option value="copycat_relay">Copycat relay</option>
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn--primary btn--block"
+                  onClick={() => onStartGame?.(selectedGameKind)}
+                >
+                  <Play size={16} /> Start {gameKindLabel(selectedGameKind)}
+                </button>
+              </>
+            )}
+            {!currentGame && !isHost && (
+              <p className="study-focus__meta">Waiting for the host.</p>
+            )}
+            {currentGame?.kind === 'hidden_mission' && (
+              privateMission ? (
+                <div className="goal">
+                  <span className="goal__who">
+                    <EyeOff size={16} />
+                  </span>
+                  <p className="goal__text">
+                    {privateMission.prompt}
+                    <br />
+                    Count: {missionState.count}/{privateMission.target}
+                  </p>
+                </div>
+              ) : (
+                <p className="study-focus__meta">Waiting for a private mission.</p>
+              )
+            )}
+            {currentGame?.kind === 'poker_bluff' && (
+              <>
+                <div className="goal">
+                  <span className="goal__who">Bet</span>
+                  <select
+                    className="goal__text"
+                    aria-label="Bluff target"
+                    value={activeBluffTargetId}
+                    onChange={(event) => setBluffTargetId(event.currentTarget.value)}
+                  >
+                    {selectableParticipants.map((participant) => (
+                      <option value={participant.id} key={participant.id}>
+                        {participant.nickname}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="session-end-modal__actions">
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={() => onSubmitBluffBet?.(activeBluffTargetId, false)}
+                  >
+                    Will hold
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--primary"
+                    onClick={() => onSubmitBluffBet?.(activeBluffTargetId, true)}
+                  >
+                    Will crack
+                  </button>
+                </div>
+                {myBluffBet && (
+                  <p className="study-focus__meta">
+                    Your bet: {participantName(participants, myBluffBet.targetId)}{' '}
+                    {myBluffBet.predictsCrack ? 'cracks' : 'holds'}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  className="btn btn--primary btn--block"
+                  onClick={() =>
+                    onSubmitBluffSignals?.(
+                      focusDetection.expressionSignals ?? emptyExpressionSignals()
+                    )
+                  }
+                >
+                  Submit tell check
+                </button>
+                {currentGame.bluffResult && (
+                  <p className="study-focus__meta">
+                    Result: {participantName(participants, currentGame.bluffResult.targetId)}{' '}
+                    {currentGame.bluffResult.cracked ? `cracked on ${currentGame.bluffResult.tell}` : 'held'}
+                  </p>
+                )}
+              </>
+            )}
+            {currentGame?.kind === 'copycat_relay' && (
+              <>
+                <div className="goal">
+                  <span className="goal__who">To</span>
+                  <select
+                    className="goal__text"
+                    aria-label="Relay target"
+                    value={activeRelayTargetId}
+                    onChange={(event) => setRelayTargetId(event.currentTarget.value)}
+                  >
+                    {selectableParticipants.map((participant) => (
+                      <option value={participant.id} key={participant.id}>
+                        {participant.nickname}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <label className="goal__achieved">
+                  Similarity {Math.round(relaySimilarity * 100)}%
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={Math.round(relaySimilarity * 100)}
+                    onChange={(event) => setRelaySimilarity(Number(event.currentTarget.value) / 100)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="btn btn--primary btn--block"
+                  onClick={() => onAdvanceRelay?.(activeRelayTargetId, relaySimilarity)}
+                >
+                  Advance relay
+                </button>
+                {(currentGame.relayLinks ?? []).map((link, index) => (
+                  <p className="study-focus__meta" key={`${link.fromId}-${link.toId}-${index}`}>
+                    {participantName(participants, link.fromId)} to{' '}
+                    {participantName(participants, link.toId)} - {Math.round(link.similarity * 100)}%
+                  </p>
+                ))}
+              </>
             )}
           </section>
 
@@ -532,6 +677,26 @@ function gameKindLabel(kind: GameSession['kind']) {
   if (kind === 'hidden_mission') return 'Hidden mission';
   if (kind === 'poker_bluff') return 'Poker-face bluff';
   return 'Copycat relay';
+}
+
+function participantName(participants: Participant[], participantId: string) {
+  return participants.find((participant) => participant.id === participantId)?.nickname ?? 'Player';
+}
+
+function emptyExpressionSignals(): ExpressionSignals {
+  return {
+    timestamp: Date.now(),
+    smile: 0,
+    jawOpen: 0,
+    winkLeft: false,
+    winkRight: false,
+    browRaise: 0,
+    cheekPuff: 0,
+    mouthPucker: 0,
+    headYaw: 0,
+    headPitch: 0,
+    headRoll: 0
+  };
 }
 
 function getAudioTracks(stream: MediaStream | null): MediaStreamTrack[] {

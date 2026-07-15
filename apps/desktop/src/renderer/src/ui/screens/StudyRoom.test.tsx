@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   ExpressionSignals,
@@ -182,6 +182,25 @@ describe('DailyParticipantMedia', () => {
 });
 
 describe('StudyRoom hidden mission progress', () => {
+  it('lets the host choose another game mode before starting a round', () => {
+    const participant = createParticipant('participant-host', 'Host');
+    const onStartGame = vi.fn();
+
+    render(
+      <StudyRoom
+        {...baseStudyRoomProps(participant)}
+        onStartGame={onStartGame}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText('Game mode'), {
+      target: { value: 'poker_bluff' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Start Poker-face bluff' }));
+
+    expect(onStartGame).toHaveBeenCalledWith('poker_bluff');
+  });
+
   it('increments the secret mission count when expression signals cross the mission threshold', async () => {
     const participant = createParticipant('participant-host', 'Host');
     const room = createRoom();
@@ -251,7 +270,74 @@ describe('StudyRoom hidden mission progress', () => {
       success: true
     });
   });
+
+  it('submits poker bluff bets and expression checks from the game controls', () => {
+    const host = createParticipant('participant-host', 'Host');
+    const member = { ...createParticipant('participant-member', 'Member'), role: 'member' as const };
+    const onSubmitBluffBet = vi.fn();
+    const onSubmitBluffSignals = vi.fn();
+    const currentGame = createGame(createRoom(), [host, member], 'poker_bluff');
+    focusDetectionMock.snapshot.expressionSignals = expressionSignal({ smile: 0.9 });
+
+    render(
+      <StudyRoom
+        {...baseStudyRoomProps(host)}
+        currentGame={currentGame}
+        participants={[host, member]}
+        onSubmitBluffBet={onSubmitBluffBet}
+        onSubmitBluffSignals={onSubmitBluffSignals}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Will crack' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit tell check' }));
+
+    expect(onSubmitBluffBet).toHaveBeenCalledWith(member.id, true);
+    expect(onSubmitBluffSignals).toHaveBeenCalledWith(
+      expect.objectContaining({ smile: 0.9 })
+    );
+  });
+
+  it('submits copycat relay links with the selected target and similarity', () => {
+    const host = createParticipant('participant-host', 'Host');
+    const member = { ...createParticipant('participant-member', 'Member'), role: 'member' as const };
+    const onAdvanceRelay = vi.fn();
+    const currentGame = createGame(createRoom(), [host, member], 'copycat_relay');
+
+    render(
+      <StudyRoom
+        {...baseStudyRoomProps(host)}
+        currentGame={currentGame}
+        participants={[host, member]}
+        onAdvanceRelay={onAdvanceRelay}
+      />
+    );
+
+    fireEvent.change(screen.getByRole('slider'), { target: { value: '82' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Advance relay' }));
+
+    expect(onAdvanceRelay).toHaveBeenCalledWith(member.id, 0.82);
+  });
 });
+
+function baseStudyRoomProps(participant: Participant) {
+  return {
+    currentParticipantId: participant.id,
+    isHost: true,
+    onEndSession: vi.fn(),
+    onLeaveRoom: vi.fn(),
+    onToggleGoalAchieved: vi.fn(),
+    onUpdatePresence: vi.fn(),
+    onStartBreak: vi.fn(),
+    onStartGame: vi.fn(),
+    onSubmitMissionResult: vi.fn(),
+    participants: [participant],
+    goals: [],
+    roomiMessages: [],
+    room: createRoom(),
+    go: vi.fn()
+  };
+}
 
 function createRoom(): Room {
   return {
@@ -288,6 +374,30 @@ function createParticipant(id: string, nickname: string): Participant {
     scoreVisible: true,
     joinedAt: '2026-07-15T00:00:00.000Z',
     lastSeenAt: '2026-07-15T00:00:00.000Z'
+  };
+}
+
+function createGame(room: Room, participants: Participant[], kind: GameSession['kind']): GameSession {
+  return {
+    id: `game-${kind}`,
+    roomId: room.id,
+    kind,
+    status: 'in_round',
+    round: {
+      id: `round-${kind}`,
+      gameId: `game-${kind}`,
+      index: 1,
+      status: 'in_round',
+      startedAt: '2026-07-15T00:00:00.000Z',
+      endsAt: '2026-07-15T00:02:00.000Z'
+    },
+    scores: participants.map((participant) => ({ participantId: participant.id, points: 0 })),
+    missions: [],
+    missionResults: [],
+    bluffBets: kind === 'poker_bluff' ? [] : undefined,
+    relayLinks: kind === 'copycat_relay' ? [] : undefined,
+    createdAt: '2026-07-15T00:00:00.000Z',
+    updatedAt: '2026-07-15T00:00:00.000Z'
   };
 }
 
