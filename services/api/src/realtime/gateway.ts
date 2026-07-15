@@ -4,6 +4,7 @@ import {
   type GameSession,
   type HiddenMissionVerify,
   type MissionResult,
+  type ParticipantStatus,
   type RoomSnapshot,
   type ClientToServerEvents,
   type ServerToClientEvents
@@ -15,10 +16,21 @@ import type { RoomService } from '../rooms/room-service';
 
 const FOCUS_RECOVERY_DELAY_MS = 60_000;
 const FOCUS_RECOVERY_COOLDOWN_MS = 5 * 60_000;
+// One minute of unbroken distraction is the README's trigger for a private check-in.
+// Recovering to focused clears the pending timer, so this only fires on a sustained
+// run. The cooldown is longer than the away one because distraction recurs far more
+// often over a session and repeated nudges would just be nagging.
+const DISTRACTED_RECOVERY_DELAY_MS = 60_000;
+const DISTRACTED_RECOVERY_COOLDOWN_MS = 10 * 60_000;
+
+/** Participant statuses Roomi will privately check in about. */
+type RecoveryStatus = 'away' | 'distracted';
 
 export type RealtimeGatewayOptions = {
   focusRecoveryDelayMs?: number;
   focusRecoveryCooldownMs?: number;
+  distractedRecoveryDelayMs?: number;
+  distractedRecoveryCooldownMs?: number;
 };
 
 export function registerRealtimeGateway(
@@ -75,11 +87,23 @@ export function registerRealtimeGateway(
   });
 
   const lastFocusRecoveryAt = new Map<string, number>();
-  const awayTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const recoveryTimers = new Map<
+    string,
+    { status: RecoveryStatus; timer: ReturnType<typeof setTimeout> }
+  >();
   const nextRoundTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const focusRecoveryDelayMs = options.focusRecoveryDelayMs ?? FOCUS_RECOVERY_DELAY_MS;
   const focusRecoveryCooldownMs =
     options.focusRecoveryCooldownMs ?? FOCUS_RECOVERY_COOLDOWN_MS;
+  const distractedRecoveryDelayMs =
+    options.distractedRecoveryDelayMs ?? DISTRACTED_RECOVERY_DELAY_MS;
+  const distractedRecoveryCooldownMs =
+    options.distractedRecoveryCooldownMs ?? DISTRACTED_RECOVERY_COOLDOWN_MS;
+
+  const recoveryDelayFor = (status: RecoveryStatus) =>
+    status === 'away' ? focusRecoveryDelayMs : distractedRecoveryDelayMs;
+  const recoveryCooldownFor = (status: RecoveryStatus) =>
+    status === 'away' ? focusRecoveryCooldownMs : distractedRecoveryCooldownMs;
 
   io.on('connection', (socket) => {
     const subscriptions = new Map<string, string>();
@@ -136,22 +160,30 @@ export function registerRealtimeGateway(
         );
 
         const cooldownKey = `${input.roomId}:${input.participantId}`;
+        const status = isRecoveryStatus(input.status) ? input.status : null;
+        const pending = recoveryTimers.get(cooldownKey);
 
-        if (input.status !== 'away') {
-          const timer = awayTimers.get(cooldownKey);
-          if (timer) clearTimeout(timer);
-          awayTimers.delete(cooldownKey);
+        // Re-reporting the same status must not restart the clock, or a client that
+        // repeats its presence would push the nudge back forever.
+        if (pending && pending.status === status) {
           return;
         }
 
-        if (snapshot.room.status === 'studying' && !awayTimers.has(cooldownKey)) {
-          const timer = setTimeout(() => {
-            awayTimers.delete(cooldownKey);
-            void sendFocusRecoveryIfEligible(input.roomId, input.participantId, cooldownKey);
-          }, focusRecoveryDelayMs);
-          timer.unref?.();
-          awayTimers.set(cooldownKey, timer);
+        if (pending) {
+          clearTimeout(pending.timer);
+          recoveryTimers.delete(cooldownKey);
         }
+
+        if (!status || snapshot.room.status !== 'studying') {
+          return;
+        }
+
+        const timer = setTimeout(() => {
+          recoveryTimers.delete(cooldownKey);
+          void sendFocusRecoveryIfEligible(input.roomId, input.participantId, cooldownKey, status);
+        }, recoveryDelayFor(status));
+        timer.unref?.();
+        recoveryTimers.set(cooldownKey, { status, timer });
       } catch (error) {
         socket.emit(realtimeEvents.server.error, errorMessage(error));
       }
@@ -295,7 +327,8 @@ export function registerRealtimeGateway(
   async function sendFocusRecoveryIfEligible(
     roomId: string,
     participantId: string,
-    cooldownKey: string
+    cooldownKey: string,
+    status: RecoveryStatus
   ) {
     const snapshot = roomService.getByRoomId(roomId);
     const lastSentAt = lastFocusRecoveryAt.get(cooldownKey) ?? 0;
@@ -303,13 +336,15 @@ export function registerRealtimeGateway(
     if (
       !snapshot ||
       snapshot.room.status !== 'studying' ||
-      Date.now() - lastSentAt < focusRecoveryCooldownMs
+      Date.now() - lastSentAt < recoveryCooldownFor(status)
     ) {
       return;
     }
 
+    // Still in the state we scheduled for: anyone who already recovered on their
+    // own does not need to hear about it.
     const participant = snapshot.participants.find(
-      (candidate) => candidate.id === participantId && candidate.status === 'away'
+      (candidate) => candidate.id === participantId && candidate.status === status
     );
 
     if (!participant) return;
@@ -320,7 +355,7 @@ export function registerRealtimeGateway(
     const text = await roomiOrchestrator.generateFocusRecoveryMessage({
       nickname: participant.nickname,
       goal: goal?.refinedText ?? goal?.rawText,
-      status: 'away'
+      status
     });
     roomService.addRoomiMessage({
       roomId,
@@ -429,6 +464,10 @@ export function registerRealtimeGateway(
     roomService.addRoomiMessage({ roomId, kind: 'game_reveal', text });
   }
 
+}
+
+function isRecoveryStatus(status: ParticipantStatus): status is RecoveryStatus {
+  return status === 'away' || status === 'distracted';
 }
 
 function participantChannel(roomId: string, participantId: string) {

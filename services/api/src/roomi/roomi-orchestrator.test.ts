@@ -101,6 +101,33 @@ describe('RoomiOrchestrator live-session messages', () => {
     expect(message).toContain('소요');
     expect(message).toContain('다음 한 단계');
   });
+
+  it('asks rather than accuses when the signal only says distracted', async () => {
+    const orchestrator = new RoomiOrchestrator(failingGenerator);
+
+    const message = await orchestrator.generateFocusRecoveryMessage({
+      nickname: '소요',
+      goal: '수학 문제 3개 풀기',
+      status: 'distracted'
+    });
+
+    expect(message).toContain('소요');
+    expect(message).toContain('?');
+  });
+
+  it('tells the generator not to treat a distraction reading as fact', async () => {
+    const prompts: string[] = [];
+    const orchestrator = new RoomiOrchestrator({
+      generateText: async (prompt) => {
+        prompts.push(prompt);
+        return '아직 목표 작업 중이야?';
+      }
+    });
+
+    await orchestrator.generateFocusRecoveryMessage({ nickname: '소요', status: 'distracted' });
+
+    expect(prompts[0]).toContain('단정하지 말고');
+  });
 });
 
 describe('RoomiOrchestrator.generateRetrospective', () => {

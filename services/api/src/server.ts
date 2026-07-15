@@ -177,8 +177,8 @@ export function createApp(
         throw new Error('No active session to end');
       }
 
-      const baseSummary = computeSummary(session, snapshot.goals);
       const ranking = roomService.getFocusRanking(roomId);
+      const baseSummary = computeSummary(session, snapshot.goals, ranking);
       const retrospective = await roomiOrchestrator.generateRetrospective({
         sessionMinutes: session.plannedMinutes,
         focusMinutes: baseSummary.focusMinutes,

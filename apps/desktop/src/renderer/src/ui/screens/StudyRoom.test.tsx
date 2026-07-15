@@ -137,6 +137,7 @@ describe('StudyRoom focus detection status mapping', () => {
       eyeAspectRatio: 0.3,
       headYawRatio: 0,
       headPitchRatio: 0,
+      headPose: null,
       eyesClosed: false,
       headTurned: false,
       headDown: false

@@ -1,4 +1,5 @@
 import type { ExpressionSignals, HiddenMissionVerify, MissionResult } from '@roomi/shared';
+import { headPoseFromMatrix, neutralHeadPose, roundHeadPose } from './head-pose';
 
 export type BlendshapeCategory = {
   categoryName: string;
@@ -60,7 +61,7 @@ export function expressionSignalsFromBlendshapes(
     browRaise,
     cheekPuff: Math.max(score('cheekPuff'), score('cheekPuffLeft'), score('cheekPuffRight')),
     mouthPucker: score('mouthPucker'),
-    ...headPoseFromMatrix(matrix)
+    ...roundHeadPose(headPoseFromMatrix(matrix) ?? neutralHeadPose)
   };
 }
 
@@ -135,24 +136,4 @@ export function missionResultFromCounter(input: {
 function scoreReader(categories: BlendshapeCategory[] | undefined) {
   const scores = new Map(categories?.map((item) => [item.categoryName, item.score]) ?? []);
   return (name: string) => scores.get(name) ?? 0;
-}
-
-function headPoseFromMatrix(matrix?: readonly number[]) {
-  if (!matrix || matrix.length < 16) {
-    return { headYaw: 0, headPitch: 0, headRoll: 0 };
-  }
-
-  const yaw = Math.atan2(matrix[8] ?? 0, matrix[0] ?? 1);
-  const pitch = Math.atan2(-(matrix[9] ?? 0), matrix[10] ?? 1);
-  const roll = Math.atan2(matrix[4] ?? 0, matrix[5] ?? 1);
-
-  return {
-    headYaw: radiansToDegrees(yaw),
-    headPitch: radiansToDegrees(pitch),
-    headRoll: radiansToDegrees(roll)
-  };
-}
-
-function radiansToDegrees(value: number) {
-  return Math.round((value * 180) / Math.PI);
 }

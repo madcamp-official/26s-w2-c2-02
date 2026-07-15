@@ -61,7 +61,8 @@ describe('realtime gateway', () => {
     roomService = new RoomService(new InMemoryRoomStore());
     httpServer = createServer();
     registerRealtimeGateway(httpServer, roomService, new RoomiOrchestrator(), {
-      focusRecoveryDelayMs: 0
+      focusRecoveryDelayMs: 0,
+      distractedRecoveryDelayMs: 20
     });
     await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
     port = (httpServer.address() as AddressInfo).port;
@@ -198,6 +199,61 @@ describe('realtime gateway', () => {
     const [hostSnapshot, memberSnapshot] = await Promise.all([hostUpdate, memberUpdate]);
     expect(hostSnapshot.roomiMessages).toEqual([]);
     expect(memberSnapshot.roomiMessages).toHaveLength(1);
+  });
+
+  it('privately checks in with a participant who stays distracted', async () => {
+    const created = roomService.createRoom({ nickname: 'host' });
+    const started = roomService.startSession(created.room.id, created.participants[0].id);
+    const joined = roomService.joinRoom({ nickname: 'member', inviteCode: started.room.inviteCode });
+    const member = joined.participants.at(-1)!;
+    const memberClient = await connectClient();
+    await subscribe(memberClient, started.room.id, member.id);
+
+    const message = new Promise<RoomiMessage>((resolve) =>
+      memberClient.once(realtimeEvents.server.roomiMessage, resolve)
+    );
+
+    memberClient.emit(realtimeEvents.client.updateStatus, {
+      roomId: started.room.id,
+      participantId: member.id,
+      status: 'distracted'
+    });
+
+    const received = await message;
+
+    expect(received.kind).toBe('focus_recovery');
+    expect(received.targetParticipantId).toBe(member.id);
+    // A distraction reading is a guess, so the nudge has to ask rather than tell.
+    expect(received.text).toContain('?');
+  });
+
+  it('stays quiet when a distracted participant recovers before the delay elapses', async () => {
+    const created = roomService.createRoom({ nickname: 'host' });
+    const started = roomService.startSession(created.room.id, created.participants[0].id);
+    const joined = roomService.joinRoom({ nickname: 'member', inviteCode: started.room.inviteCode });
+    const member = joined.participants.at(-1)!;
+    const memberClient = await connectClient();
+    await subscribe(memberClient, started.room.id, member.id);
+
+    let received = false;
+    memberClient.on(realtimeEvents.server.roomiMessage, () => {
+      received = true;
+    });
+
+    memberClient.emit(realtimeEvents.client.updateStatus, {
+      roomId: started.room.id,
+      participantId: member.id,
+      status: 'distracted'
+    });
+    memberClient.emit(realtimeEvents.client.updateStatus, {
+      roomId: started.room.id,
+      participantId: member.id,
+      status: 'focused'
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    expect(received).toBe(false);
   });
 
   it('runs a hidden mission game from start to result reveal over sockets', async () => {

@@ -375,6 +375,33 @@ describe('POST /sessions/end', () => {
     }
   });
 
+  it('summarises focus minutes from tracked focus rather than elapsed session time', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-07-13T00:00:00.000Z'));
+    try {
+      await startApp(new RoomiOrchestrator());
+      const created = roomService.createRoom({ nickname: 'host' });
+      const host = created.participants[0];
+      const joined = roomService.joinRoom({
+        nickname: 'member',
+        inviteCode: created.room.inviteCode
+      });
+      const member = joined.participants.at(-1)!;
+      roomService.startSession(created.room.id, host.id);
+
+      // The member is away for the whole session, so 10 elapsed minutes must not
+      // become 10 focused minutes for the room.
+      vi.setSystemTime(new Date('2026-07-13T00:10:00.000Z'));
+      roomService.updateParticipantStatus(created.room.id, member.id, 'away');
+      const response = await endSession({ roomId: created.room.id, participantId: host.id });
+      const snapshot = (await response.json()) as RoomSnapshot;
+
+      expect(snapshot.currentSession?.summary?.focusMinutes).toBe(5);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('returns 404 for an unknown room', async () => {
     await startApp(new RoomiOrchestrator());
 

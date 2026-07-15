@@ -564,16 +564,37 @@ export function MediaPipeTest({ go }: ScreenProps) {
               unit=""
             />
             <FeatureMeter
-              label="yaw"
+              label="yaw 비율"
               value={round(focusSnapshot.current.headYawRatio, 2)}
               unit=""
             />
             <FeatureMeter
-              label="pitch"
+              label="pitch 비율"
               value={round(focusSnapshot.current.headPitchRatio, 2)}
               unit=""
             />
+            <FeatureMeter
+              label="yaw 각도"
+              value={round(focusSnapshot.current.headPose?.headYaw ?? 0, 1)}
+              unit="°"
+            />
+            <FeatureMeter
+              label="pitch 각도"
+              value={round(focusSnapshot.current.headPose?.headPitch ?? 0, 1)}
+              unit="°"
+            />
+            <FeatureMeter
+              label="roll 각도"
+              value={round(focusSnapshot.current.headPose?.headRoll ?? 0, 1)}
+              unit="°"
+            />
           </div>
+
+          <p className="mediapipe-test__note">
+            각도는 MediaPipe 6DoF 행렬에서 바로 계산한 값이고, 아직 판정에는 쓰지 않습니다. 판정은
+            위의 비율 임계값으로만 이뤄집니다. 정면·좌우·아래를 차례로 보면서 각도가 어떻게 움직이는지
+            확인한 뒤 각도 기준으로 전환할 예정입니다.
+          </p>
 
           <p className="mediapipe-test__note">
             Rule-Based는 매 프레임 로컬 기준으로 판정하고, ML 서버 모드는 같은 로컬 feature를 20초

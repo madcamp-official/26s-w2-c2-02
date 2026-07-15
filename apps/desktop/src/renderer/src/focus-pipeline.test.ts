@@ -17,6 +17,7 @@ const focusedFrame: Omit<FrameSignals, 'timestamp'> = {
   eyeAspectRatio: 0.3,
   headYawRatio: 0,
   headPitchRatio: 0,
+  headPose: null,
   eyesClosed: false,
   headTurned: false,
   headDown: false
@@ -183,6 +184,37 @@ describe('buildFeatureWindow', () => {
     expect(window.features.eyeClosedRatio).toBe(0);
   });
 
+  it('reports the real head angles when frames carry a pose', () => {
+    const frames = frameRun(20, {
+      headPose: { headYaw: 12, headPitch: -4, headRoll: 0 },
+      // A ratio that would fabricate 45 degrees under the old ratio * 90 rule.
+      headYawRatio: 0.5
+    });
+    const window = buildFeatureWindow(
+      frames,
+      classifyFocus(frames, defaultRuleSettings),
+      0,
+      20_000,
+      identity
+    );
+
+    expect(window.features.headYawMean).toBe(12);
+    expect(window.features.headPitchMean).toBe(-4);
+  });
+
+  it('falls back to scaling the landmark ratio when no pose is available', () => {
+    const frames = frameRun(20, { headPose: null, headYawRatio: 0.5 });
+    const window = buildFeatureWindow(
+      frames,
+      classifyFocus(frames, defaultRuleSettings),
+      0,
+      20_000,
+      identity
+    );
+
+    expect(window.features.headYawMean).toBe(45);
+  });
+
   it('clamps the reported duration into the schema range', () => {
     const frames = frameRun(1);
     const window = buildFeatureWindow(
@@ -226,7 +258,30 @@ describe('extractFrameSignals', () => {
     expect(signals.facePresent).toBe(true);
     expect(signals.headDown).toBe(true);
   });
+
+  it('leaves the head pose null when MediaPipe supplied no matrix', () => {
+    const signals = extractFrameSignals(syntheticFace({ noseY: 0.5 }), defaultRuleSettings, 0, null);
+
+    expect(signals.headPose).toBeNull();
+  });
+
+  it('reads real angles from the transformation matrix when one is supplied', () => {
+    const signals = extractFrameSignals(
+      syntheticFace({ noseY: 0.5 }),
+      defaultRuleSettings,
+      0,
+      null,
+      identityMatrix()
+    );
+
+    expect(signals.headPose).toEqual({ headYaw: 0, headPitch: 0, headRoll: 0 });
+  });
 });
+
+/** A head facing the camera, in MediaPipe's column-major 4x4 layout. */
+function identityMatrix(): number[] {
+  return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+}
 
 /**
  * A minimal 468-point face: eyes near the top, nose placed by the caller. Only

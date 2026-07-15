@@ -221,7 +221,8 @@ export function useFocusDetection({
       landmarks[0],
       currentSettings,
       now,
-      previousNoseRef.current
+      previousNoseRef.current,
+      matrix
     );
     previousNoseRef.current = landmarks[0]?.[1] ?? previousNoseRef.current;
     signalWindowRef.current = updateSignalWindow(

@@ -184,10 +184,26 @@ export class RoomiOrchestrator {
       [
         `참가자: ${input.nickname}`,
         `상태: ${statusLabel}`,
-        `현재 목표: ${input.goal ?? '등록된 목표 없음'}`
-      ].join('\n'),
-      `${input.nickname}, 잠깐 흐름이 끊긴 것 같아. 돌아오면 목표의 다음 한 단계만 바로 시작해보자.`
+        `현재 목표: ${input.goal ?? '등록된 목표 없음'}`,
+        // A face-signal reading of "distracted" is a guess and is often wrong
+        // (taking notes reads the same as looking at a phone), so the message has
+        // to check with the participant instead of telling them what they did.
+        input.status === 'distracted'
+          ? '감지는 틀릴 수 있어. 딴짓한다고 단정하지 말고 아직 목표 작업 중인지 먼저 물어봐.'
+          : ''
+      ]
+        .filter(Boolean)
+        .join('\n'),
+      this.templateFocusRecovery(input)
     );
+  }
+
+  private templateFocusRecovery(input: FocusRecoveryInput): string {
+    if (input.status === 'distracted') {
+      return `${input.nickname}, 혹시 아직 목표 작업 중이야? 맞으면 그대로 가고, 아니면 다음 한 단계만 같이 정해보자.`;
+    }
+
+    return `${input.nickname}, 잠깐 흐름이 끊긴 것 같아. 돌아오면 목표의 다음 한 단계만 바로 시작해보자.`;
   }
 
   async generateRetrospective(input: RetrospectiveInput): Promise<RetrospectiveText> {

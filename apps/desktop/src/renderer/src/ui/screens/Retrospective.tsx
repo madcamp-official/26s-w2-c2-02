@@ -26,9 +26,17 @@ export function Retrospective({
   currentParticipantId
 }: RetrospectiveProps) {
   const plannedMinutes = session?.plannedMinutes ?? 50;
-  const focusMinutes = session?.summary?.focusMinutes ?? fallbackFocusMinutes(session);
+  const ranking = session?.summary?.ranking ?? [];
+  // The headline sits next to this participant's own goal, so it has to be their
+  // tracked minutes. summary.focusMinutes is the room average and would contradict
+  // the ranking row below for anyone who was not the most focused person here.
+  const myFocusMinutes = ranking.find(
+    (entry) => entry.participantId === currentParticipantId
+  )?.focusMinutes;
+  const focusMinutes =
+    myFocusMinutes ?? session?.summary?.focusMinutes ?? fallbackFocusMinutes(session);
   const focusPercent =
-    plannedMinutes > 0 ? Math.round((focusMinutes / plannedMinutes) * 100) : 0;
+    plannedMinutes > 0 ? Math.min(100, Math.round((focusMinutes / plannedMinutes) * 100)) : 0;
 
   const myGoal = goals.find((goal) => goal.participantId === currentParticipantId);
   const goalAchieved = myGoal?.achieved ?? false;
@@ -38,8 +46,6 @@ export function Retrospective({
     session?.summary?.goalFeedback ?? '자세한 목표 피드백은 다음 세션부터 더 정확하게 보여줄게요.';
   const lumiComment =
     session?.summary?.lumiComment ?? '오늘도 수고했어! 다음에도 같이 집중해보자.';
-
-  const ranking = session?.summary?.ranking ?? [];
 
   return (
     <div className="screen screen--app">

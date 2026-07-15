@@ -1,4 +1,5 @@
 import type { FeatureWindowV1, MlFocusLabel, PredictResponse } from './focus-ml-client';
+import { headPoseFromMatrix, type HeadPose } from './head-pose';
 
 /**
  * Local focus estimation shared by the MediaPipe tuning screen and the study
@@ -38,6 +39,13 @@ export type FrameSignals = {
   eyeAspectRatio: number;
   headYawRatio: number;
   headPitchRatio: number;
+  /**
+   * Real 6DoF angles when MediaPipe supplied a transformation matrix. The rule
+   * thresholds above still run on the landmark ratios they were tuned against;
+   * this is what the ML feature window reports and what the tuning screen shows,
+   * and it is the input a future degree-based rule should switch to.
+   */
+  headPose: HeadPose | null;
   eyesClosed: boolean;
   headTurned: boolean;
   headDown: boolean;
@@ -87,6 +95,7 @@ export const emptyFocusSnapshot: FocusSnapshot = {
     eyeAspectRatio: 0,
     headYawRatio: 0,
     headPitchRatio: 0,
+    headPose: null,
     eyesClosed: false,
     headTurned: false,
     headDown: false
@@ -97,7 +106,8 @@ export function extractFrameSignals(
   face: LandmarkPoint[] | undefined,
   settings: RuleSettings,
   timestamp: number,
-  previousNose: LandmarkPoint | null
+  previousNose: LandmarkPoint | null,
+  matrix?: readonly number[]
 ): FrameSignals {
   if (!face) {
     return {
@@ -106,6 +116,7 @@ export function extractFrameSignals(
       eyeAspectRatio: 0,
       headYawRatio: 0,
       headPitchRatio: 0,
+      headPose: null,
       eyesClosed: false,
       headTurned: false,
       headDown: false
@@ -132,6 +143,7 @@ export function extractFrameSignals(
     eyeAspectRatio,
     headYawRatio,
     headPitchRatio,
+    headPose: headPoseFromMatrix(matrix),
     eyesClosed: eyeAspectRatio < settings.eyeAspectRatioThreshold,
     headTurned: Math.abs(headYawRatio) > settings.headTurnRatioThreshold + motionBoost,
     headDown: headPitchRatio > settings.headDownRatioThreshold
@@ -193,6 +205,7 @@ export function classifyFocus(windowFrames: FrameSignals[], settings: RuleSettin
       eyeAspectRatio: latest.eyeAspectRatio,
       headYawRatio: latest.headYawRatio,
       headPitchRatio: latest.headPitchRatio,
+      headPose: latest.headPose,
       eyesClosed: latest.eyesClosed,
       headTurned: latest.headTurned,
       headDown: latest.headDown
@@ -223,8 +236,8 @@ export function buildFeatureWindow(
     detectedFrames.filter((frame) => frame.headTurned).length,
     detectedFrames.length
   );
-  const headYawDegrees = detectedFrames.map((frame) => frame.headYawRatio * 90);
-  const headPitchDegrees = detectedFrames.map((frame) => frame.headPitchRatio * 90);
+  const headYawDegrees = detectedFrames.map((frame) => frameYawDegrees(frame));
+  const headPitchDegrees = detectedFrames.map((frame) => framePitchDegrees(frame));
   const motionAmount = getMotionAmount(detectedFrames);
   const ruleScore = clamp(ruleSnapshot.score / 100, 0, 1);
   const windowEndDate = new Date();
@@ -338,6 +351,20 @@ export function getLatestDuration(
   return round((latest.timestamp - start) / 1000, 1);
 }
 
+/**
+ * The `FeatureWindowV1` schema promises degrees, so prefer the real pose and only
+ * fall back to scaling the landmark ratio when no matrix was available.
+ */
+function frameYawDegrees(frame: FrameSignals) {
+  return frame.headPose?.headYaw ?? frame.headYawRatio * 90;
+}
+
+function framePitchDegrees(frame: FrameSignals) {
+  return frame.headPose?.headPitch ?? frame.headPitchRatio * 90;
+}
+
+/** Stays on the landmark ratios: motionAmount is a relative jitter measure and
+ * rescaling it would shift a feature the ML model already sees. */
 export function getMotionAmount(frames: FrameSignals[]) {
   if (frames.length < 2) {
     return 0;
