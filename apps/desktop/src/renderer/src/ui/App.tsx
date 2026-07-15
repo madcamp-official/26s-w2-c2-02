@@ -309,6 +309,17 @@ export function App() {
     setIsJoiningRoom(false);
   };
 
+  const returnHome = () => {
+    socketRef.current?.disconnect();
+    socketRef.current = null;
+    setRoomDraft(null);
+    setJoinCode('');
+    setJoinError(undefined);
+    setCreateError(undefined);
+    resetRoomRequestState();
+    go('onboarding-nickname');
+  };
+
   useEffect(() => {
     if (!roomDraft || roomDraft.realtime !== 'server') return undefined;
 
@@ -712,7 +723,22 @@ export function App() {
   };
 
   const leaveCurrentSession = () => {
-    setCurrentSessionPresence('online');
+    if (!roomDraft) {
+      go('retrospective');
+      return;
+    }
+
+    if (roomDraft.realtime === 'server') {
+      updateParticipantStatus(socketRef.current, {
+        roomId: roomDraft.room.id,
+        participantId: roomDraft.currentParticipantId,
+        status: 'online'
+      });
+    }
+
+    setRoomDraft((current) =>
+      current ? buildRetrospectiveDraft(current, 'online') : current
+    );
     go('retrospective');
   };
 
@@ -1172,7 +1198,7 @@ export function App() {
         room: { ...current.room, status: 'ended' },
         currentGame,
         currentSession: current.currentSession
-          ? { ...current.currentSession, endedAt: now(), mode: 'ended' }
+          ? sessionWithLocalSummary(current.currentSession, current.goals, current.focusRanking, now())
           : current.currentSession
       };
       const winner = currentGame?.scores
@@ -1319,7 +1345,9 @@ export function App() {
           <Retrospective
             session={activeRoom.currentSession}
             currentGame={activeRoom.currentGame}
+            focusRanking={activeRoom.focusRanking}
             goals={activeRoom.goals}
+            onHome={returnHome}
             participants={activeRoom.participants}
             currentParticipantId={activeRoom.currentParticipantId}
             go={go}
@@ -1346,6 +1374,68 @@ function snapshotToDraftPatch(snapshot: {
     currentSession: snapshot.currentSession,
     currentGame: snapshot.currentGame
   };
+}
+
+function buildRetrospectiveDraft(
+  draft: RoomDraft,
+  currentParticipantStatus: ParticipantStatus
+): RoomDraft {
+  const timestamp = now();
+  const participants = draft.participants.map((participant) =>
+    participant.id === draft.currentParticipantId
+      ? { ...participant, status: currentParticipantStatus, lastSeenAt: timestamp }
+      : participant
+  );
+
+  return {
+    ...draft,
+    participants,
+    currentSession: draft.currentSession
+      ? sessionWithLocalSummary(draft.currentSession, draft.goals, draft.focusRanking, timestamp)
+      : draft.currentSession
+  };
+}
+
+function sessionWithLocalSummary(
+  session: StudySession,
+  goals: Goal[],
+  ranking: FocusRankingEntry[],
+  endedAt: string
+): StudySession {
+  const focusMinutes =
+    session.summary?.focusMinutes ??
+    averageFocusMinutes(ranking) ??
+    elapsedSessionMinutes(session, endedAt);
+  const achievedGoals = goals.filter((goal) => goal.achieved).length;
+  const goalCompletionRate =
+    session.summary?.goalCompletionRate ?? (goals.length > 0 ? achievedGoals / goals.length : 0);
+
+  return {
+    ...session,
+    endedAt: session.endedAt ?? endedAt,
+    mode: 'ended',
+    summary: {
+      ...session.summary,
+      focusMinutes,
+      goalCompletionRate,
+      ranking: session.summary?.ranking ?? ranking
+    }
+  };
+}
+
+function averageFocusMinutes(ranking: FocusRankingEntry[]) {
+  if (ranking.length === 0) return undefined;
+  return Math.round(
+    ranking.reduce((total, entry) => total + entry.focusMinutes, 0) / ranking.length
+  );
+}
+
+function elapsedSessionMinutes(session: StudySession, endedAt: string) {
+  const elapsedMinutes = Math.max(
+    0,
+    (Date.parse(endedAt) - Date.parse(session.startedAt)) / 60_000
+  );
+  return Math.round(Math.min(elapsedMinutes, session.plannedMinutes));
 }
 
 function finishLocalGameRound(game: GameSession, forceReveal = false): GameSession {

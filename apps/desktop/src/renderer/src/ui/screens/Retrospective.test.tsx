@@ -1,9 +1,45 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { GameSession, Participant } from '@roomi/shared';
 import { Retrospective } from './Retrospective';
 
 describe('Retrospective', () => {
+  it('shows the latest collected focus ranking when leaving before a server summary exists', () => {
+    const onHome = vi.fn();
+
+    render(
+      <Retrospective
+        currentParticipantId="participant-host"
+        focusRanking={[
+          {
+            participantId: 'participant-host',
+            focusMinutes: 12,
+            score: 144,
+            nickname: 'Host',
+            left: false
+          }
+        ]}
+        goals={[]}
+        go={vi.fn()}
+        onHome={onHome}
+        participants={[participant('participant-host', 'Host')]}
+        session={{
+          id: 'session-1',
+          roomId: 'room-1',
+          startedAt: '2026-07-15T00:00:00.000Z',
+          endedAt: '2026-07-15T00:12:00.000Z',
+          plannedMinutes: 50,
+          mode: 'ended'
+        }}
+      />
+    );
+
+    expect(screen.getByText('12분')).toBeInTheDocument();
+    expect(screen.getByText('144점')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '홈으로' }));
+    expect(onHome).toHaveBeenCalledTimes(1);
+  });
+
   it('shows game results when a game session exists', () => {
     const participants = [
       participant('participant-host', 'Host'),

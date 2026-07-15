@@ -1,5 +1,12 @@
 import { RoomiMascot } from '../components/RoomiMascot';
-import type { GameScore, GameSession, Goal, Participant, StudySession } from '@roomi/shared';
+import type {
+  FocusRankingEntry,
+  GameScore,
+  GameSession,
+  Goal,
+  Participant,
+  StudySession
+} from '@roomi/shared';
 import type { ScreenProps } from './types';
 
 interface RetrospectiveProps extends ScreenProps {
@@ -8,6 +15,8 @@ interface RetrospectiveProps extends ScreenProps {
   goals: Goal[];
   participants: Participant[];
   currentParticipantId: string;
+  focusRanking?: FocusRankingEntry[];
+  onHome?: () => void;
 }
 
 function fallbackFocusMinutes(session?: StudySession): number {
@@ -23,7 +32,9 @@ export function Retrospective({
   go,
   session,
   currentGame,
+  focusRanking = [],
   goals,
+  onHome,
   participants,
   currentParticipantId
 }: RetrospectiveProps) {
@@ -33,13 +44,14 @@ export function Retrospective({
         currentGame={currentGame}
         currentParticipantId={currentParticipantId}
         go={go}
+        onHome={onHome}
         participants={participants}
       />
     );
   }
 
   const plannedMinutes = session?.plannedMinutes ?? 50;
-  const ranking = session?.summary?.ranking ?? [];
+  const ranking = session?.summary?.ranking ?? focusRanking;
   // The headline sits next to this participant's own goal, so it has to be their
   // tracked minutes. summary.focusMinutes is the room average and would contradict
   // the ranking row below for anyone who was not the most focused person here.
@@ -136,7 +148,7 @@ export function Retrospective({
 
           {/* Actions */}
           <div className="retro__actions">
-            <button type="button" className="btn btn--ghost" onClick={() => go('onboarding-nickname')}>
+            <button type="button" className="btn btn--ghost" onClick={onHome ?? (() => go('onboarding-nickname'))}>
               홈으로
             </button>
             <button type="button" className="btn btn--primary" onClick={() => go('waiting')}>
@@ -153,8 +165,9 @@ function GameRetrospective({
   currentGame,
   currentParticipantId,
   go,
+  onHome,
   participants
-}: Pick<RetrospectiveProps, 'currentGame' | 'currentParticipantId' | 'go' | 'participants'> & {
+}: Pick<RetrospectiveProps, 'currentGame' | 'currentParticipantId' | 'go' | 'onHome' | 'participants'> & {
   currentGame: GameSession;
 }) {
   const ranking = rankGameScores(currentGame.scores, participants);
@@ -261,7 +274,7 @@ function GameRetrospective({
           </div>
 
           <div className="retro__actions">
-            <button type="button" className="btn btn--ghost" onClick={() => go('onboarding-nickname')}>
+            <button type="button" className="btn btn--ghost" onClick={onHome ?? (() => go('onboarding-nickname'))}>
               새로 시작하기
             </button>
             <button type="button" className="btn btn--primary" onClick={() => go('waiting')}>
