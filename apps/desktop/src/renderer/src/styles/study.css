@@ -276,11 +276,6 @@
 }
 
 .study-lumi {
-  display: flex;
-  flex-direction: column;
-  height: 192px;
-  min-height: 192px;
-  max-height: 192px;
   padding: 18px;
   overflow: hidden;
   background:
@@ -326,8 +321,9 @@
 
 .study-lumi__bubble {
   position: relative;
-  flex: 1;
-  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 132px;
   padding: 13px 14px;
   border-radius: 12px;
   background: var(--lavender-card);
@@ -349,6 +345,7 @@
 .study-lumi__label {
   position: relative;
   display: block;
+  flex: none;
   margin-bottom: 5px;
   color: var(--purple-700);
   font-size: 10px;
@@ -357,7 +354,7 @@
 
 .study-lumi__text {
   position: relative;
-  max-height: calc(100% - 20px);
+  min-height: 0;
   margin: 0;
   overflow-y: auto;
   padding-right: 4px;
