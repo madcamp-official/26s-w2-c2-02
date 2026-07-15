@@ -11,6 +11,7 @@ import type { FocusSnapshot } from '../../focus-pipeline';
 import { focusIndices } from '../../focus-stats';
 import {
   DailyParticipantMedia,
+  createDistractionCardByKind,
   FocusDetailPanel,
   focusLabelToParticipantStatus,
   focusScoreTrendPoints,
@@ -690,6 +691,24 @@ describe('DailyParticipantMedia', () => {
 });
 
 describe('StudyRoom hidden mission progress', () => {
+  it('can generate every distraction card game type', () => {
+    expect(createDistractionCardByKind('memory').title).toBe('순간 기억');
+    expect(createDistractionCardByKind('quick_choice').title).toBe('빠른 선택');
+    expect(createDistractionCardByKind('odd_expression').title).toBe('다른 표정 찾기');
+  });
+
+  it('randomizes the memory distraction answer and shows it before the question', () => {
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+    const first = createDistractionCardByKind('memory');
+    randomSpy.mockReturnValue(0.99);
+    const second = createDistractionCardByKind('memory');
+
+    expect(first.answer).toBe('2');
+    expect(first.introPrompt).toBe('기억할 숫자: 2');
+    expect(second.answer).toBe('9');
+    expect(second.introPrompt).toBe('기억할 숫자: 9');
+  });
+
   it('shows break control only in study mode', () => {
     const participant = createParticipant('participant-host', 'Host');
     const onStartBreak = vi.fn();
@@ -884,7 +903,8 @@ describe('StudyRoom hidden mission progress', () => {
 
     expect(screen.getByLabelText('루미 방해 카드')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '순간 기억 1/3' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '7' })).not.toBeInTheDocument();
+    expect(screen.getByText('기억할 숫자: 2')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '2' })).not.toBeInTheDocument();
     act(() => {
       vi.advanceTimersByTime(1_000);
     });
@@ -908,17 +928,17 @@ describe('StudyRoom hidden mission progress', () => {
     fireEvent.click(screen.getByRole('button', { name: /화상 타일 보기/ }));
     expect(screen.queryByLabelText('루미 방해 카드')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /방해 카드 보기/ }));
-    fireEvent.click(screen.getByRole('button', { name: '7' }));
+    fireEvent.click(screen.getByRole('button', { name: '2' }));
     expect(screen.getByRole('heading', { name: '순간 기억 2/3' })).toBeInTheDocument();
     act(() => {
       vi.advanceTimersByTime(1_000);
     });
-    fireEvent.click(screen.getByRole('button', { name: '7' }));
+    fireEvent.click(screen.getByRole('button', { name: '2' }));
     expect(screen.getByRole('heading', { name: '순간 기억 3/3' })).toBeInTheDocument();
     act(() => {
       vi.advanceTimersByTime(1_000);
     });
-    fireEvent.click(screen.getByRole('button', { name: '7' }));
+    fireEvent.click(screen.getByRole('button', { name: '2' }));
     vi.useRealTimers();
 
     await waitFor(() =>
@@ -998,6 +1018,32 @@ describe('StudyRoom hidden mission progress', () => {
 
     expect(onWinByMissionGuess).toHaveBeenCalledWith(host.id, member.id, memberMission.id);
     vi.useRealTimers();
+  });
+
+  it('opens mission guess choices even when the public game snapshot hides missions', () => {
+    const host = createParticipant('participant-host', 'Host');
+    const member = { ...createParticipant('participant-member', 'Member'), role: 'member' as const };
+    const room = createRoom();
+    const currentGame: GameSession = {
+      ...createGame(room, [host, member], 'hidden_mission'),
+      missions: []
+    };
+    const onWinByMissionGuess = vi.fn();
+
+    render(
+      <StudyRoom
+        {...baseStudyRoomProps(host)}
+        currentGame={currentGame}
+        participants={[host, member]}
+        room={room}
+        onWinByMissionGuess={onWinByMissionGuess}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Member' }));
+
+    expect(screen.getByRole('dialog', { name: '미션 맞추기' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '대화 중 한 번 윙크하기' })).toBeInTheDocument();
   });
 
   it('resets the secret mission count when the round changes even if the mission id is reused', async () => {

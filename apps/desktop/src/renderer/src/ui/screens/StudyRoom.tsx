@@ -63,6 +63,7 @@ type DistractionCard = {
   id: string;
   kind: DistractionCardKind;
   title: string;
+  introPrompt?: string;
   prompt: string;
   choices: string[];
   answer: string;
@@ -85,9 +86,9 @@ type KeyedMissionCounterState = MissionCounterState & {
 
 type MissionAccusationPrompt = {
   targetId: string;
-  missionId: string;
+  missionId?: string;
   choices: string[];
-  answer: string;
+  answer?: string;
 };
 
 type MissionProgressSignal = {
@@ -158,29 +159,7 @@ export function ruleSettingsForActivity(activityKind: RoomActivityKind) {
   return activityKind === 'study' ? defaultRuleSettings : gameRoomRuleSettings;
 }
 
-const distractionCards: Omit<DistractionCard, 'id'>[] = [
-  {
-    kind: 'memory',
-    title: '순간 기억',
-    prompt: '루미가 방금 띄운 숫자를 고르세요.',
-    choices: ['3', '7', '9'],
-    answer: '7'
-  },
-  {
-    kind: 'quick_choice',
-    title: '빠른 선택',
-    prompt: '가장 큰 숫자를 고르세요.',
-    choices: ['18', '31', '27'],
-    answer: '31'
-  },
-  {
-    kind: 'odd_expression',
-    title: '다른 표정 찾기',
-    prompt: '하나만 다른 표정을 고르세요.',
-    choices: ['🙂', '🙂', '😐', '🙂'],
-    answer: '😐'
-  }
-];
+const distractionCardKinds: DistractionCardKind[] = ['memory', 'quick_choice', 'odd_expression'];
 
 /** Newest-last score samples as an SVG polyline path inside a `width` x `height` box. */
 export function focusScoreTrendPoints(history: number[], width: number, height: number) {
@@ -954,11 +933,10 @@ export function StudyRoom({
     if (!currentGame || Date.now() < accusationCooldownUntil) return;
     if (targetId === currentParticipantId) return;
     const mission = currentGame.missions?.find((item) => item.playerId === targetId);
-    if (!mission) return;
     setAccusationPrompt({
       targetId,
-      missionId: mission.id,
-      answer: mission.prompt,
+      missionId: mission?.id,
+      answer: mission?.prompt,
       choices: missionGuessChoices(mission, currentGame.missions ?? [])
     });
   };
@@ -969,7 +947,12 @@ export function StudyRoom({
     const accusedRecentActor =
       recentProgress?.playerId === accusationPrompt.targetId &&
       Date.now() - recentProgress.recordedAt <= accusationWindowMs;
-    if (choice === accusationPrompt.answer && accusedRecentActor) {
+    if (
+      accusationPrompt.answer &&
+      accusationPrompt.missionId &&
+      choice === accusationPrompt.answer &&
+      accusedRecentActor
+    ) {
       onWinByMissionGuess?.(
         currentParticipantId,
         accusationPrompt.targetId,
@@ -1112,7 +1095,9 @@ export function StudyRoom({
                     {distractionCard.title} {distractionStepIndex + 1}/{distractionCardStepCount}
                   </h2>
                   {distractionIntroVisible ? (
-                    <p className="study-distraction__intro">잠시 후 문제가 시작돼요.</p>
+                    <p className="study-distraction__intro">
+                      {distractionCard.introPrompt ?? '잠시 후 문제가 시작돼요.'}
+                    </p>
                   ) : (
                     <>
                       <p>{distractionCard.prompt}</p>
@@ -1822,14 +1807,81 @@ function focusReportKey(report: FocusSessionReport) {
 }
 
 function createDistractionCard(roundId: string, roundIndex: number): DistractionCard {
-  const template = distractionCards[(Math.max(1, roundIndex) - 1) % distractionCards.length]!;
+  const kind = randomItem(distractionCardKinds);
+  const card = createDistractionCardByKind(kind);
   return {
-    id: `${roundId}:${template.kind}:${Date.now()}`,
-    ...template
+    id: `${roundId}:${roundIndex}:${kind}:${Date.now()}`,
+    ...card
   };
 }
 
-function missionGuessChoices(answer: HiddenMission, missions: HiddenMission[]) {
+export function createDistractionCardByKind(kind: DistractionCardKind): Omit<DistractionCard, 'id'> {
+  if (kind === 'memory') {
+    const answer = String(randomInt(2, 9));
+    const choices = numericChoices(Number(answer), 2, 9);
+    return {
+      kind,
+      title: '순간 기억',
+      introPrompt: `기억할 숫자: ${answer}`,
+      prompt: '루미가 방금 띄운 숫자를 고르세요.',
+      choices,
+      answer
+    };
+  }
+
+  if (kind === 'quick_choice') {
+    const answer = randomInt(24, 49);
+    const choices = numericChoices(answer, 10, answer - 1);
+    return {
+      kind,
+      title: '빠른 선택',
+      prompt: '가장 큰 숫자를 고르세요.',
+      choices: shuffle(choices),
+      answer: String(answer)
+    };
+  }
+
+  const oddExpressions = ['😐', '😮', '😉', '😴'];
+  const commonExpression = randomItem(['🙂', '😄', '🤔']);
+  const answer = randomItem(oddExpressions.filter((expression) => expression !== commonExpression));
+  const oddIndex = randomInt(0, 3);
+  const choices = Array.from({ length: 4 }, (_, index) =>
+    index === oddIndex ? answer : commonExpression
+  );
+  return {
+    kind,
+    title: '다른 표정 찾기',
+    prompt: '하나만 다른 표정을 고르세요.',
+    choices,
+    answer
+  };
+}
+
+function numericChoices(answer: number, min: number, max: number) {
+  const pool = Array.from({ length: max - min + 1 }, (_, index) => min + index).filter(
+    (value) => value !== answer
+  );
+  return shuffle([answer, ...shuffle(pool).slice(0, 2)].map(String));
+}
+
+function randomItem<T>(items: T[]): T {
+  return items[randomInt(0, items.length - 1)]!;
+}
+
+function randomInt(min: number, max: number) {
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+function shuffle<T>(items: T[]): T[] {
+  const shuffled = [...items];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = randomInt(0, index);
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex]!, shuffled[index]!];
+  }
+  return shuffled;
+}
+
+function missionGuessChoices(answer: HiddenMission | undefined, missions: HiddenMission[]) {
   const fallbackPrompts = [
     '상대가 볼 때마다 자연스럽게 미소 짓기',
     '대화 중 한 번 윙크하기',
@@ -1838,12 +1890,12 @@ function missionGuessChoices(answer: HiddenMission, missions: HiddenMission[]) {
     '입을 살짝 벌리고 생각하는 척하기'
   ];
   const prompts = [
-    answer.prompt,
+    answer?.prompt,
     ...missions
-      .filter((mission) => mission.id !== answer.id)
+      .filter((mission) => mission.id !== answer?.id)
       .map((mission) => mission.prompt),
     ...fallbackPrompts
-  ];
+  ].filter((prompt): prompt is string => Boolean(prompt));
   const uniquePrompts = Array.from(new Set(prompts)).slice(0, 4);
   return uniquePrompts.sort((left, right) => left.localeCompare(right));
 }
