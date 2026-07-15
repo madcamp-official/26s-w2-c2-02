@@ -244,7 +244,7 @@ function createLocalGame(room: Room, participants: Participant[], kind: GameKind
     missions:
       kind === 'hidden_mission'
         ? participants.map((participant, index) => ({
-            id: `mission-${participant.id}`,
+            id: `mission-${gameId}-${participant.id}-${index}`,
             playerId: participant.id,
             ...shuffled[index % shuffled.length]!
           }))
@@ -1373,13 +1373,25 @@ function localPlayStyleFallback(kind: GameKind, rawStyle: string) {
   return '디테일 하나를 집요하게 따라 하는 카피 장인 되기';
 }
 
-function resolvePrivateMission(current: RoomDraft, game: GameSession | undefined) {
+type PrivateMissionContext = Pick<
+  RoomDraft,
+  'currentParticipantId' | 'currentGame' | 'privateMission'
+>;
+
+export function resolvePrivateMission(
+  current: PrivateMissionContext,
+  game: GameSession | undefined
+) {
   const assignedMission = game?.missions?.find(
     (mission) => mission.playerId === current.currentParticipantId
   );
 
   if (assignedMission) return assignedMission;
-  if (game?.kind === 'hidden_mission' && current.currentGame?.id === game.id) {
+  if (
+    game?.kind === 'hidden_mission' &&
+    current.currentGame?.id === game.id &&
+    current.currentGame.round.id === game.round.id
+  ) {
     return current.privateMission;
   }
 

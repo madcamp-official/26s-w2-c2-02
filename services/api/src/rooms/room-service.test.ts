@@ -625,6 +625,9 @@ describe('RoomService face party games', () => {
     expect(nextRound.round.index).toBe(2);
     expect(nextRound.missionResults).toEqual([]);
     expect(nextRound.nextRoundReadyParticipantIds).toEqual([]);
+    const nextMission = nextRound.missions!.find((item) => item.playerId === host.id)!;
+    expect(nextMission.id).not.toBe(mission.id);
+    expect(nextMission.prompt).not.toBe(mission.prompt);
   });
 
   it('replaces a hidden mission when a player returns from the waiting room', () => {

@@ -321,7 +321,7 @@ export function StudyRoom({
   useEffect(() => {
     setMissionState({ count: 0, previousActive: false });
     reportedMissionRef.current = null;
-  }, [privateMission?.id]);
+  }, [currentGame?.round.id, privateMission?.id]);
 
   useEffect(() => {
     if (!privateMission || currentGame?.status !== 'in_round' || !focusDetection.expressionSignals) return;
