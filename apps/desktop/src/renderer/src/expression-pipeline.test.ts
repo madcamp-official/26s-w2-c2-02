@@ -76,6 +76,20 @@ describe('expression-pipeline', () => {
     expect(state.count).toBe(2);
   });
 
+  it('requires brow raises to release below the lower threshold before counting again', () => {
+    let state = { count: 0, previousActive: false };
+    const brow = (timestamp: number, browInnerUp: number) =>
+      expressionSignalsFromBlendshapes(categories({ browInnerUp }), undefined, timestamp);
+
+    state = updateHiddenMissionCounter(state, 'brow_count', 3, brow(1_000, 0.7));
+    state = updateHiddenMissionCounter(state, 'brow_count', 3, brow(2_100, 0.32));
+    state = updateHiddenMissionCounter(state, 'brow_count', 3, brow(3_200, 0.7));
+    state = updateHiddenMissionCounter(state, 'brow_count', 3, brow(4_300, 0.2));
+    state = updateHiddenMissionCounter(state, 'brow_count', 3, brow(5_400, 0.7));
+
+    expect(state.count).toBe(2);
+  });
+
   it('marks no-jaw-open missions failed without exposing raw landmarks', () => {
     const state = updateHiddenMissionCounter(
       { count: 0, previousActive: false },

@@ -11,6 +11,7 @@ export type ExpressionSettings = {
   blinkThreshold: number;
   winkOpenThreshold: number;
   browThreshold: number;
+  browReleaseThreshold: number;
   cheekPuffThreshold: number;
   mouthPuckerThreshold: number;
   missionCountCooldownMs: number;
@@ -28,7 +29,8 @@ export const defaultExpressionSettings: ExpressionSettings = {
   jawOpenThreshold: 0.45,
   blinkThreshold: 0.55,
   winkOpenThreshold: 0.25,
-  browThreshold: 0.42,
+  browThreshold: 0.6,
+  browReleaseThreshold: 0.25,
   cheekPuffThreshold: 0.35,
   mouthPuckerThreshold: 0.45,
   missionCountCooldownMs: 1_000
@@ -77,14 +79,7 @@ export function updateHiddenMissionCounter(
     };
   }
 
-  const active =
-    verify === 'wink_count'
-      ? signals.winkLeft || signals.winkRight
-      : verify === 'smile_count'
-        ? signals.smile >= settings.smileThreshold
-        : verify === 'brow_count'
-          ? signals.browRaise >= settings.browThreshold
-          : signals.cheekPuff >= settings.cheekPuffThreshold;
+  const active = expressionMissionActive(state, verify, signals, settings);
 
   const cooldownPassed =
     state.lastCountedAt === undefined ||
@@ -97,6 +92,24 @@ export function updateHiddenMissionCounter(
     lastCountedAt: shouldCount ? signals.timestamp : state.lastCountedAt,
     failed: state.failed || count < 0 || target < 0
   };
+}
+
+function expressionMissionActive(
+  state: MissionCounterState,
+  verify: HiddenMissionVerify,
+  signals: ExpressionSignals,
+  settings: ExpressionSettings
+) {
+  if (verify === 'wink_count') return signals.winkLeft || signals.winkRight;
+  if (verify === 'smile_count') return signals.smile >= settings.smileThreshold;
+  if (verify === 'cheek_puff_count') return signals.cheekPuff >= settings.cheekPuffThreshold;
+  if (verify !== 'brow_count') return false;
+
+  if (state.previousActive) {
+    return signals.browRaise > settings.browReleaseThreshold;
+  }
+
+  return signals.browRaise >= settings.browThreshold;
 }
 
 export function missionResultFromCounter(input: {
