@@ -384,6 +384,17 @@
   align-items: center;
 }
 
+.game-rank-row .goal__text {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.game-rank-row__status {
+  display: block;
+  font-size: 12px;
+}
+
 .goal__text {
   flex: 1;
   font-size: 13px;

@@ -1307,10 +1307,13 @@ function finishLocalGameRound(game: GameSession, forceReveal = false): GameSessi
   const scores =
     game.kind === 'hidden_mission'
       ? game.scores.map((score) => {
-          const success = (game.missionResults ?? []).find(
+          const result = (game.missionResults ?? []).find(
             (result) => result.playerId === score.participantId
-          )?.success;
-          return { ...score, points: score.points + (success ? 10 : 0) };
+          );
+          const mission = game.missions?.find(
+            (mission) => mission.playerId === score.participantId
+          );
+          return { ...score, points: score.points + hiddenMissionRoundPoints(result, mission) };
         })
       : game.scores;
   const completedRounds = [
@@ -1457,6 +1460,14 @@ function hiddenMissionConversationTopic(roundNumber: number) {
     '하루만 바꿔보고 싶은 사소한 규칙'
   ];
   return topics[(Math.max(1, roundNumber) - 1) % topics.length]!;
+}
+
+function hiddenMissionRoundPoints(
+  result: MissionResult | undefined,
+  mission: HiddenMission | undefined
+) {
+  if (!result || !mission || mission.target <= 0) return 0;
+  return Math.round((Math.min(result.count, mission.target) / mission.target) * 10);
 }
 
 function localPlayStyleFallback(kind: GameKind, rawStyle: string) {

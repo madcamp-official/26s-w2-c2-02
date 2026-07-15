@@ -639,6 +639,31 @@ describe('RoomService face party games', () => {
     expect(nextMission.prompt).not.toBe(mission.prompt);
   });
 
+  it('awards partial hidden mission points by progress ratio', () => {
+    const service = createService();
+    const created = service.createRoom({
+      nickname: 'host',
+      settings: { activityKind: 'hidden_mission', roundCount: 2 }
+    });
+    const host = created.participants[0]!;
+    const game = service.startGame(created.room.id, host.id, 'hidden_mission');
+    const mission = game.missions!.find((item) => item.playerId === host.id)!;
+    const progressCount = Math.max(1, Math.floor(mission.target / 2));
+
+    service.recordMissionResult(created.room.id, {
+      playerId: host.id,
+      missionId: mission.id,
+      count: progressCount,
+      success: false
+    });
+    const revealed = service.revealGame(created.room.id, host.id, game.id);
+    const expectedPoints = Math.round((progressCount / mission.target) * 10);
+
+    expect(revealed.scores.find((score) => score.participantId === host.id)?.points).toBe(
+      expectedPoints
+    );
+  });
+
   it('replaces a hidden mission when a player returns from the waiting room', () => {
     const service = createService();
     const created = service.createRoom({

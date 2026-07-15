@@ -737,6 +737,54 @@ describe('StudyRoom hidden mission progress', () => {
     );
   });
 
+  it('shows the latest round winner while waiting for the next round', () => {
+    const host = createParticipant('participant-host', 'Host');
+    const member = { ...createParticipant('participant-member', 'Member'), role: 'member' as const };
+    const room = createRoom('hidden_mission', 'hidden_mission');
+    const currentGame: GameSession = {
+      ...createGame(room, [host, member], 'hidden_mission'),
+      status: 'between_round',
+      round: {
+        id: 'round-1',
+        gameId: 'game-hidden_mission',
+        index: 1,
+        status: 'between_round',
+        startedAt: '2026-07-15T00:00:00.000Z',
+        revealAt: '2026-07-15T00:01:00.000Z',
+        nextStartsAt: new Date(Date.now() + 60_000).toISOString()
+      },
+      completedRounds: [
+        {
+          roundIndex: 1,
+          status: 'completed',
+          endedAt: '2026-07-15T00:01:00.000Z',
+          scores: [
+            { participantId: host.id, points: 5 },
+            { participantId: member.id, points: 10 }
+          ]
+        }
+      ],
+      nextRoundStartsAt: new Date(Date.now() + 60_000).toISOString(),
+      nextRoundReadyParticipantIds: [host.id],
+      scores: [
+        { participantId: host.id, points: 5 },
+        { participantId: member.id, points: 10 }
+      ]
+    };
+
+    render(
+      <StudyRoom
+        {...baseStudyRoomProps(host)}
+        room={room}
+        currentGame={currentGame}
+        participants={[host, member]}
+      />
+    );
+
+    expect(screen.getByText(/1라운드 Member 우승 · 2라운드 시작까지/)).toBeInTheDocument();
+    expect(screen.getByText('준비 대기 중')).toBeInTheDocument();
+  });
+
   it('submits copycat relay links with the selected target and similarity', () => {
     const host = createParticipant('participant-host', 'Host');
     const member = { ...createParticipant('participant-member', 'Member'), role: 'member' as const };

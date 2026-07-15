@@ -421,4 +421,21 @@ describe('RoomiOrchestrator face party games', () => {
     expect(prompts[0]).toContain('전체 대화 로그를 요약하지 말고');
     expect(prompts[0]).toContain('새 채팅을 그대로 반복하거나 바꿔 말하지 마');
   });
+
+  it('removes repeated chat text from generated chat reactions', async () => {
+    const orchestrator = new RoomiOrchestrator(
+      generatorReturning('sdf: 피자가 좋아요 정말 좋아하시는군요! 어떤 종류의 피자를 가장 좋아하시나요?')
+    );
+
+    const reaction = await orchestrator.generateChatReactionMessage({
+      game: 'hidden_mission',
+      latestNickname: 'sdf',
+      latestText: '피자가 좋아요',
+      recentMessages: [{ nickname: 'sdf', text: '피자가 좋아요' }],
+      tone: 'playful'
+    });
+
+    expect(reaction).toBe('정말 좋아하시는군요! 어떤 종류의 피자를 가장 좋아하시나요?');
+    expect(reaction).not.toMatch(/^sdf:|^피자가 좋아요/);
+  });
 });

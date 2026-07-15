@@ -288,11 +288,18 @@ export class RoomiOrchestrator {
   }
 
   async generateChatReactionMessage(input: FacePartyChatReactionInput): Promise<string> {
-    return this.generateFacePartyText(
-      'game_reaction',
-      this.buildFacePartyChatReactionPrompt(input),
-      this.templateChatReactionMessage(input)
-    );
+    const fallback = this.templateChatReactionMessage(input);
+
+    if (!this.generator) return fallback;
+
+    try {
+      const raw = await this.generator.generateText(this.buildFacePartyChatReactionPrompt(input));
+      const text = this.sanitizeChatReactionText(raw, input);
+      return text && this.isKoreanText(text) ? text : fallback;
+    } catch (error) {
+      this.logGeneratorFailure('game_reaction', error);
+      return fallback;
+    }
   }
 
   async generateGameRevealMessage(input: FacePartyGameMessageInput): Promise<string> {
@@ -555,6 +562,27 @@ export class RoomiOrchestrator {
         : '',
       '짧은 한 문장만 출력해.'
     ].filter(Boolean).join('\n');
+  }
+
+  private sanitizeChatReactionText(
+    rawOutput: string,
+    input: FacePartyChatReactionInput
+  ): string {
+    let text = rawOutput.trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, '').trim();
+    const nicknamePrefix = new RegExp(`^${this.escapeRegExp(input.latestNickname)}\\s*[:：]\\s*`);
+    text = text.replace(nicknamePrefix, '').trim();
+
+    const latestText = input.latestText.trim();
+    if (latestText) {
+      const latestPrefix = new RegExp(`^${this.escapeRegExp(latestText)}[\\s,，.!?。！？]*`);
+      text = text.replace(latestPrefix, '').trim();
+    }
+
+    return text;
+  }
+
+  private escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   private hiddenMissionConversationTopic(roundNumber?: number): string {

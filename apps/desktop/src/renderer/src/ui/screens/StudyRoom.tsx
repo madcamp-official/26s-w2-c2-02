@@ -494,12 +494,13 @@ export function StudyRoom({
   const isNextRoundWaiting = currentGame?.status === 'between_round';
   const isGameEnded = currentGame?.status === 'reveal';
   const hasMarkedNextReady = readyParticipantIds.has(currentParticipantId);
+  const latestRoundWinner = currentGame ? roundWinnerName(currentGame, participants) : undefined;
   const gameTimerLabel = isGameEnded ? '게임 상태' : isNextRoundWaiting ? '다음 라운드' : '현재 라운드';
   const gameTimerValue = currentGame
     ? isGameEnded
       ? '게임 종료'
       : isNextRoundWaiting
-      ? `${currentGame.round.index + 1}라운드 시작까지 ${formatSessionTime(remainingSeconds)}`
+      ? `${latestRoundWinner ? `${currentGame.round.index}라운드 ${latestRoundWinner} 우승 · ` : ''}${currentGame.round.index + 1}라운드 시작까지 ${formatSessionTime(remainingSeconds)}`
       : `${currentGame.round.index}/${currentGame.totalRounds ?? 1}라운드`
     : `${room.settings.roundCount ?? 1}라운드 예정`;
   const tileCols = Math.min(2, Math.max(1, Math.ceil(Math.sqrt(displayParticipants.length))));
@@ -766,7 +767,7 @@ export function StudyRoom({
                   <p className="goal__text">
                     <strong className="goal__owner">{entry.participant.nickname}</strong>
                     {isNextRoundWaiting && (
-                      <span className="goal__note">
+                      <span className="goal__note game-rank-row__status">
                         {readyParticipantIds.has(entry.participant.id) ? '다음 라운드 준비 완료' : '준비 대기 중'}
                       </span>
                     )}
@@ -1078,6 +1079,23 @@ export function StudyRoom({
 
 function rankGameScores(game: GameSession | undefined, participants: Participant[]) {
   return rankScores(game?.scores ?? [], participants);
+}
+
+function roundWinnerName(game: GameSession, participants: Participant[]) {
+  const completedRounds = game.completedRounds ?? [];
+  const latestRound = completedRounds.at(-1);
+  if (!latestRound) return undefined;
+
+  const previousRound = completedRounds.at(-2);
+  const previousScores = new Map(
+    previousRound?.scores.map((score) => [score.participantId, score.points]) ?? []
+  );
+  const roundScores = latestRound.scores.map((score) => ({
+    participantId: score.participantId,
+    points: score.points - (previousScores.get(score.participantId) ?? 0)
+  }));
+  const winner = rankScores(roundScores, participants)[0];
+  return winner && winner.points > 0 ? winner.participant.nickname : undefined;
 }
 
 function rankScores(scores: GameSession['scores'], participants: Participant[]) {

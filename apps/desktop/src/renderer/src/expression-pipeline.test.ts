@@ -39,8 +39,8 @@ describe('expression-pipeline', () => {
   it('accepts a softer wink when one eye is mostly open', () => {
     const signals = expressionSignalsFromBlendshapes(
       categories({
-        eyeBlinkLeft: 0.5,
-        eyeBlinkRight: 0.3
+        eyeBlinkLeft: 0.42,
+        eyeBlinkRight: 0.38
       }),
       undefined,
       1234
@@ -48,6 +48,21 @@ describe('expression-pipeline', () => {
 
     expect(signals.winkLeft).toBe(true);
     expect(signals.winkRight).toBe(false);
+  });
+
+  it('counts smaller nods after the head returns near neutral', () => {
+    let state = { count: 0, previousActive: false };
+    const nod = (timestamp: number, headPitch: number) =>
+      updateHiddenMissionCounter(state, 'nod_count', 2, {
+        ...expressionSignalsFromBlendshapes(undefined, undefined, timestamp),
+        headPitch
+      });
+
+    state = nod(1_000, 12);
+    state = nod(2_100, 4);
+    state = nod(3_200, 12);
+
+    expect(state.count).toBe(2);
   });
 
   it('accepts a softer brow raise without changing the release gate', () => {

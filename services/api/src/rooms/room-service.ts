@@ -1139,8 +1139,10 @@ export class RoomService {
 
     const results = game.missionResults ?? [];
     return game.scores.map((score) => {
-      const success = results.find((result) => result.playerId === score.participantId)?.success;
-      return { ...score, points: score.points + (success ? 10 : 0) };
+      const result = results.find((item) => item.playerId === score.participantId);
+      const mission = game.missions?.find((item) => item.playerId === score.participantId);
+      const roundPoints = hiddenMissionRoundPoints(result, mission);
+      return { ...score, points: score.points + roundPoints };
     });
   }
 
@@ -1277,4 +1279,12 @@ export class RoomService {
       )
     };
   }
+}
+
+function hiddenMissionRoundPoints(
+  result: MissionResult | undefined,
+  mission: HiddenMission | undefined
+): number {
+  if (!result || !mission || mission.target <= 0) return 0;
+  return Math.round((Math.min(result.count, mission.target) / mission.target) * 10);
 }
