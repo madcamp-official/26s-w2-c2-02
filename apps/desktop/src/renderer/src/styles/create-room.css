@@ -86,7 +86,7 @@
   display: flex;
   gap: 12px;
   margin-top: 12px;
-  padding-bottom: 6px;
+  padding: 8px 4px 10px;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scrollbar-width: thin;
@@ -273,7 +273,7 @@
 
   .create__game-grid {
     margin-right: -22px;
-    padding-right: 22px;
+    padding-right: 26px;
   }
 
   .toggle-row,

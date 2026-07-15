@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { VideoProvider } from '../video/daily-video-provider';
 import { InMemoryRoomStore } from '../adapters/storage/in-memory-room-store';
-import { RoomService } from './room-service';
+import { hiddenMissionTemplates, RoomService } from './room-service';
 
 function createService() {
   return new RoomService(new InMemoryRoomStore());
@@ -510,6 +510,13 @@ describe('RoomService.setGoalAchieved', () => {
 });
 
 describe('RoomService face party games', () => {
+  it('keeps hidden mission templates curated', () => {
+    expect(hiddenMissionTemplates).toHaveLength(14);
+    expect(hiddenMissionTemplates.map((mission) => mission.prompt)).not.toContain(
+      '생각하는 척하며 볼을 3번 부풀리기'
+    );
+  });
+
   it('starts hidden mission with private missions and server-owned scores', () => {
     const service = createService();
     const created = service.createRoom({ nickname: 'host' });
