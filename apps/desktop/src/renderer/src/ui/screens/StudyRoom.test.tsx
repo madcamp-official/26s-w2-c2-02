@@ -797,7 +797,7 @@ describe('StudyRoom hidden mission progress', () => {
         gameId: 'game-1',
         index: 1,
         status: 'in_round',
-        startedAt: '2026-07-15T00:00:00.000Z',
+        startedAt: new Date(Date.now()).toISOString(),
         endsAt: '2026-07-15T00:02:00.000Z'
       },
       totalRounds: room.settings.roundCount,
@@ -878,6 +878,7 @@ describe('StudyRoom hidden mission progress', () => {
       missions: [privateMission]
     };
     const onSubmitMissionResult = vi.fn();
+    vi.setSystemTime(new Date(currentGame.round.startedAt!));
 
     const { rerender } = render(
       <StudyRoom
@@ -991,6 +992,7 @@ describe('StudyRoom hidden mission progress', () => {
     expect(screen.getByRole('button', { name: 'Host' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Member' }));
     expect(screen.getByRole('dialog', { name: '미션 맞추기' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: memberMission.prompt })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: memberMission.prompt }));
     expect(onWinByMissionGuess).not.toHaveBeenCalled();
 
@@ -1024,9 +1026,16 @@ describe('StudyRoom hidden mission progress', () => {
     const host = createParticipant('participant-host', 'Host');
     const member = { ...createParticipant('participant-member', 'Member'), role: 'member' as const };
     const room = createRoom();
+    const hostMission: HiddenMission = {
+      id: 'mission-host',
+      playerId: host.id,
+      prompt: 'Smile once',
+      verify: 'smile_count',
+      target: 1
+    };
     const currentGame: GameSession = {
       ...createGame(room, [host, member], 'hidden_mission'),
-      missions: []
+      missions: [hostMission]
     };
     const onWinByMissionGuess = vi.fn();
 
@@ -1043,6 +1052,7 @@ describe('StudyRoom hidden mission progress', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Member' }));
 
     expect(screen.getByRole('dialog', { name: '미션 맞추기' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: hostMission.prompt })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '대화 중 한 번 윙크하기' })).toBeInTheDocument();
   });
 

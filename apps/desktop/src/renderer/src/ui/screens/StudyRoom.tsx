@@ -70,7 +70,7 @@ type DistractionCard = {
 };
 
 const distractionCardMinDelayMs = 10_000;
-const distractionCardMaxDelayMs = 30_000;
+const distractionCardIntervalMs = 30_000;
 const distractionCardStepCount = 3;
 const distractionCardIntroMs = 1_000;
 const accusationWindowMs = 1_500;
@@ -731,9 +731,12 @@ export function StudyRoom({
     setDistractionStepIndex(0);
     setDistractionIntroVisible(false);
 
-    const delayMs =
+    const roundStartedAt = Date.parse(currentGame.round.startedAt ?? '');
+    const scheduledAt =
+      (Number.isFinite(roundStartedAt) ? roundStartedAt : Date.now()) +
       distractionCardMinDelayMs +
-      Math.floor(Math.random() * (distractionCardMaxDelayMs - distractionCardMinDelayMs + 1));
+      distractionCycle * distractionCardIntervalMs;
+    const delayMs = Math.max(0, scheduledAt - Date.now());
     const timerId = window.setTimeout(() => {
       const card = createDistractionCard(currentGame.round.id, currentGame.round.index);
       setDistractionCard(card);
@@ -750,6 +753,7 @@ export function StudyRoom({
     currentGame?.kind,
     currentGame?.round.id,
     currentGame?.round.index,
+    currentGame?.round.startedAt,
     currentGame?.status,
     distractionCard,
     distractionCycle,
@@ -938,11 +942,14 @@ export function StudyRoom({
     if (!currentGame || Date.now() < accusationCooldownUntil) return;
     if (targetId === currentParticipantId) return;
     const mission = currentGame.missions?.find((item) => item.playerId === targetId);
+    const visibleGuessMissions = (currentGame.missions ?? []).filter(
+      (item) => item.playerId !== currentParticipantId
+    );
     setAccusationPrompt({
       targetId,
       missionId: mission?.id,
       answer: mission?.prompt,
-      choices: missionGuessChoices(mission, currentGame.missions ?? [])
+      choices: missionGuessChoices(mission, visibleGuessMissions)
     });
   };
 
