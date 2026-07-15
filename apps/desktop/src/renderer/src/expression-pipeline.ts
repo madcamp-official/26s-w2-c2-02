@@ -27,9 +27,9 @@ export type MissionCounterState = {
 export const defaultExpressionSettings: ExpressionSettings = {
   smileThreshold: 0.45,
   jawOpenThreshold: 0.45,
-  blinkThreshold: 0.55,
-  winkOpenThreshold: 0.25,
-  browThreshold: 0.6,
+  blinkThreshold: 0.5,
+  winkOpenThreshold: 0.3,
+  browThreshold: 0.52,
   browReleaseThreshold: 0.25,
   cheekPuffThreshold: 0.35,
   mouthPuckerThreshold: 0.45,

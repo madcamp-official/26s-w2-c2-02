@@ -36,6 +36,45 @@ describe('expression-pipeline', () => {
     });
   });
 
+  it('accepts a softer wink when one eye is mostly open', () => {
+    const signals = expressionSignalsFromBlendshapes(
+      categories({
+        eyeBlinkLeft: 0.5,
+        eyeBlinkRight: 0.3
+      }),
+      undefined,
+      1234
+    );
+
+    expect(signals.winkLeft).toBe(true);
+    expect(signals.winkRight).toBe(false);
+  });
+
+  it('accepts a softer brow raise without changing the release gate', () => {
+    let state = { count: 0, previousActive: false };
+
+    state = updateHiddenMissionCounter(
+      state,
+      'brow_count',
+      2,
+      expressionSignalsFromBlendshapes(categories({ browInnerUp: 0.52 }), undefined, 1_000)
+    );
+    state = updateHiddenMissionCounter(
+      state,
+      'brow_count',
+      2,
+      expressionSignalsFromBlendshapes(categories({ browInnerUp: 0.3 }), undefined, 2_100)
+    );
+    state = updateHiddenMissionCounter(
+      state,
+      'brow_count',
+      2,
+      expressionSignalsFromBlendshapes(categories({ browInnerUp: 0.52 }), undefined, 3_200)
+    );
+
+    expect(state.count).toBe(1);
+  });
+
   it('counts only rising edges for hidden mission events', () => {
     let state = { count: 0, previousActive: false };
     const active = (timestamp: number) =>
