@@ -146,7 +146,7 @@ export function WaitingRoom({
         id: participant.id,
         name: participant.nickname,
         sub: participant.role === 'host' ? '방장' : '',
-        status: isStudying ? (isStudyMode ? '공부 중' : '참여 중') : participant.isReady ? '준비완료' : '준비 중',
+        status: isStudying ? (isStudyMode ? '공부 중' : '게임 중') : participant.isReady ? '준비완료' : '준비 중',
         tone: isStudying || participant.isReady ? 'green' : 'muted',
         initial: participant.nickname.slice(0, 1)
       };

@@ -181,6 +181,25 @@ describe('WaitingRoom', () => {
     expect(screen.queryByRole('button', { name: '세션 시작하기' })).not.toBeInTheDocument();
   });
 
+  it('labels active participants as playing in game rooms', () => {
+    const initial = baseProps();
+    const props = {
+      ...initial,
+      isHost: false,
+      currentParticipantId: 'p-3',
+      room: room('studying', 'hidden_mission'),
+      participants: initial.participants.map((candidate) =>
+        candidate.id === 'p-host' ? { ...candidate, status: 'focused' as const } : candidate
+      )
+    };
+    render(<WaitingRoom {...props} />);
+
+    expect(screen.getByText('이미 게임이 진행 중이에요')).toBeInTheDocument();
+    expect(screen.getByText('게임 중')).toBeInTheDocument();
+    expect(screen.queryByText('공부 중')).not.toBeInTheDocument();
+    expect(screen.queryByText('참여 중')).not.toBeInTheDocument();
+  });
+
   it('locks the study-room join action synchronously to prevent duplicate entry', () => {
     const props = { ...baseProps(), isHost: false, currentParticipantId: 'p-3', room: room('studying') };
     render(<WaitingRoom {...props} />);

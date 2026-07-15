@@ -369,7 +369,7 @@ export function StudyRoom({
   };
 
   return (
-    <div className="screen screen--app">
+    <div className="screen screen--app screen--study">
       <div className="study__body">
         <main className="study__stage">
           <section className="study-timer-card">
