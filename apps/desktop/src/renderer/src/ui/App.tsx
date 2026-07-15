@@ -3,6 +3,7 @@ import {
   createInviteCode,
   normalizeInviteCode,
   type ChatMessage,
+  type FocusRankingEntry,
   type Goal,
   type Participant,
   type ParticipantStatus,
@@ -58,6 +59,7 @@ type RoomDraft = {
   currentSession?: StudySession;
   realtime: 'local' | 'server';
   videoJoin?: VideoJoinInfo;
+  focusRanking: FocusRankingEntry[];
 };
 
 const now = () => new Date().toISOString();
@@ -127,7 +129,8 @@ const fallbackRoom: RoomDraft = {
   ],
   goals: [],
   roomiMessages: [],
-  chatMessages: []
+  chatMessages: [],
+  focusRanking: []
 };
 
 function createRoomDraft(nickname: string, settings: RoomSettings): RoomDraft {
@@ -163,7 +166,8 @@ function createRoomDraft(nickname: string, settings: RoomSettings): RoomDraft {
     ],
     goals: [],
     roomiMessages: [],
-    chatMessages: []
+    chatMessages: [],
+    focusRanking: []
   };
 }
 
@@ -211,7 +215,8 @@ function joinRoomDraft(nickname: string, inviteCode: string): RoomDraft {
     ],
     goals: [],
     roomiMessages: [],
-    chatMessages: []
+    chatMessages: [],
+    focusRanking: []
   };
 }
 
@@ -225,7 +230,8 @@ function roomSessionToDraft(session: RoomSession): RoomDraft {
     roomiMessages: session.snapshot.roomiMessages,
     chatMessages: session.snapshot.chatMessages,
     currentSession: session.snapshot.currentSession,
-    videoJoin: session.videoJoin
+    videoJoin: session.videoJoin,
+    focusRanking: []
   };
 }
 
@@ -301,14 +307,27 @@ export function App() {
             ? { ...current, chatMessages: [...current.chatMessages, message].slice(-100) }
             : current
         );
+      },
+      (payload) => {
+        setRoomDraft((current) =>
+          current && current.room.id === payload.roomId
+            ? { ...current, focusRanking: payload.ranking }
+            : current
+        );
       }
     );
   }, [roomDraft?.room.id, roomDraft?.realtime]);
 
   // An ended room is never joinable. This also covers a participant who receives
   // the terminal snapshot while they are already in the waiting or study screen.
+  // Only fire on the *transition* into 'ended' (tracked via ref), not on every
+  // subsequent screen change — otherwise leaving Retrospective (e.g. "홈으로" /
+  // "한 번 더 집중하기") immediately snaps back because room.status is still 'ended'.
+  const prevRoomStatusRef = useRef(activeRoom.room.status);
   useEffect(() => {
-    if (activeRoom.room.status === 'ended' && screen !== 'retrospective') {
+    const prevStatus = prevRoomStatusRef.current;
+    prevRoomStatusRef.current = activeRoom.room.status;
+    if (activeRoom.room.status === 'ended' && prevStatus !== 'ended' && screen !== 'retrospective') {
       go('retrospective');
     }
   }, [screen, activeRoom.room.status]);
@@ -849,6 +868,7 @@ export function App() {
             room={activeRoom.room}
             currentSession={activeRoom.currentSession}
             videoJoin={activeRoom.videoJoin}
+            focusRanking={activeRoom.focusRanking}
             onUpdatePresence={setCurrentSessionPresence}
             onStartBreak={startCurrentBreak}
             go={go}

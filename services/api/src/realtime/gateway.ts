@@ -11,10 +11,12 @@ import type { RoomService } from '../rooms/room-service';
 
 const FOCUS_RECOVERY_DELAY_MS = 60_000;
 const FOCUS_RECOVERY_COOLDOWN_MS = 5 * 60_000;
+const FOCUS_RANKING_HEARTBEAT_MS = 12_000;
 
 export type RealtimeGatewayOptions = {
   focusRecoveryDelayMs?: number;
   focusRecoveryCooldownMs?: number;
+  focusRankingHeartbeatMs?: number;
 };
 
 export function registerRealtimeGateway(
@@ -31,6 +33,16 @@ export function registerRealtimeGateway(
     }
   });
 
+  const focusRankingHeartbeatMs = options.focusRankingHeartbeatMs ?? FOCUS_RANKING_HEARTBEAT_MS;
+  const focusRankingHeartbeats = new Map<string, ReturnType<typeof setInterval>>();
+
+  function broadcastFocusRanking(roomId: string) {
+    io.to(roomId).emit(realtimeEvents.server.focusRankingUpdated, {
+      roomId,
+      ranking: roomService.getFocusRanking(roomId)
+    });
+  }
+
   roomService.onRoomUpdated((snapshot) => {
     snapshot.participants.forEach((participant) => {
       io.to(participantChannel(snapshot.room.id, participant.id)).emit(
@@ -38,6 +50,25 @@ export function registerRealtimeGateway(
         roomService.snapshotForParticipant(snapshot.room.id, participant.id)
       );
     });
+
+    const roomId = snapshot.room.id;
+    const hasHeartbeat = focusRankingHeartbeats.has(roomId);
+
+    if (snapshot.room.status === 'studying' && !hasHeartbeat) {
+      // Status-change broadcasts already cover most updates in real time; this
+      // heartbeat only exists to keep ticking for a participant who stays
+      // 'focused' long enough that no status-change event fires at all.
+      const timer = setInterval(() => broadcastFocusRanking(roomId), focusRankingHeartbeatMs);
+      timer.unref?.();
+      focusRankingHeartbeats.set(roomId, timer);
+    } else if (snapshot.room.status !== 'studying' && hasHeartbeat) {
+      clearInterval(focusRankingHeartbeats.get(roomId));
+      focusRankingHeartbeats.delete(roomId);
+    }
+  });
+
+  roomService.onFocusRankingUpdated(({ roomId, ranking }) => {
+    io.to(roomId).emit(realtimeEvents.server.focusRankingUpdated, { roomId, ranking });
   });
 
   roomService.onRoomiMessage((message) => {

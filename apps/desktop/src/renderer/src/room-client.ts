@@ -4,6 +4,7 @@ import type {
   ChatSendInput,
   ClientToServerEvents,
   CreateRoomInput,
+  FocusRankingBroadcast,
   GoalRefineInput,
   GoalRefinement,
   JoinRoomInput,
@@ -150,7 +151,8 @@ export function subscribeToRoom(
   onSnapshot: (snapshot: RoomSnapshot) => void,
   onRoomiMessage: (message: RoomiMessage) => void,
   onError: (message: string) => void,
-  onChatMessage?: (message: ChatMessage) => void
+  onChatMessage?: (message: ChatMessage) => void,
+  onFocusRanking?: (payload: FocusRankingBroadcast) => void
 ) {
   socket.connect();
   socket.emit(realtimeEvents.client.subscribeRoom, input, (snapshot) => {
@@ -165,6 +167,9 @@ export function subscribeToRoom(
   if (onChatMessage) {
     socket.on(realtimeEvents.server.chatMessage, onChatMessage);
   }
+  if (onFocusRanking) {
+    socket.on(realtimeEvents.server.focusRankingUpdated, onFocusRanking);
+  }
 
   return () => {
     socket.off(realtimeEvents.server.roomSnapshot, onSnapshot);
@@ -173,6 +178,9 @@ export function subscribeToRoom(
     socket.off(realtimeEvents.server.error, onError);
     if (onChatMessage) {
       socket.off(realtimeEvents.server.chatMessage, onChatMessage);
+    }
+    if (onFocusRanking) {
+      socket.off(realtimeEvents.server.focusRankingUpdated, onFocusRanking);
     }
     socket.disconnect();
   };

@@ -15,6 +15,7 @@ import { RoomiMascot, type RoomiMood } from '../components/RoomiMascot';
 import { InviteCodeCard } from '../components/InviteCodeCard';
 import {
   type ChatMessage,
+  type FocusRankingEntry,
   type Goal,
   type Participant,
   type ParticipantStatus,
@@ -50,6 +51,7 @@ interface StudyRoomProps extends ScreenProps {
   room: Room;
   currentSession?: StudySession;
   videoJoin?: VideoJoinInfo;
+  focusRanking: FocusRankingEntry[];
 }
 
 const statusLabel: Record<Participant['status'], string> = {
@@ -175,7 +177,8 @@ export function StudyRoom({
   onSendChatMessage,
   room,
   currentSession,
-  videoJoin
+  videoJoin,
+  focusRanking
 }: StudyRoomProps) {
   const studyParticipants = participantsInStudyRoom(participants);
   const gridColumns = Math.max(1, Math.ceil(Math.sqrt(studyParticipants.length || 1)));
@@ -566,6 +569,32 @@ export function StudyRoom({
               <p className="study-focus__error">{focusDetectionError ?? mlError}</p>
             )}
           </section>
+
+          {focusRanking.length > 0 && (
+            <section className="study-card" aria-label="실시간 집중 순위">
+              <div className="study-card__title">실시간 집중 순위</div>
+              <ol className="retro-ranking">
+                {focusRanking.map((entry, index) => {
+                  const isSelf = entry.participantId === currentParticipantId;
+
+                  return (
+                    <li
+                      key={entry.participantId}
+                      className={`retro-ranking__row${isSelf ? ' retro-ranking__row--self' : ''}`}
+                    >
+                      <span className="retro-ranking__rank">{index + 1}</span>
+                      <span className="retro-ranking__who">
+                        {entry.nickname}
+                        {isSelf && ' (나)'}
+                        {entry.left && ' (나감)'}
+                      </span>
+                      <span className="retro-ranking__minutes">{entry.focusMinutes}분</span>
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
+          )}
 
           {focusRecoveryMessage && (
             <section className="confirm" role="dialog" aria-label="집중 확인" aria-modal="false">
