@@ -431,32 +431,6 @@
   font-size: 12px;
 }
 
-.game-round-banner {
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-  width: min(420px, 100%);
-  margin: 0 auto 22px;
-  padding: 18px;
-  border: 1px solid rgba(138, 125, 240, 0.24);
-  border-radius: var(--r-lg);
-  background: var(--card);
-  box-shadow: var(--shadow-card);
-  text-align: center;
-}
-
-.game-round-banner strong {
-  color: var(--heading);
-  font-size: 18px;
-  font-weight: 900;
-}
-
-.game-round-banner span {
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 700;
-}
-
 .game-results-modal {
   width: min(560px, 100%);
   max-height: min(720px, calc(100vh - 96px));
@@ -535,25 +509,6 @@
   border-radius: var(--r-pill);
   box-shadow: var(--shadow-card);
   transform: translateX(-50%);
-}
-
-.study__call-status {
-  width: max-content;
-  max-width: calc(100% - 48px);
-  margin: -12px auto 22px;
-  padding: 9px 14px;
-  border: 1px solid rgba(138, 125, 240, 0.22);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.94);
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 800;
-  box-shadow: var(--shadow-card);
-}
-
-.study__call-status--error {
-  border-color: rgba(194, 71, 90, 0.28);
-  color: #c2475a;
 }
 
 .ctrl {

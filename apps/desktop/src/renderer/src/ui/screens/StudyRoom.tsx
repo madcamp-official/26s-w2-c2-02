@@ -84,15 +84,6 @@ const statusLabel: Record<ParticipantStatus, string> = {
   paused: '눈 감김'
 };
 
-const dailyStatusLabel: Record<string, string> = {
-  idle: '대기',
-  joining: '입장 중',
-  joined: '연결됨',
-  left: '연결 종료',
-  error: '오류',
-  local: '로컬'
-};
-
 const studyRoomRuleSettings = {
   ...defaultRuleSettings,
   faceMissingSeconds: 0
@@ -268,7 +259,7 @@ export function StudyRoom({
     previousActive: false
   });
   const reportedMissionRef = useRef<{ missionId: string; count: number; success: boolean } | null>(null);
-  const { callObject, localMedia, participantsByRoomiId, status, restart } =
+  const { callObject, localMedia, participantsByRoomiId, restart } =
     useDailyRoom(videoJoin);
   const localDailyParticipant = participantsByRoomiId.get(currentParticipantId);
   const localFallbackVideoTrack = getVideoTracks(localStream)[0] ?? null;
@@ -499,26 +490,6 @@ export function StudyRoom({
             })}
           </section>
 
-          <div className={`study__call-status${status === 'error' ? ' study__call-status--error' : ''}`}>
-            {videoJoin
-              ? `화상 연결: ${dailyStatusLabel[status] ?? status}`
-              : '로컬 데모 모드예요. 중앙 API가 연결되면 화상 입장이 열려요.'}
-          </div>
-          {!isStudyMode && currentGame && currentGame.status !== 'in_round' && (
-            <div className="game-round-banner" role="status">
-              <strong>
-                {currentGame.status === 'between_round' ? `${currentGame.round.index}라운드 종료` : '게임 결과 공개'}
-              </strong>
-              <span>
-                {currentGame.status === 'between_round'
-                  ? '누군가 미션을 달성해서 라운드가 멈췄어요.'
-                  : '최종 결과를 확인할 수 있어요.'}
-              </span>
-              <button type="button" className="btn btn--primary" onClick={() => setResultsOpen(true)}>
-                게임 결과 확인
-              </button>
-            </div>
-          )}
         </main>
 
         <aside className="study__panel">
