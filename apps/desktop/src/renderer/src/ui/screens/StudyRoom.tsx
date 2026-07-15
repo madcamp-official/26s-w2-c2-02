@@ -560,16 +560,15 @@ export function StudyRoom({
         >
           {isCameraOn ? <Video size={20} /> : <VideoOff size={20} />}
         </button>
-        {(room.settings.breakMode === 'individual' || isHost) && (
-          <button
-            type="button"
-            className="ctrl"
-            aria-label="휴식"
-            onClick={() => void onStartBreak()}
-          >
-            <Coffee size={20} />
-          </button>
-        )}
+        <button
+          type="button"
+          className="ctrl"
+          aria-label="휴식"
+          onClick={() => void onStartBreak()}
+        >
+          <Coffee size={20} />
+        </button>
+
         {isHost && (
           <div className="host-actions">
             <button

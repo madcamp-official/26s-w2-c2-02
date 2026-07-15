@@ -329,6 +329,10 @@
   gap: 10px;
 }
 
+.study-focus .study-card__title {
+  margin-bottom: 0;
+}
+
 .study-focus .focus-label {
   width: max-content;
 }

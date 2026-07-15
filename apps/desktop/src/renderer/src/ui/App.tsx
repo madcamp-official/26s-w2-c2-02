@@ -298,23 +298,26 @@ export function App() {
     }
   }, [screen, activeRoom.room.status]);
 
-  // Room-wide breaks (breakMode 'room') are host-driven and broadcast to everyone via
-  // room:updated. Members follow the room's status instead of clicking their own CTA.
-  // Individual breaks never change room.status, so they never trigger this effect.
+  // Room-wide breaks are host-driven and broadcast to everyone via room:updated; members
+  // auto-follow room.status instead of clicking their own CTA. Personal breaks (taken by
+  // any participant, even inside a 'room'-mode room) never change room.status, so they're
+  // only navigated by explicit start/end calls. The ref remembers whether *this* screen
+  // transition to 'break' was the auto-join branch below, so the auto-return branch only
+  // snaps back participants who followed a real room-wide break, never someone on a
+  // self-serve personal break.
+  const autoJoinedBreakRef = useRef(false);
   useEffect(() => {
     if (activeRoom.room.status === 'break' && screen === 'study') {
+      autoJoinedBreakRef.current = true;
       go('break');
       return;
     }
 
-    if (
-      activeRoom.room.status === 'studying' &&
-      screen === 'break' &&
-      activeRoom.room.settings.breakMode === 'room'
-    ) {
+    if (activeRoom.room.status === 'studying' && screen === 'break' && autoJoinedBreakRef.current) {
+      autoJoinedBreakRef.current = false;
       go('study');
     }
-  }, [screen, activeRoom.room.status, activeRoom.room.settings.breakMode]);
+  }, [screen, activeRoom.room.status]);
 
   useEffect(() => {
     if (createError) setIsCreatingRoom(false);
@@ -524,13 +527,13 @@ export function App() {
   const startCurrentBreak = async () => {
     if (!roomDraft) return;
 
-    if (roomDraft.room.settings.breakMode === 'individual') {
+    // Anyone can take a personal, self-paced break regardless of the room's break
+    // mode; only the host drives an actual room-wide break.
+    if (roomDraft.room.settings.breakMode === 'individual' || !isHost) {
       setCurrentSessionPresence('break');
       go('break');
       return;
     }
-
-    if (!isHost) return;
 
     if (roomDraft.realtime === 'server') {
       try {
@@ -579,13 +582,11 @@ export function App() {
   const endCurrentBreak = async () => {
     if (!roomDraft) return;
 
-    if (roomDraft.room.settings.breakMode === 'individual') {
+    if (roomDraft.room.settings.breakMode === 'individual' || !isHost) {
       setCurrentSessionPresence('focused');
       go('study');
       return;
     }
-
-    if (!isHost) return;
 
     if (roomDraft.realtime === 'server') {
       try {

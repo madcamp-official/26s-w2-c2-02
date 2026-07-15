@@ -19,7 +19,10 @@ function remainingBreakSeconds(session: StudySession, timestamp: number) {
 }
 
 /** Break & Return · 휴식/복귀 (Figma 68:41). Room-wide breaks share a server-synced
- * countdown and are host-controlled; individual breaks are self-serve with no timer. */
+ * countdown and are host-controlled; individual breaks are self-serve with no timer.
+ * Any participant can take a personal break even inside a 'room'-mode room, so the
+ * synced/self-serve UI is driven by the room's actual live status, not its break-mode
+ * setting. */
 export function BreakReturn({
   room,
   currentSession,
@@ -27,7 +30,7 @@ export function BreakReturn({
   onReturnToStudy,
   onExtendBreak
 }: BreakReturnProps) {
-  const isRoomBreak = room.settings.breakMode === 'room';
+  const isRoomBreak = room.status === 'break';
   const [timestamp, setTimestamp] = useState(() => Date.now());
   const autoReturnedRef = useRef(false);
 
