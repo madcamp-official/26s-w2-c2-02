@@ -116,10 +116,10 @@ export const defaultRuleSettings: RuleSettings = {
   faceMissingSeconds: 5,
   eyesClosedSeconds: 3,
   // Duration is where the sensitivity comes from. A head held away from the desk
-  // for five seconds is already a real turn, and the angles below cannot be pushed
+  // for a few seconds is already a real turn, and the angles below cannot be pushed
   // much further without eating the margin that the measured range bought.
-  headTurnedSeconds: 5,
-  headDownSeconds: 10,
+  headTurnedSeconds: 3,
+  headDownSeconds: 5,
   eyeAspectRatioThreshold: 0.19,
   // Sitting and studying comfortably spans roughly +-25 degrees of yaw and up to
   // +20 of pitch, so both thresholds sit outside that band: inside it, ordinary

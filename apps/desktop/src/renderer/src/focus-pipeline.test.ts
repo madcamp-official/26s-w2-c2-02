@@ -95,6 +95,21 @@ describe('classifyFocus', () => {
     expect(snapshot.label).toBe('focused');
   });
 
+  it('uses shorter sustained thresholds for turned and lowered heads', () => {
+    expect(
+      classifyFocus(
+        frameRun(defaultRuleSettings.headTurnedSeconds, { headTurned: true, headYawRatio: 0.4 }),
+        defaultRuleSettings
+      ).activeSignals
+    ).toContain('head_turned');
+    expect(
+      classifyFocus(
+        frameRun(defaultRuleSettings.headDownSeconds, { headDown: true, headPitchRatio: 0.5 }),
+        defaultRuleSettings
+      ).activeSignals
+    ).toContain('head_down');
+  });
+
   it('can report away immediately when face missing delay is disabled', () => {
     const snapshot = classifyFocus(
       frameRun(0, { facePresent: false }),

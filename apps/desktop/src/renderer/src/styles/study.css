@@ -1219,6 +1219,50 @@
   color: var(--text-faint);
 }
 
+.focus-nudge {
+  display: grid;
+  gap: 12px;
+  border-color: rgba(138, 125, 240, 0.28);
+  background: linear-gradient(180deg, #fff, #f7f4ff);
+}
+
+.focus-nudge--rest {
+  border-color: rgba(44, 143, 104, 0.24);
+  background: linear-gradient(180deg, #fff, #f1fbf6);
+}
+
+.focus-nudge__eyebrow {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--purple-700);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.focus-nudge--rest .focus-nudge__eyebrow {
+  color: #27845f;
+}
+
+.focus-nudge h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.focus-nudge p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.focus-nudge__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 /* Focus verdict chip — sits beside the detail label so "what is happening" and
    "does it count as focus" stay visibly separate. The dot already carries the
    state colour, so this stays neutral. */

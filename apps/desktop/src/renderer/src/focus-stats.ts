@@ -133,9 +133,9 @@ export function focusIndices(stats: FocusSessionStats): FocusIndices {
   // meter on the tuning screen for a session and move them.
   const restlessness = Math.round(normalise(averageMotion, 0.3, 2) * 100);
 
-  // Weights are deliberate but unvalidated, which is exactly why these two indices
-  // only ever display and suggest. The focus score and the ranking stay on the
-  // duration rules; nothing here can move them.
+  // Weights are deliberate but unvalidated. Fatigue only suggests rest; the study
+  // room can use sustained high distraction as one more signal for the existing
+  // distracted presence state, which is what moves the ranking score.
   const fatigue = weighted([
     // PERCLOS leads: it is the one measure of the three with real drowsiness
     // research behind it, where sustained closure above ~15% marks the onset. Its
