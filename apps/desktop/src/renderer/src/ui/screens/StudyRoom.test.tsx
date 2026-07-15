@@ -14,6 +14,7 @@ import {
   participantStatusLabel,
   participantsInStudyRoom,
   reconcilePendingCameraState,
+  ruleSettingsForActivity,
   setDailyCameraEnabled,
   shouldUseLocalCameraFallback,
   remainingSessionSeconds,
@@ -121,6 +122,27 @@ describe('StudyRoom session clock', () => {
         Date.parse('2026-07-13T00:02:00.000Z')
       )
     ).toBe(0);
+  });
+});
+
+describe('ruleSettingsForActivity', () => {
+  it('gives study rooms the full grace period before calling someone away', () => {
+    // Focus time stops accruing while a participant is away, so a blip in
+    // detection must not cost them credit for studying.
+    expect(ruleSettingsForActivity('study').faceMissingSeconds).toBe(5);
+  });
+
+  it('marks a hidden face as away immediately in the face games', () => {
+    expect(ruleSettingsForActivity('hidden_mission').faceMissingSeconds).toBe(0);
+    expect(ruleSettingsForActivity('poker_bluff').faceMissingSeconds).toBe(0);
+    expect(ruleSettingsForActivity('copycat_relay').faceMissingSeconds).toBe(0);
+  });
+
+  it('changes nothing else between the two modes', () => {
+    const { faceMissingSeconds: _study, ...study } = ruleSettingsForActivity('study');
+    const { faceMissingSeconds: _game, ...game } = ruleSettingsForActivity('hidden_mission');
+
+    expect(study).toEqual(game);
   });
 });
 

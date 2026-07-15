@@ -25,6 +25,7 @@ import {
   type Participant,
   type ParticipantStatus,
   type Room,
+  type RoomActivityKind,
   type RoomiMessage,
   type StudySession,
   type VideoJoinInfo
@@ -118,10 +119,20 @@ const statusLabel: Record<ParticipantStatus, string> = {
   paused: '눈 감김'
 };
 
-const studyRoomRuleSettings = {
+/**
+ * Hiding your face is itself a move in the face games, so a game room flips to
+ * `자리 비움` the instant detection loses the face. Study rooms keep the 5 second
+ * default: a sip of water or a hand crossing the face is not leaving, and focus
+ * time stops accruing for anyone marked away.
+ */
+const gameRoomRuleSettings = {
   ...defaultRuleSettings,
   faceMissingSeconds: 0
 };
+
+export function ruleSettingsForActivity(activityKind: RoomActivityKind) {
+  return activityKind === 'study' ? defaultRuleSettings : gameRoomRuleSettings;
+}
 
 const distractionCards: Omit<DistractionCard, 'id'>[] = [
   {
@@ -352,7 +363,7 @@ export function StudyRoom({
       userId: currentParticipantId,
       sessionId: currentGame?.id ?? currentSession?.id ?? room.id
     },
-    settings: studyRoomRuleSettings
+    settings: ruleSettingsForActivity(room.settings.activityKind)
   });
   const missionKey = currentGame && privateMission ? `${currentGame.round.id}:${privateMission.id}` : '';
 
