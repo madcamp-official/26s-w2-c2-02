@@ -714,7 +714,7 @@ describe('RoomService focus ranking', () => {
     vi.useRealTimers();
   });
 
-  it('ranks participants by accumulated focused time, keyed off status transitions', () => {
+  it('ranks participants by focus score, keyed off status transitions', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-13T00:00:00.000Z'));
     const service = createService();
@@ -736,8 +736,10 @@ describe('RoomService focus ranking', () => {
     service.endSession(created.room.id, host.id);
 
     expect(service.getFocusRanking(created.room.id)).toEqual([
-      { participantId: member.id, focusMinutes: 10, nickname: 'member', left: false },
-      { participantId: host.id, focusMinutes: 8, nickname: 'host', left: false }
+      // 10 focused minutes: 600s / 5 * 10.
+      { participantId: member.id, focusMinutes: 10, score: 1_200, nickname: 'member', left: false },
+      // 8 focused minutes earns 960, then 7 distracted minutes drains 420 of it.
+      { participantId: host.id, focusMinutes: 8, score: 540, nickname: 'host', left: false }
     ]);
   });
 
@@ -765,6 +767,7 @@ describe('RoomService focus ranking', () => {
     expect(ranking.find((entry) => entry.participantId === member.id)).toEqual({
       participantId: member.id,
       focusMinutes: 5,
+      score: 600,
       nickname: 'member',
       left: true
     });
@@ -788,6 +791,74 @@ describe('RoomService focus ranking', () => {
 
     const ranking = service.getFocusRanking(created.room.id);
     expect(ranking.find((entry) => entry.participantId === latecomer.id)?.focusMinutes).toBe(5);
+  });
+
+  it('keeps ticking while a participant simply stays focused', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-13T00:00:00.000Z'));
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    service.startSession(created.room.id, created.participants[0].id);
+
+    // No status change fires while someone keeps working, so the ranking has to
+    // project the time since the last one or the heartbeat rebroadcasts a frozen
+    // value for the whole session.
+    vi.setSystemTime(new Date('2026-07-13T00:10:00.000Z'));
+    const live = service.getFocusRanking(created.room.id);
+
+    expect(live[0]?.focusMinutes).toBe(10);
+    expect(live[0]?.score).toBe(1_200);
+  });
+
+  it('drains the score while a participant is away and floors it at 0', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-13T00:00:00.000Z'));
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    service.startSession(created.room.id, host.id);
+
+    // One focused minute banks 120, then two away minutes would take it to -360.
+    vi.setSystemTime(new Date('2026-07-13T00:01:00.000Z'));
+    service.updateParticipantStatus(created.room.id, host.id, 'away');
+
+    vi.setSystemTime(new Date('2026-07-13T00:03:00.000Z'));
+    expect(service.getFocusRanking(created.room.id)[0]?.score).toBe(0);
+  });
+
+  it('starts earning again immediately after the score bottoms out', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-13T00:00:00.000Z'));
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    service.startSession(created.room.id, host.id);
+
+    vi.setSystemTime(new Date('2026-07-13T00:00:30.000Z'));
+    service.updateParticipantStatus(created.room.id, host.id, 'away');
+
+    // Long enough away that an unclamped score would be deep underwater.
+    vi.setSystemTime(new Date('2026-07-13T00:30:00.000Z'));
+    service.updateParticipantStatus(created.room.id, host.id, 'focused');
+
+    // Coming back must pay out from 0 rather than climb out of a hole.
+    vi.setSystemTime(new Date('2026-07-13T00:31:00.000Z'));
+    expect(service.getFocusRanking(created.room.id)[0]?.score).toBe(120);
+  });
+
+  it('holds the score still during an agreed break', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-13T00:00:00.000Z'));
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    service.startSession(created.room.id, host.id);
+
+    vi.setSystemTime(new Date('2026-07-13T00:01:00.000Z'));
+    service.startBreak(created.room.id, host.id);
+
+    vi.setSystemTime(new Date('2026-07-13T00:11:00.000Z'));
+    expect(service.getFocusRanking(created.room.id)[0]?.score).toBe(120);
   });
 
   it('returns an empty ranking for a room with no session history', () => {

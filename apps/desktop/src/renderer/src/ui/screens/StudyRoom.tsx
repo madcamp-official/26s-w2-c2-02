@@ -158,6 +158,67 @@ const distractionCards: Omit<DistractionCard, 'id'>[] = [
   }
 ];
 
+/** Newest-last score samples as an SVG polyline path inside a `width` x `height` box. */
+export function focusScoreTrendPoints(history: number[], width: number, height: number) {
+  if (history.length < 2) {
+    return '';
+  }
+
+  const top = Math.max(...history);
+  const bottom = Math.min(...history);
+  // A flat run has no range to scale against; draw it down the middle rather than
+  // dividing by zero and sending every point to the top edge.
+  const span = top - bottom || 1;
+
+  return history
+    .map((score, index) => {
+      const x = (index / (history.length - 1)) * width;
+      const y = height - ((score - bottom) / span) * height;
+      return `${round2(x)},${round2(top === bottom ? height / 2 : y)}`;
+    })
+    .join(' ');
+}
+
+function round2(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+export function FocusScoreTrend({ history, score }: { history: number[]; score?: number }) {
+  const points = focusScoreTrendPoints(history, 240, 48);
+  const previous = history.at(-2);
+  const latest = history.at(-1);
+  const delta = previous !== undefined && latest !== undefined ? latest - previous : 0;
+
+  if (score === undefined) {
+    return null;
+  }
+
+  return (
+    <div className="focus-trend">
+      <div className="focus-trend__head">
+        <strong className="focus-trend__score">{score}점</strong>
+        {/* The arrow and sign carry the direction, so the reading never depends on
+            colour alone. */}
+        <span className="focus-trend__delta">
+          {delta === 0 ? '유지' : `${delta > 0 ? '↑' : '↓'} ${delta > 0 ? '+' : '−'}${Math.abs(delta)}`}
+        </span>
+      </div>
+      {points ? (
+        <svg
+          aria-hidden="true"
+          className="focus-trend__spark"
+          preserveAspectRatio="none"
+          viewBox="0 0 240 48"
+        >
+          <polyline points={points} />
+        </svg>
+      ) : (
+        <p className="focus-trend__empty">잠시 후 점수 흐름이 그려져요.</p>
+      )}
+    </div>
+  );
+}
+
 export function participantsInStudyRoom(participants: Participant[]) {
   return participants.filter((participant) => participant.status !== 'online');
 }
@@ -366,6 +427,19 @@ export function StudyRoom({
     settings: ruleSettingsForActivity(room.settings.activityKind)
   });
   const missionKey = currentGame && privateMission ? `${currentGame.round.id}:${privateMission.id}` : '';
+  const myFocusScore = focusRanking.find(
+    (entry) => entry.participantId === currentParticipantId
+  )?.score;
+  const [scoreHistory, setScoreHistory] = useState<number[]>([]);
+
+  // Keyed on the score value rather than the ranking array: the array is a fresh
+  // reference on every render, which would loop through this setState.
+  useEffect(() => {
+    if (myFocusScore === undefined) return;
+    setScoreHistory((history) =>
+      history.at(-1) === myFocusScore ? history : [...history, myFocusScore].slice(-60)
+    );
+  }, [myFocusScore]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setTimestamp(Date.now()), 1_000);
@@ -922,6 +996,7 @@ export function StudyRoom({
               {focusRanking.length > 0 && (
                 <section className="study-card" aria-label="실시간 집중 순위">
                   <h2 className="study-card__title">실시간 집중 순위</h2>
+                  <FocusScoreTrend history={scoreHistory} score={myFocusScore} />
                   <ol className="retro-ranking">
                     {focusRanking.map((entry, index) => {
                       const isSelf = entry.participantId === currentParticipantId;
@@ -938,7 +1013,7 @@ export function StudyRoom({
                             {isSelf && ' (나)'}
                             {entry.left && ' (나감)'}
                           </span>
-                          <span className="retro-ranking__minutes">{entry.focusMinutes}분</span>
+                          <span className="retro-ranking__minutes">{entry.score}점</span>
                         </li>
                       );
                     })}

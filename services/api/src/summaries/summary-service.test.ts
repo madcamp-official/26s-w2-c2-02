@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Goal, StudySession } from '@roomi/shared';
+import type { FocusRankingEntry, Goal, StudySession } from '@roomi/shared';
 import { computeSummary, createEmptySummary } from './summary-service';
 
 function session(overrides: Partial<StudySession> = {}): StudySession {
@@ -24,6 +24,17 @@ function goal(overrides: Partial<Goal> = {}): Goal {
   };
 }
 
+function rankingEntry(overrides: Partial<FocusRankingEntry> = {}): FocusRankingEntry {
+  return {
+    participantId: 'participant-1',
+    focusMinutes: 0,
+    score: 0,
+    nickname: '참가자1',
+    left: false,
+    ...overrides
+  };
+}
+
 describe('createEmptySummary', () => {
   it('returns a zeroed summary', () => {
     expect(createEmptySummary()).toEqual({ focusMinutes: 0, goalCompletionRate: 0 });
@@ -36,8 +47,8 @@ describe('computeSummary', () => {
       session({ startedAt: '2026-07-13T00:00:00.000Z', endedAt: '2026-07-13T00:42:00.000Z' }),
       [],
       [
-        { participantId: 'participant-1', focusMinutes: 40, nickname: '참가자1', left: false },
-        { participantId: 'participant-2', focusMinutes: 10, nickname: '참가자2', left: false }
+        rankingEntry({ participantId: 'participant-1', focusMinutes: 40 }),
+        rankingEntry({ participantId: 'participant-2', focusMinutes: 10 })
       ]
     );
 
@@ -48,7 +59,7 @@ describe('computeSummary', () => {
     const summary = computeSummary(
       session({ startedAt: '2026-07-13T00:00:00.000Z', endedAt: '2026-07-13T00:50:00.000Z' }),
       [],
-      [{ participantId: 'participant-1', focusMinutes: 0, nickname: '참가자1', left: false }]
+      [rankingEntry({ focusMinutes: 0 })]
     );
 
     expect(summary.focusMinutes).toBe(0);

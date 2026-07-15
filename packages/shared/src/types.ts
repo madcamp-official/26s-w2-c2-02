@@ -205,6 +205,12 @@ export type GameSession = {
 export type FocusRankingEntry = {
   participantId: string;
   focusMinutes: number;
+  /**
+   * Focus score, the value the ranking is ordered by. It builds while a
+   * participant is focused and drains while they are distracted or away, and
+   * never drops below 0.
+   */
+  score: number;
   nickname: string;
   left: boolean;
 };

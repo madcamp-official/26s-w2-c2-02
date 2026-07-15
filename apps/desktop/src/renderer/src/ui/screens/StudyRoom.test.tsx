@@ -10,6 +10,7 @@ import type {
 import {
   DailyParticipantMedia,
   focusLabelToParticipantStatus,
+  focusScoreTrendPoints,
   formatSessionTime,
   participantStatusLabel,
   participantsInStudyRoom,
@@ -122,6 +123,28 @@ describe('StudyRoom session clock', () => {
         Date.parse('2026-07-13T00:02:00.000Z')
       )
     ).toBe(0);
+  });
+});
+
+describe('focusScoreTrendPoints', () => {
+  it('draws nothing until there are two samples to connect', () => {
+    expect(focusScoreTrendPoints([], 240, 48)).toBe('');
+    expect(focusScoreTrendPoints([120], 240, 48)).toBe('');
+  });
+
+  it('puts the highest score at the top and the lowest at the bottom', () => {
+    // y grows downward in SVG, so the best score sits at y=0.
+    expect(focusScoreTrendPoints([0, 100], 240, 48)).toBe('0,48 240,0');
+  });
+
+  it('draws a flat run down the middle instead of dividing by zero', () => {
+    expect(focusScoreTrendPoints([50, 50, 50], 240, 48)).toBe('0,24 120,24 240,24');
+  });
+
+  it('shows a drop as a fall toward the bottom edge', () => {
+    const points = focusScoreTrendPoints([100, 50, 0], 240, 48);
+
+    expect(points).toBe('0,0 120,24 240,48');
   });
 });
 

@@ -1169,3 +1169,52 @@
   font-size: 13px;
   padding: 0 14px;
 }
+
+/* Focus score trend — one series, so the rise and fall is read from the line
+   shape and the signed delta, not from colour. */
+.focus-trend {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.focus-trend__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.focus-trend__score {
+  font-size: 22px;
+  color: var(--ink);
+}
+
+.focus-trend__delta {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.focus-trend__spark {
+  display: block;
+  width: 100%;
+  height: 48px;
+  margin-top: 8px;
+  overflow: visible;
+}
+
+.focus-trend__spark polyline {
+  fill: none;
+  stroke: var(--purple-700);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.focus-trend__empty {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-faint);
+}
