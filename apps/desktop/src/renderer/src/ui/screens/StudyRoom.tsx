@@ -51,6 +51,17 @@ type DailyParticipantMediaLike = {
   };
 };
 
+type DistractionCardKind = 'memory' | 'quick_choice' | 'odd_expression';
+
+type DistractionCard = {
+  id: string;
+  kind: DistractionCardKind;
+  title: string;
+  prompt: string;
+  choices: string[];
+  answer: string;
+};
+
 interface StudyRoomProps extends ScreenProps {
   currentParticipantId: string;
   isHost: boolean;
@@ -88,6 +99,30 @@ const studyRoomRuleSettings = {
   ...defaultRuleSettings,
   faceMissingSeconds: 0
 };
+
+const distractionCards: Omit<DistractionCard, 'id'>[] = [
+  {
+    kind: 'memory',
+    title: '순간 기억',
+    prompt: '루미가 방금 띄운 숫자를 고르세요.',
+    choices: ['3', '7', '9'],
+    answer: '7'
+  },
+  {
+    kind: 'quick_choice',
+    title: '빠른 선택',
+    prompt: '가장 큰 숫자를 고르세요.',
+    choices: ['18', '31', '27'],
+    answer: '31'
+  },
+  {
+    kind: 'odd_expression',
+    title: '다른 표정 찾기',
+    prompt: '하나만 다른 표정을 고르세요.',
+    choices: ['🙂', '🙂', '😐', '🙂'],
+    answer: '😐'
+  }
+];
 
 export function participantsInStudyRoom(participants: Participant[]) {
   return participants.filter((participant) => participant.status !== 'online');
@@ -261,6 +296,10 @@ export function StudyRoom({
     count: 0,
     previousActive: false
   });
+  const [distractionCard, setDistractionCard] = useState<DistractionCard | null>(null);
+  const [distractionSolvedId, setDistractionSolvedId] = useState<string | null>(null);
+  const [distractionVisible, setDistractionVisible] = useState(true);
+  const [distractionWrong, setDistractionWrong] = useState(false);
   const reportedMissionRef = useRef<{ missionId: string; count: number; success: boolean } | null>(null);
   const { callObject, localMedia, participantsByRoomiId, restart } =
     useDailyRoom(videoJoin);
@@ -327,7 +366,40 @@ export function StudyRoom({
   }, [currentGame?.round.id, privateMission?.id]);
 
   useEffect(() => {
-    if (!privateMission || currentGame?.status !== 'in_round' || !focusDetection.expressionSignals) return;
+    const shouldShowDistraction =
+      currentGame?.kind === 'hidden_mission' &&
+      currentGame.status === 'in_round' &&
+      participants.length > 1;
+
+    if (!shouldShowDistraction || !currentGame) {
+      setDistractionCard(null);
+      setDistractionSolvedId(null);
+      setDistractionVisible(false);
+      setDistractionWrong(false);
+      return;
+    }
+
+    const card = createDistractionCard(currentGame.round.id, currentGame.round.index);
+    setDistractionCard(card);
+    setDistractionSolvedId(null);
+    setDistractionVisible(true);
+    setDistractionWrong(false);
+  }, [currentGame?.id, currentGame?.kind, currentGame?.round.id, currentGame?.round.index, currentGame?.status, participants.length]);
+
+  const distractionLocksMission = Boolean(
+    distractionCard &&
+      currentGame?.kind === 'hidden_mission' &&
+      currentGame.status === 'in_round' &&
+      distractionSolvedId !== distractionCard.id
+  );
+
+  useEffect(() => {
+    if (
+      !privateMission ||
+      currentGame?.status !== 'in_round' ||
+      !focusDetection.expressionSignals ||
+      distractionLocksMission
+    ) return;
 
     setMissionState((current) =>
       updateHiddenMissionCounter(
@@ -337,7 +409,7 @@ export function StudyRoom({
         focusDetection.expressionSignals!
       )
     );
-  }, [currentGame?.status, focusDetection.expressionSignals, privateMission]);
+  }, [currentGame?.status, distractionLocksMission, focusDetection.expressionSignals, privateMission]);
 
   useEffect(() => {
     if (!privateMission || currentGame?.status !== 'in_round' || !onSubmitMissionResult) return;
@@ -430,6 +502,18 @@ export function StudyRoom({
     setCameraOn(next);
   };
 
+  const answerDistractionCard = (choice: string) => {
+    if (!distractionCard) return;
+    if (choice === distractionCard.answer) {
+      setDistractionSolvedId(distractionCard.id);
+      setDistractionVisible(false);
+      setDistractionWrong(false);
+      return;
+    }
+
+    setDistractionWrong(true);
+  };
+
   return (
     <div className="screen screen--app screen--study">
       <div className="study__body">
@@ -465,36 +549,82 @@ export function StudyRoom({
             </div>
           </section>
 
-          <section className="study__grid" style={{ '--tile-cols': tileCols } as CSSProperties}>
-            {displayParticipants.map((participant) => {
-              const isMe = participant.id === currentParticipantId;
-              const dailyParticipant = participantsByRoomiId.get(participant.id);
-              return (
-                <article className={`tile${isMe ? ' tile--me' : ''}`} key={participant.id}>
-                  <DailyParticipantMedia
-                    fallbackInitial={participant.nickname.slice(0, 1).toUpperCase()}
-                    isCameraOn={isMe ? cameraOn : true}
-                    isMe={isMe}
-                    participant={dailyParticipant as DailyParticipantMediaLike | undefined}
-                    fallbackTrack={isMe ? localFallbackVideoTrack ?? undefined : undefined}
-                  />
-                  <footer className="tile__foot">
-                    <span className="tile__name">
-                      {participant.nickname}
-                      {isMe ? ' (나)' : ''}
-                    </span>
-                    <span className="tile__status">
-                      <i className={`tile__dot ${tileDotClass(participant.status)}`} />
-                      {participantStatusLabel(
-                        participant,
-                        isMe ? focusDetection.focusSnapshot : undefined
-                      )}
-                    </span>
-                  </footer>
-                </article>
-              );
-            })}
-          </section>
+          <div className="study__grid-wrap">
+            {distractionCard && distractionSolvedId !== distractionCard.id && (
+              <button
+                type="button"
+                className="study-distraction-toggle"
+                onClick={() => setDistractionVisible((current) => !current)}
+              >
+                {distractionVisible ? '화상 타일 보기' : '방해 카드 보기'}
+                <span>미션 잠금</span>
+              </button>
+            )}
+            <section className="study__grid" style={{ '--tile-cols': tileCols } as CSSProperties}>
+              {displayParticipants.map((participant) => {
+                const isMe = participant.id === currentParticipantId;
+                const dailyParticipant = participantsByRoomiId.get(participant.id);
+                return (
+                  <article className={`tile${isMe ? ' tile--me' : ''}`} key={participant.id}>
+                    <DailyParticipantMedia
+                      fallbackInitial={participant.nickname.slice(0, 1).toUpperCase()}
+                      isCameraOn={isMe ? cameraOn : true}
+                      isMe={isMe}
+                      participant={dailyParticipant as DailyParticipantMediaLike | undefined}
+                      fallbackTrack={isMe ? localFallbackVideoTrack ?? undefined : undefined}
+                    />
+                    <footer className="tile__foot">
+                      <span className="tile__name">
+                        {participant.nickname}
+                        {isMe ? ' (나)' : ''}
+                      </span>
+                      <span className="tile__status">
+                        <i className={`tile__dot ${tileDotClass(participant.status)}`} />
+                        {participantStatusLabel(
+                          participant,
+                          isMe ? focusDetection.focusSnapshot : undefined
+                        )}
+                      </span>
+                    </footer>
+                  </article>
+                );
+              })}
+            </section>
+            {distractionCard && distractionVisible && distractionSolvedId !== distractionCard.id && (
+              <section
+                className={`study-distraction${distractionWrong ? ' study-distraction--wrong' : ''}`}
+                aria-label="루미 방해 카드"
+              >
+                <div className="study-distraction__panel">
+                  <span className="study-distraction__eyebrow">루미 방해 카드</span>
+                  <h2>{distractionCard.title}</h2>
+                  <p>{distractionCard.prompt}</p>
+                  <div className="study-distraction__choices">
+                    {distractionCard.choices.map((choice, index) => (
+                      <button
+                        type="button"
+                        className="btn btn--soft"
+                        key={`${choice}-${index}`}
+                        onClick={() => answerDistractionCard(choice)}
+                      >
+                        {choice}
+                      </button>
+                    ))}
+                  </div>
+                  {distractionWrong && (
+                    <p className="study-distraction__feedback">다시 골라야 미션 잠금이 풀려요.</p>
+                  )}
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => setDistractionVisible(false)}
+                  >
+                    잠깐 숨기기
+                  </button>
+                </div>
+              </section>
+            )}
+          </div>
 
         </main>
 
@@ -620,6 +750,12 @@ export function StudyRoom({
                       {privateMission.prompt}
                       <br />
                       진행: {missionState.count}/{privateMission.target}
+                      {distractionLocksMission && (
+                        <>
+                          <br />
+                          <span className="study-focus__meta">방해 카드를 풀어야 미션이 다시 진행돼요.</span>
+                        </>
+                      )}
                     </p>
                   </div>
                 ) : (
@@ -936,6 +1072,14 @@ function emptyExpressionSignals(): ExpressionSignals {
     headYaw: 0,
     headPitch: 0,
     headRoll: 0
+  };
+}
+
+function createDistractionCard(roundId: string, roundIndex: number): DistractionCard {
+  const template = distractionCards[(Math.max(1, roundIndex) - 1) % distractionCards.length]!;
+  return {
+    id: `${roundId}:${template.kind}`,
+    ...template
   };
 }
 

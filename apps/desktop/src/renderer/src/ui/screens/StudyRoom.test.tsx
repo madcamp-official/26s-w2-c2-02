@@ -408,6 +408,67 @@ describe('StudyRoom hidden mission progress', () => {
     );
   });
 
+  it('locks hidden mission progress until the distraction card is solved', async () => {
+    const host = createParticipant('participant-host', 'Host');
+    const member = { ...createParticipant('participant-member', 'Member'), role: 'member' as const };
+    const room = createRoom();
+    const privateMission: HiddenMission = {
+      id: 'mission-1',
+      playerId: host.id,
+      prompt: 'Smile once',
+      verify: 'smile_count',
+      target: 1
+    };
+    const currentGame: GameSession = {
+      ...createGame(room, [host, member], 'hidden_mission'),
+      missions: [privateMission]
+    };
+    const onSubmitMissionResult = vi.fn();
+
+    const { rerender } = render(
+      <StudyRoom
+        {...baseStudyRoomProps(host)}
+        currentGame={currentGame}
+        participants={[host, member]}
+        privateMission={privateMission}
+        room={room}
+        onSubmitMissionResult={onSubmitMissionResult}
+      />
+    );
+
+    expect(screen.getByLabelText('루미 방해 카드')).toBeInTheDocument();
+    expect(screen.getByText('방해 카드를 풀어야 미션이 다시 진행돼요.')).toBeInTheDocument();
+
+    focusDetectionMock.snapshot.expressionSignals = expressionSignal({ timestamp: 1_000, smile: 0.8 });
+    rerender(
+      <StudyRoom
+        {...baseStudyRoomProps(host)}
+        currentGame={currentGame}
+        participants={[host, member]}
+        privateMission={privateMission}
+        room={room}
+        onSubmitMissionResult={onSubmitMissionResult}
+      />
+    );
+
+    expect(screen.getByText(/진행: 0\/1/)).toBeInTheDocument();
+    expect(onSubmitMissionResult).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /화상 타일 보기/ }));
+    expect(screen.queryByLabelText('루미 방해 카드')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /방해 카드 보기/ }));
+    fireEvent.click(screen.getByRole('button', { name: '7' }));
+
+    await waitFor(() =>
+      expect(onSubmitMissionResult).toHaveBeenCalledWith({
+        playerId: host.id,
+        missionId: privateMission.id,
+        count: 1,
+        success: true
+      })
+    );
+  });
+
   it('resets the secret mission count when the round changes even if the mission id is reused', async () => {
     const participant = createParticipant('participant-host', 'Host');
     const room = createRoom();
