@@ -59,14 +59,17 @@ and rolls back the participant instead of returning a local-only video session.
 - Room creation stores `room.settings.activityKind`. `study` keeps the original
   study-room flow with break controls; `hidden_mission`, `poker_bluff`, and
   `copycat_relay` create game rooms. Break settings and break controls are only
-  available when `activityKind === 'study'`.
+  available when `activityKind === 'study'`. Study rooms use
+  `sessionMinutes`; game rooms use `roundCount` for the number of game rounds.
 - The waiting-room text slot is mode-aware. Study rooms label it as `내 목표`
   and use `/goals/refine` to narrow the goal. Game rooms label it as `오늘의
   플레이 스타일`, allow empty-text recommendations from Roomi, and require a
   saved style before entering the active game room.
-- The active video room shows every participant's saved study goal or play
-  style. In game rooms, the pre-round Roomi message is based on the configured
-  `defaultGameKind` instead of the study-session start copy.
+- The active video room shows every participant's saved study goal in study
+  rooms. In game rooms, the right-side summary becomes `현재 순위`; saved play
+  styles move into the detailed game-results modal. The pre-round Roomi message
+  is based on the configured `defaultGameKind` instead of the study-session
+  start copy.
 - In the active room, the host can start `hidden_mission`, `poker_bluff`, or
   `copycat_relay` when `room.settings.activityKind` is a game kind. The desktop
   app sends `room.settings.defaultGameKind`, which is chosen during room
@@ -75,7 +78,14 @@ and rolls back the participant instead of returning a local-only video session.
   events below.
 - Hidden mission rounds assign each participant one private mission from a
   shuffled mission pool. Mission text is not included in public game snapshots
-  until the host reveals the game.
+  until the host reveals the game. When a participant returns from the lobby to
+  an active hidden-mission round, the server replaces that participant's private
+  mission.
+- Hidden mission success stops the current round without ending the video room.
+  If more rounds remain, `currentGame.status` becomes `between_round`, the top
+  room timer shows the next-round countdown, and participants can send
+  `game:next-round-ready`. The next round starts immediately when every active
+  participant is ready, or automatically when the 5-minute countdown expires.
 - Roomi game host messages are emitted through `roomi:message` on game start,
   player reactions, and reveal. The API asks the configured LLM for these lines
   and falls back to templates when the LLM is unavailable; prompts include only
@@ -83,9 +93,11 @@ and rolls back the participant instead of returning a local-only video session.
   text, not raw camera frames. Hidden mission live reactions avoid naming the
   player or declaring mission success; they only hint at visible expression
   clues such as a raised brow or brief smile.
-- The server owns the round timer through `currentSession.startedAt`,
-  `currentSession.plannedMinutes`, and optional `breakEndsAt`. Clients calculate
-  remaining time from server timestamps, so late joiners see the same clock.
+- The server owns study timing through `currentSession.startedAt`,
+  `currentSession.plannedMinutes`, and optional `breakEndsAt`. Game timing lives
+  on `currentGame.round.endsAt` and `currentGame.nextRoundStartsAt`. Clients
+  calculate remaining time from server timestamps, so late joiners see the same
+  clock.
 - If the configured central API is unavailable during local development, the
   desktop renderer can still create a local demo room and run the face party
   game UI on one machine. That fallback is intentionally process-local: invite
@@ -121,9 +133,10 @@ Client events are defined in `packages/shared/src/realtime-events.ts`.
 | `bluff:bet` | client to server | Submit a player's guess for an expression bluff target. |
 | `relay:advance` | client to server | Submit one relay mirror step with prompt, player expression signals, and similarity score. |
 | `game:reveal` | client to server | Host reveals the current game and asks the server to finalize scores. |
+| `game:next-round-ready` | client to server | Mark the participant ready during `between_round`. When all active participants are ready, the server starts the next round and broadcasts `game:round-begin`. |
 | `room:snapshot` | server to client | Send the current room snapshot to a newly subscribed client. |
 | `room:updated` | server to client | Broadcast the latest room snapshot. |
-| `game:round-begin` | server to client | Broadcast the public game state for the new round. Hidden missions are removed from public snapshots. |
+| `game:round-begin` | server to client | Broadcast the public game state for the new round or between-round state. Hidden missions are removed from public snapshots. |
 | `mission:assign` | server to client | Send one hidden mission only to the assigned participant. |
 | `mission:result` | server to client | Broadcast a submitted mission result without raw camera frames. |
 | `game:reveal` | server to client | Broadcast the revealed game state, including final scores and missions that are now safe to show. |

@@ -43,6 +43,7 @@ import {
   extendBreak,
   joinRoomSession,
   leaveRoom,
+  markNextRoundReady,
   placeBluffBet,
   refineGoal,
   reportExpression,
@@ -79,6 +80,7 @@ const defaultRoomSettings: RoomSettings = {
   activityKind: 'study',
   defaultGameKind: 'hidden_mission',
   sessionMinutes: 50,
+  roundCount: 3,
   breakMode: 'room',
   breakMinutes: 10,
   defaultScoreVisibility: 'public',
@@ -230,8 +232,11 @@ function createLocalGame(room: Room, participants: Participant[], kind: GameKind
       index: 1,
       status: 'in_round',
       startedAt: timestamp,
-      endsAt: new Date(Date.now() + room.settings.sessionMinutes * 60_000).toISOString()
+      endsAt: new Date(Date.now() + 90_000).toISOString()
     },
+    totalRounds: Math.max(1, room.settings.roundCount ?? 1),
+    completedRounds: [],
+    nextRoundReadyParticipantIds: [],
     scores: participants.map((participant) => ({
       participantId: participant.id,
       points: 0
@@ -364,6 +369,31 @@ export function App() {
   useEffect(() => {
     if (activeRoom.room.status === 'ended' && screen !== 'retrospective') go('retrospective');
   }, [activeRoom.room.status, screen]);
+
+  useEffect(() => {
+    if (
+      !roomDraft ||
+      roomDraft.realtime !== 'local' ||
+      roomDraft.currentGame?.status !== 'between_round' ||
+      !roomDraft.currentGame.nextRoundStartsAt
+    ) {
+      return undefined;
+    }
+
+    const delayMs = Math.max(0, Date.parse(roomDraft.currentGame.nextRoundStartsAt) - Date.now());
+    const timer = window.setTimeout(() => {
+      setRoomDraft((current) => {
+        if (!current?.currentGame || current.currentGame.status !== 'between_round') return current;
+        const currentGame = startNextLocalRound(current.room, current.participants, current.currentGame);
+        return {
+          ...current,
+          currentGame,
+          privateMission: resolvePrivateMission(current, currentGame)
+        };
+      });
+    }, delayMs);
+    return () => window.clearTimeout(timer);
+  }, [roomDraft?.currentGame?.id, roomDraft?.currentGame?.nextRoundStartsAt, roomDraft?.currentGame?.status, roomDraft?.realtime]);
 
   useEffect(() => {
     if (
@@ -600,6 +630,41 @@ export function App() {
   };
 
   const joinCurrentSession = () => {
+    setRoomDraft((current) => {
+      if (
+        !current ||
+        current.realtime !== 'local' ||
+        current.currentGame?.kind !== 'hidden_mission' ||
+        current.currentGame.status !== 'in_round'
+      ) {
+        return current;
+      }
+      const participant = current.participants.find(
+        (item) => item.id === current.currentParticipantId
+      );
+      if (participant?.status !== 'online') return current;
+
+      const freshGame = createLocalGame(current.room, current.participants, 'hidden_mission');
+      const replacement = freshGame.missions?.find(
+        (mission) => mission.playerId === current.currentParticipantId
+      );
+      if (!replacement) return current;
+
+      const currentGame = {
+        ...current.currentGame,
+        missions: [
+          ...(current.currentGame.missions ?? []).filter(
+            (mission) => mission.playerId !== current.currentParticipantId
+          ),
+          replacement
+        ],
+        missionResults: (current.currentGame.missionResults ?? []).filter(
+          (result) => result.playerId !== current.currentParticipantId
+        ),
+        updatedAt: now()
+      };
+      return { ...current, currentGame, privateMission: replacement };
+    });
     setCurrentSessionPresence('focused');
     go('study');
   };
@@ -740,7 +805,15 @@ export function App() {
       );
       const next: RoomDraft = {
         ...current,
-        currentGame: {
+        currentGame: result.success ? finishLocalGameRound({
+          ...current.currentGame,
+          missionResults: [
+            ...(current.currentGame.missionResults ?? []).filter(
+              (item) => item.playerId !== result.playerId
+            ),
+            result
+          ]
+        }) : {
           ...current.currentGame,
           missionResults: [
             ...(current.currentGame.missionResults ?? []).filter(
@@ -909,6 +982,38 @@ export function App() {
     });
   };
 
+  const readyForNextRound = () => {
+    if (!roomDraft?.currentGame) return;
+
+    if (roomDraft.realtime === 'server') {
+      markNextRoundReady(socketRef.current, {
+        roomId: roomDraft.room.id,
+        participantId: roomDraft.currentParticipantId,
+        gameId: roomDraft.currentGame.id
+      });
+      return;
+    }
+
+    setRoomDraft((current) => {
+      if (!current?.currentGame || current.currentGame.status !== 'between_round') return current;
+      const readyIds = new Set(current.currentGame.nextRoundReadyParticipantIds ?? []);
+      readyIds.add(current.currentParticipantId);
+      const everyoneReady = current.participants.every((participant) => readyIds.has(participant.id));
+      const currentGame = everyoneReady
+        ? startNextLocalRound(current.room, current.participants, current.currentGame)
+        : {
+            ...current.currentGame,
+            nextRoundReadyParticipantIds: [...readyIds],
+            updatedAt: now()
+          };
+      return {
+        ...current,
+        currentGame,
+        privateMission: resolvePrivateMission(current, currentGame)
+      };
+    });
+  };
+
   const endCurrentSession = () => {
     if (!roomDraft) {
       go('retrospective');
@@ -934,17 +1039,19 @@ export function App() {
 
     setRoomDraft((current) => {
       if (!current) return current;
-      const results = current.currentGame?.missionResults ?? [];
       const currentGame = current.currentGame
-        ? {
-            ...current.currentGame,
-            status: 'reveal' as const,
-            round: { ...current.currentGame.round, status: 'reveal' as const, revealAt: now() },
-            scores: current.currentGame.scores.map((score) => {
-              const success = results.find((result) => result.playerId === score.participantId)?.success;
-              return { ...score, points: score.points + (success ? 10 : 0) };
-            })
-          }
+        ? current.currentGame.status === 'reveal'
+          ? current.currentGame
+          : current.currentGame.status === 'between_round'
+            ? {
+                ...current.currentGame,
+                status: 'reveal' as const,
+                round: { ...current.currentGame.round, status: 'reveal' as const, revealAt: now() },
+                nextRoundReadyParticipantIds: [],
+                nextRoundStartsAt: undefined,
+                updatedAt: now()
+              }
+            : finishLocalGameRound(current.currentGame, true)
         : current.currentGame;
       const next: RoomDraft = {
         ...current,
@@ -1076,6 +1183,7 @@ export function App() {
             onSubmitBluffBet={submitCurrentBluffBet}
             onSubmitBluffSignals={submitCurrentBluffSignals}
             onAdvanceRelay={advanceCurrentRelay}
+            onReadyNextRound={readyForNextRound}
             go={go}
           />
         )}
@@ -1118,6 +1226,81 @@ function snapshotToDraftPatch(snapshot: {
     roomiMessages: snapshot.roomiMessages,
     currentSession: snapshot.currentSession,
     currentGame: snapshot.currentGame
+  };
+}
+
+function finishLocalGameRound(game: GameSession, forceReveal = false): GameSession {
+  const timestamp = now();
+  const scores =
+    game.kind === 'hidden_mission'
+      ? game.scores.map((score) => {
+          const success = (game.missionResults ?? []).find(
+            (result) => result.playerId === score.participantId
+          )?.success;
+          return { ...score, points: score.points + (success ? 10 : 0) };
+        })
+      : game.scores;
+  const completedRounds = [
+    ...(game.completedRounds ?? []),
+    {
+      roundIndex: game.round.index,
+      status: forceReveal || game.round.index >= game.totalRounds ? 'revealed' as const : 'completed' as const,
+      endedAt: timestamp,
+      scores,
+      missionResults: game.missionResults,
+      bluffResult: game.bluffResult,
+      relayLinks: game.relayLinks
+    }
+  ];
+
+  if (forceReveal || game.round.index >= game.totalRounds) {
+    return {
+      ...game,
+      status: 'reveal',
+      round: { ...game.round, status: 'reveal', revealAt: timestamp },
+      scores,
+      completedRounds,
+      nextRoundReadyParticipantIds: [],
+      nextRoundStartsAt: undefined,
+      updatedAt: timestamp
+    };
+  }
+
+  const nextRoundStartsAt = new Date(Date.now() + 5 * 60_000).toISOString();
+  return {
+    ...game,
+    status: 'between_round',
+    round: { ...game.round, status: 'between_round', revealAt: timestamp, nextStartsAt: nextRoundStartsAt },
+    scores,
+    completedRounds,
+    nextRoundReadyParticipantIds: [],
+    nextRoundStartsAt,
+    updatedAt: timestamp
+  };
+}
+
+function startNextLocalRound(room: Room, participants: Participant[], game: GameSession): GameSession {
+  const freshGame = createLocalGame(room, participants, game.kind);
+  const timestamp = now();
+  return {
+    ...game,
+    status: 'in_round',
+    round: {
+      id: `round-${Date.now()}`,
+      gameId: game.id,
+      index: game.round.index + 1,
+      status: 'in_round',
+      startedAt: timestamp,
+      endsAt: new Date(Date.now() + 90_000).toISOString()
+    },
+    missions: game.kind === 'hidden_mission' ? freshGame.missions : [],
+    missionResults: [],
+    bluffBets: game.kind === 'poker_bluff' ? [] : undefined,
+    bluffResult: undefined,
+    relayLinks: game.kind === 'copycat_relay' ? [] : undefined,
+    nextRoundReadyParticipantIds: [],
+    nextRoundStartsAt: undefined,
+    updatedAt: timestamp
   };
 }
 

@@ -249,6 +249,9 @@ describe('StudyRoom hidden mission progress', () => {
         startedAt: '2026-07-15T00:00:00.000Z',
         endsAt: '2026-07-15T00:02:00.000Z'
       },
+      totalRounds: room.settings.roundCount,
+      completedRounds: [],
+      nextRoundReadyParticipantIds: [],
       scores: [{ participantId: participant.id, points: 0 }],
       missions: [privateMission],
       missionResults: [],
@@ -367,7 +370,9 @@ describe('StudyRoom hidden mission progress', () => {
       />
     );
 
-    expect(screen.getByRole('heading', { name: '플레이 스타일' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '현재 순위' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '자세히 보기' }));
+    expect(screen.getByRole('heading', { name: '게임 결과 상세' })).toBeInTheDocument();
     expect(screen.getByText('의심받을수록 더 침착한 척하기')).toBeInTheDocument();
     expect(screen.getByText('괜히 자신감 넘치는 분석가처럼 말하기')).toBeInTheDocument();
     expect(screen.getByText(/포커페이스 블러프를 시작하면/)).toBeInTheDocument();
@@ -453,6 +458,7 @@ function createRoom(
       activityKind,
       defaultGameKind,
       sessionMinutes: 10,
+      roundCount: 3,
       breakMinutes: 5,
       maxParticipants: 4,
       breakMode: 'individual',
@@ -498,6 +504,9 @@ function createGame(room: Room, participants: Participant[], kind: GameSession['
       startedAt: '2026-07-15T00:00:00.000Z',
       endsAt: '2026-07-15T00:02:00.000Z'
     },
+    totalRounds: room.settings.roundCount,
+    completedRounds: [],
+    nextRoundReadyParticipantIds: [],
     scores: participants.map((participant) => ({ participantId: participant.id, points: 0 })),
     missions: [],
     missionResults: [],

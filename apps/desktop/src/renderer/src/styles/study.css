@@ -218,11 +218,38 @@
   line-height: 1;
 }
 
+.study-timer__value--game {
+  font-size: clamp(24px, 3vw, 36px);
+  line-height: 1.15;
+}
+
 .study-card__title {
   font-size: 14px;
   font-weight: 800;
   color: var(--heading);
   margin-bottom: 14px;
+}
+
+.study-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.study-card__head .study-card__title {
+  margin-bottom: 0;
+}
+
+.text-button {
+  color: var(--purple-700);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.text-button:hover {
+  text-decoration: underline;
 }
 
 .goal {
@@ -243,6 +270,10 @@
   font-weight: 700;
   color: var(--purple-700);
   min-width: 40px;
+}
+
+.game-rank-row {
+  align-items: center;
 }
 
 .goal__text {
@@ -384,6 +415,87 @@
 
 .study-focus__error {
   color: var(--danger);
+}
+
+.btn--compact {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.game-round-banner {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: min(420px, 100%);
+  margin: 0 auto 22px;
+  padding: 18px;
+  border: 1px solid rgba(138, 125, 240, 0.24);
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+  text-align: center;
+}
+
+.game-round-banner strong {
+  color: var(--heading);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.game-round-banner span {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.game-results-modal {
+  width: min(560px, 100%);
+  max-height: min(720px, calc(100vh - 96px));
+  overflow-y: auto;
+}
+
+.game-results__section {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.game-results__section h3 {
+  color: var(--heading);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.game-results__row {
+  display: grid;
+  grid-template-columns: minmax(52px, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border-soft);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.game-results__row:first-of-type {
+  border-top: none;
+}
+
+.game-results__row span {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.game-results__row b {
+  color: var(--purple-700);
+}
+
+.game-results__round {
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  background: var(--row-bg);
 }
 
 @keyframes lumi-message-in {

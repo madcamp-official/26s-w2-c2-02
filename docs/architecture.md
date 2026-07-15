@@ -51,10 +51,12 @@ participant tokens, while Roomi room codes, player lists, host state, round
 state, and timers stay in the Roomi API. Daily API keys are server-side
 environment variables and must not be exposed to the renderer.
 
-The server owns round timing through `currentSession.startedAt`,
-`currentSession.plannedMinutes`, and optional `breakEndsAt`. Clients render the
-clock from those timestamps, so late joiners and reconnecting players see the
-same remaining time without each client becoming its own timer authority.
+The server owns study timing through `currentSession.startedAt`,
+`currentSession.plannedMinutes`, and optional `breakEndsAt`. Game timing is
+stored separately on `currentGame.round.endsAt` and
+`currentGame.nextRoundStartsAt`. Clients render clocks from those timestamps, so
+late joiners and reconnecting players see the same remaining time without each
+client becoming its own timer authority.
 
 Rooms store `settings.activityKind` to distinguish the original study-room flow
 from face party game rooms. `study` enables study goals and break controls;
@@ -64,9 +66,12 @@ from face party game rooms. `study` enables study goals and break controls;
 room; the active game room starts that configured game instead of choosing a
 mode from the live controls. The API starts rounds, stores hidden missions and
 scores, sends private mission assignments only to the matching participant, and
-broadcasts public game snapshots without hidden mission text until reveal. The
-renderer uses local expression signals to update mission progress, while the API
-remains the authority for multiplayer results.
+broadcasts public game snapshots without hidden mission text until reveal. Game
+rooms use `settings.roundCount`; between rounds the API tracks
+`nextRoundReadyParticipantIds`, starts the next round when everyone is ready,
+and falls back to an automatic start after the 5-minute countdown. The renderer
+uses local expression signals to update mission progress, while the API remains
+the authority for multiplayer results.
 
 The waiting-room text slot still uses the compatibility `goals` collection, but
 its product meaning depends on `activityKind`. Study rooms treat it as the
@@ -74,8 +79,9 @@ participant's study goal. Game rooms treat it as that player's "today's play
 style", can ask Roomi to recommend one through `/goals/refine` with
 `mode: 'play_style'`, and pass the saved style into game host-message prompts so
 Roomi can reference player-authored characters during live reactions. The active
-video room renders these saved goals/styles for every participant, not just the
-local player.
+video room renders saved study goals directly in study rooms; in game rooms,
+play styles live in the detailed results modal beside current ranking and
+round-by-round results.
 
 Roomi's live game host lines are generated on the API side in Korean for game
 start, mission results, bluff bets/results, relay progress, and reveal. The

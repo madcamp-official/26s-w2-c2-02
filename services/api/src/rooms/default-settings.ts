@@ -4,6 +4,7 @@ export const defaultRoomSettings: RoomSettings = {
   activityKind: 'study',
   defaultGameKind: 'hidden_mission',
   sessionMinutes: 50,
+  roundCount: 3,
   breakMode: 'room',
   breakMinutes: 10,
   defaultScoreVisibility: 'public',

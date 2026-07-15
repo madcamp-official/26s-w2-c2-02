@@ -260,7 +260,11 @@ export function WaitingRoom({
           <div className="waiting-game">
             <span className="waiting-game__label">선택한 방식</span>
             <strong>{activityLabel[room.settings.activityKind]}</strong>
-            <span>{room.settings.sessionMinutes}분 {isStudyMode ? '집중' : '라운드'}</span>
+            <span>
+              {isStudyMode
+                ? `${room.settings.sessionMinutes}분 집중`
+                : `${room.settings.roundCount ?? 1}라운드`}
+            </span>
           </div>
 
           <div className="people">

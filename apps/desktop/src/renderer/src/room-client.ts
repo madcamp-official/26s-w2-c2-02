@@ -5,6 +5,7 @@ import type {
   GoalRefineInput,
   GoalRefinement,
   GameRevealInput,
+  GameNextRoundReadyInput,
   GameSession,
   GameStartInput,
   JoinRoomInput,
@@ -169,6 +170,13 @@ export function revealGame(
   input: GameRevealInput
 ) {
   socket?.emit(realtimeEvents.client.revealGame, input);
+}
+
+export function markNextRoundReady(
+  socket: Socket<ServerToClientEvents, ClientToServerEvents> | null,
+  input: GameNextRoundReadyInput
+) {
+  socket?.emit(realtimeEvents.client.nextRoundReady, input);
 }
 
 export function createRoomSocket() {

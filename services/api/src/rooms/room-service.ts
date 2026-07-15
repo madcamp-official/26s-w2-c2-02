@@ -5,6 +5,7 @@ import type {
   ExpressionSignals,
   FocusRankingEntry,
   GameKind,
+  GameRoundSummary,
   GameSession,
   Goal,
   HiddenMission,
@@ -34,6 +35,9 @@ type RoomiMessageListener = (message: RoomiMessage) => void;
 type AddRoomiMessageInput = Omit<RoomiMessage, 'id' | 'createdAt'>;
 type GameUpdatedListener = (snapshot: RoomSnapshot, game: GameSession) => void;
 type MissionAssignedListener = (roomId: string, mission: HiddenMission) => void;
+
+const GAME_ROUND_MS = 90_000;
+const NEXT_ROUND_WAIT_MS = 5 * 60_000;
 
 export const hiddenMissionTemplates: ReadonlyArray<Omit<HiddenMission, 'id' | 'playerId'>> = [
   { prompt: '대화 사이에 몰래 윙크 2번 넣기', verify: 'wink_count', target: 2 },
@@ -186,6 +190,9 @@ export class RoomService {
       throw new Error('Room not found');
     }
 
+    const previousParticipant = snapshot.participants.find(
+      (participant) => participant.id === participantId
+    );
     this.touchFocusTracker(roomId, participantId, status, Date.now());
 
     snapshot.participants = snapshot.participants.map((participant) =>
@@ -193,7 +200,37 @@ export class RoomService {
         ? { ...participant, status, lastSeenAt: new Date().toISOString() }
         : participant
     );
+    const shouldReplaceHiddenMission =
+      previousParticipant?.status === 'online' &&
+      status === 'focused' &&
+      snapshot.currentGame?.kind === 'hidden_mission' &&
+      snapshot.currentGame.status === 'in_round';
+    let replacementMission: HiddenMission | undefined;
+    if (shouldReplaceHiddenMission && snapshot.currentGame) {
+      const previousMission = snapshot.currentGame.missions?.find(
+        (mission) => mission.playerId === participantId
+      );
+      const replacement = this.createReplacementHiddenMission(participantId, previousMission);
+      replacementMission = replacement;
+      snapshot.currentGame = {
+        ...snapshot.currentGame,
+        missions: [
+          ...(snapshot.currentGame.missions ?? []).filter(
+            (mission) => mission.playerId !== participantId
+          ),
+          replacement
+        ],
+        missionResults: (snapshot.currentGame.missionResults ?? []).filter(
+          (result) => result.playerId !== participantId
+        ),
+        updatedAt: new Date().toISOString()
+      };
+    }
     this.store.update(snapshot);
+    if (replacementMission && snapshot.currentGame) {
+      this.emitMissionAssigned(roomId, replacementMission);
+      this.emitGameUpdated(snapshot, snapshot.currentGame);
+    }
     this.emitRoomUpdated(snapshot);
     return snapshot;
   }
@@ -529,6 +566,7 @@ export class RoomService {
 
     const now = new Date().toISOString();
     const gameId = crypto.randomUUID();
+    const totalRounds = Math.max(1, Math.min(10, snapshot.room.settings.roundCount ?? 1));
     const game: GameSession = {
       id: gameId,
       roomId,
@@ -540,8 +578,11 @@ export class RoomService {
         index: 1,
         status: 'in_round',
         startedAt: now,
-        endsAt: new Date(Date.now() + 90_000).toISOString()
+        endsAt: new Date(Date.now() + GAME_ROUND_MS).toISOString()
       },
+      totalRounds,
+      completedRounds: [],
+      nextRoundReadyParticipantIds: [],
       scores: snapshot.participants.map((participant) => ({
         participantId: participant.id,
         points: 0
@@ -574,6 +615,7 @@ export class RoomService {
 
     const game = snapshot.currentGame;
     if (game.kind !== 'hidden_mission') throw new Error('Mission results require hidden mission');
+    if (game.status !== 'in_round' && game.status !== 'guessing') return game;
     if (!game.missions?.some((mission) => mission.id === result.missionId && mission.playerId === result.playerId)) {
       throw new Error('Mission not found');
     }
@@ -582,11 +624,14 @@ export class RoomService {
       ...(game.missionResults ?? []).filter((item) => item.playerId !== result.playerId),
       result
     ];
-    snapshot.currentGame = {
+    const nextGame = {
       ...game,
       missionResults,
       updatedAt: new Date().toISOString()
     };
+    snapshot.currentGame = result.success
+      ? this.finishGameRound(snapshot, nextGame)
+      : nextGame;
     this.store.update(snapshot);
     this.emitGameUpdated(snapshot, snapshot.currentGame);
     return snapshot.currentGame;
@@ -701,28 +746,77 @@ export class RoomService {
     if (!requester) throw new Error('Participant not found');
     if (requester.role !== 'host') throw new Error('Only the host can reveal the game');
 
-    const now = new Date().toISOString();
-    const results = snapshot.currentGame.missionResults ?? [];
-    const scores =
-      snapshot.currentGame.kind === 'hidden_mission'
-        ? snapshot.currentGame.scores.map((score) => {
-            const success = results.find(
-              (result) => result.playerId === score.participantId
-            )?.success;
-            return { ...score, points: score.points + (success ? 10 : 0) };
-          })
-        : snapshot.currentGame.scores;
-
-    snapshot.currentGame = {
-      ...snapshot.currentGame,
-      status: 'reveal',
-      round: { ...snapshot.currentGame.round, status: 'reveal', revealAt: now },
-      scores,
-      updatedAt: now
-    };
+    snapshot.currentGame =
+      snapshot.currentGame.status === 'between_round'
+        ? {
+            ...snapshot.currentGame,
+            status: 'reveal',
+            round: {
+              ...snapshot.currentGame.round,
+              status: 'reveal',
+              revealAt: new Date().toISOString()
+            },
+            nextRoundReadyParticipantIds: [],
+            nextRoundStartsAt: undefined,
+            updatedAt: new Date().toISOString()
+          }
+        : this.finishGameRound(snapshot, snapshot.currentGame, true);
     this.store.update(snapshot);
     this.emitRoomUpdated(snapshot);
     this.emitGameUpdated(snapshot, snapshot.currentGame);
+    return snapshot.currentGame;
+  }
+
+  markNextRoundReady(roomId: string, participantId: string, gameId: string): GameSession {
+    const snapshot = this.store.findByRoomId(roomId);
+    if (!snapshot?.currentGame || snapshot.currentGame.id !== gameId) {
+      throw new Error('No active game');
+    }
+
+    const game = snapshot.currentGame;
+    if (game.status !== 'between_round') return game;
+
+    const participantExists = snapshot.participants.some(
+      (participant) => participant.id === participantId
+    );
+    if (!participantExists) throw new Error('Participant not found');
+
+    const readyIds = new Set(game.nextRoundReadyParticipantIds ?? []);
+    readyIds.add(participantId);
+    const activeParticipantIds = snapshot.participants.map((participant) => participant.id);
+    const everyoneReady = activeParticipantIds.every((id) => readyIds.has(id));
+
+    snapshot.currentGame = everyoneReady
+      ? this.startNextRound(snapshot, game)
+      : {
+          ...game,
+          nextRoundReadyParticipantIds: [...readyIds],
+          updatedAt: new Date().toISOString()
+        };
+
+    this.store.update(snapshot);
+    this.emitRoomUpdated(snapshot);
+    this.emitGameUpdated(snapshot, snapshot.currentGame);
+    if (snapshot.currentGame.status === 'in_round') {
+      snapshot.currentGame.missions?.forEach((mission) =>
+        this.emitMissionAssigned(roomId, mission)
+      );
+    }
+    return snapshot.currentGame;
+  }
+
+  startNextRoundIfDue(roomId: string, gameId: string, nowMs = Date.now()): GameSession | undefined {
+    const snapshot = this.store.findByRoomId(roomId);
+    if (!snapshot?.currentGame || snapshot.currentGame.id !== gameId) return undefined;
+    const game = snapshot.currentGame;
+    if (game.status !== 'between_round' || !game.nextRoundStartsAt) return game;
+    if (Date.parse(game.nextRoundStartsAt) > nowMs) return game;
+
+    snapshot.currentGame = this.startNextRound(snapshot, game);
+    this.store.update(snapshot);
+    this.emitRoomUpdated(snapshot);
+    this.emitGameUpdated(snapshot, snapshot.currentGame);
+    snapshot.currentGame.missions?.forEach((mission) => this.emitMissionAssigned(roomId, mission));
     return snapshot.currentGame;
   }
 
@@ -909,16 +1003,128 @@ export class RoomService {
     return createSharedInviteCode();
   }
 
-  private createHiddenMissions(participants: Participant[]): HiddenMission[] {
+  private finishGameRound(
+    snapshot: RoomSnapshot,
+    game: GameSession,
+    forceReveal = false
+  ): GameSession {
+    const now = new Date().toISOString();
+    const scores = this.scoreCompletedRound(game);
+    const roundSummary: GameRoundSummary = {
+      roundIndex: game.round.index,
+      status: forceReveal || game.round.index >= game.totalRounds ? 'revealed' : 'completed',
+      endedAt: now,
+      scores,
+      missionResults: game.missionResults,
+      bluffResult: game.bluffResult,
+      relayLinks: game.relayLinks
+    };
+    const completedRounds = [...(game.completedRounds ?? []), roundSummary];
+    const isFinalRound = forceReveal || game.round.index >= game.totalRounds;
+
+    if (isFinalRound) {
+      return {
+        ...game,
+        status: 'reveal',
+        round: { ...game.round, status: 'reveal', revealAt: now },
+        scores,
+        completedRounds,
+        nextRoundReadyParticipantIds: [],
+        nextRoundStartsAt: undefined,
+        updatedAt: now
+      };
+    }
+
+    const nextRoundStartsAt = new Date(Date.now() + NEXT_ROUND_WAIT_MS).toISOString();
+    return {
+      ...game,
+      status: 'between_round',
+      round: {
+        ...game.round,
+        status: 'between_round',
+        revealAt: now,
+        nextStartsAt: nextRoundStartsAt
+      },
+      scores,
+      completedRounds,
+      nextRoundReadyParticipantIds: [],
+      nextRoundStartsAt,
+      updatedAt: now
+    };
+  }
+
+  private startNextRound(snapshot: RoomSnapshot, game: GameSession): GameSession {
+    const now = new Date().toISOString();
+    const roundIndex = game.round.index + 1;
+    return {
+      ...game,
+      status: 'in_round',
+      round: {
+        id: crypto.randomUUID(),
+        gameId: game.id,
+        index: roundIndex,
+        status: 'in_round',
+        startedAt: now,
+        endsAt: new Date(Date.now() + GAME_ROUND_MS).toISOString()
+      },
+      missions:
+        game.kind === 'hidden_mission'
+          ? this.createHiddenMissions(snapshot.participants, game.missions)
+          : [],
+      missionResults: [],
+      bluffBets: game.kind === 'poker_bluff' ? [] : undefined,
+      bluffResult: undefined,
+      relayLinks: game.kind === 'copycat_relay' ? [] : undefined,
+      nextRoundReadyParticipantIds: [],
+      nextRoundStartsAt: undefined,
+      updatedAt: now
+    };
+  }
+
+  private scoreCompletedRound(game: GameSession): GameSession['scores'] {
+    if (game.kind !== 'hidden_mission') return game.scores;
+
+    const results = game.missionResults ?? [];
+    return game.scores.map((score) => {
+      const success = results.find((result) => result.playerId === score.participantId)?.success;
+      return { ...score, points: score.points + (success ? 10 : 0) };
+    });
+  }
+
+  private createHiddenMissions(
+    participants: Participant[],
+    previousMissions: HiddenMission[] = []
+  ): HiddenMission[] {
     const shuffled = [...hiddenMissionTemplates].sort(() => Math.random() - 0.5);
     return participants.map((participant, index) => {
-      const template = shuffled[index % shuffled.length]!;
+      const previousPrompt = previousMissions.find(
+        (mission) => mission.playerId === participant.id
+      )?.prompt;
+      let template = shuffled[index % shuffled.length]!;
+      if (template.prompt === previousPrompt) {
+        template = shuffled[(index + 1) % shuffled.length]!;
+      }
       return {
         id: crypto.randomUUID(),
         playerId: participant.id,
         ...template
       };
     });
+  }
+
+  private createReplacementHiddenMission(
+    participantId: string,
+    previousMission: HiddenMission | undefined
+  ): HiddenMission {
+    const candidates = hiddenMissionTemplates.filter(
+      (template) => template.prompt !== previousMission?.prompt
+    );
+    const template = candidates[Math.floor(Math.random() * candidates.length)] ?? hiddenMissionTemplates[0]!;
+    return {
+      id: crypto.randomUUID(),
+      playerId: participantId,
+      ...template
+    };
   }
 
   private bluffResultFromSignals(targetId: string, signals: ExpressionSignals): BluffResult {

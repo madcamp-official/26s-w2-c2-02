@@ -57,6 +57,7 @@ export function registerRealtimeGateway(
   });
 
   roomService.onGameUpdated((snapshot, game) => {
+    scheduleNextRoundIfNeeded(game);
     io.to(snapshot.room.id).emit(realtimeEvents.server.gameRoundBegin, publicGame(game));
     snapshot.participants.forEach((participant) => {
       io.to(participantChannel(snapshot.room.id, participant.id)).emit(
@@ -75,6 +76,7 @@ export function registerRealtimeGateway(
 
   const lastFocusRecoveryAt = new Map<string, number>();
   const awayTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const nextRoundTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const focusRecoveryDelayMs = options.focusRecoveryDelayMs ?? FOCUS_RECOVERY_DELAY_MS;
   const focusRecoveryCooldownMs =
     options.focusRecoveryCooldownMs ?? FOCUS_RECOVERY_COOLDOWN_MS;
@@ -229,6 +231,22 @@ export function registerRealtimeGateway(
       }
     });
 
+    socket.on(realtimeEvents.client.nextRoundReady, (input) => {
+      try {
+        const game = roomService.markNextRoundReady(
+          input.roomId,
+          input.participantId,
+          input.gameId
+        );
+        io.to(input.roomId).emit(realtimeEvents.server.gameRoundBegin, publicGame(game));
+        if (game.status === 'in_round') {
+          void sendGameIntro(input.roomId, game).catch(logGameMessageFailure);
+        }
+      } catch (error) {
+        socket.emit(realtimeEvents.server.error, errorMessage(error));
+      }
+    });
+
     socket.on(realtimeEvents.client.leaveRoom, (input) => {
       try {
         roomService.leaveRoom(input.roomId, input.participantId);
@@ -249,6 +267,30 @@ export function registerRealtimeGateway(
       subscriptions.clear();
     });
   });
+
+  function scheduleNextRoundIfNeeded(game: GameSession) {
+    const key = `${game.roomId}:${game.id}`;
+    if (game.status !== 'between_round' || !game.nextRoundStartsAt) {
+      const existing = nextRoundTimers.get(key);
+      if (existing) clearTimeout(existing);
+      nextRoundTimers.delete(key);
+      return;
+    }
+
+    if (nextRoundTimers.has(key)) return;
+
+    const delayMs = Math.max(0, Date.parse(game.nextRoundStartsAt) - Date.now());
+    const timer = setTimeout(() => {
+      nextRoundTimers.delete(key);
+      const nextGame = roomService.startNextRoundIfDue(game.roomId, game.id);
+      if (nextGame?.status === 'in_round') {
+        io.to(game.roomId).emit(realtimeEvents.server.gameRoundBegin, publicGame(nextGame));
+        void sendGameIntro(game.roomId, nextGame).catch(logGameMessageFailure);
+      }
+    }, delayMs);
+    timer.unref?.();
+    nextRoundTimers.set(key, timer);
+  }
 
   async function sendFocusRecoveryIfEligible(
     roomId: string,

@@ -576,6 +576,77 @@ describe('RoomService face party games', () => {
     expect(revealed.scores.find((score) => score.participantId === host.id)?.points).toBe(10);
   });
 
+  it('uses room round count and waits between rounds after a mission success', () => {
+    const service = createService();
+    const created = service.createRoom({
+      nickname: 'host',
+      settings: { activityKind: 'hidden_mission', roundCount: 3 }
+    });
+    const host = created.participants[0]!;
+    const game = service.startGame(created.room.id, host.id, 'hidden_mission');
+    const mission = game.missions![0]!;
+
+    const waiting = service.recordMissionResult(created.room.id, {
+      playerId: host.id,
+      missionId: mission.id,
+      count: mission.target,
+      success: true
+    });
+
+    expect(waiting.totalRounds).toBe(3);
+    expect(waiting.status).toBe('between_round');
+    expect(waiting.completedRounds).toHaveLength(1);
+    expect(waiting.scores.find((score) => score.participantId === host.id)?.points).toBe(10);
+    expect(waiting.nextRoundStartsAt).toBeTruthy();
+  });
+
+  it('starts the next round when all active participants are ready', () => {
+    const service = createService();
+    const created = service.createRoom({
+      nickname: 'host',
+      settings: { activityKind: 'hidden_mission', roundCount: 2 }
+    });
+    const host = created.participants[0]!;
+    const joined = service.joinRoom({ nickname: 'member', inviteCode: created.room.inviteCode });
+    const member = joined.participants.at(-1)!;
+    const game = service.startGame(created.room.id, host.id, 'hidden_mission');
+    const mission = game.missions!.find((item) => item.playerId === host.id)!;
+    const waiting = service.recordMissionResult(created.room.id, {
+      playerId: host.id,
+      missionId: mission.id,
+      count: mission.target,
+      success: true
+    });
+
+    service.markNextRoundReady(created.room.id, host.id, waiting.id);
+    const nextRound = service.markNextRoundReady(created.room.id, member.id, waiting.id);
+
+    expect(nextRound.status).toBe('in_round');
+    expect(nextRound.round.index).toBe(2);
+    expect(nextRound.missionResults).toEqual([]);
+    expect(nextRound.nextRoundReadyParticipantIds).toEqual([]);
+  });
+
+  it('replaces a hidden mission when a player returns from the waiting room', () => {
+    const service = createService();
+    const created = service.createRoom({
+      nickname: 'host',
+      settings: { activityKind: 'hidden_mission' }
+    });
+    const host = created.participants[0]!;
+    const game = service.startGame(created.room.id, host.id, 'hidden_mission');
+    const previousMission = game.missions!.find((mission) => mission.playerId === host.id)!;
+
+    service.updateParticipantStatus(created.room.id, host.id, 'online');
+    const snapshot = service.updateParticipantStatus(created.room.id, host.id, 'focused');
+    const replacement = snapshot.currentGame?.missions?.find(
+      (mission) => mission.playerId === host.id
+    );
+
+    expect(replacement?.id).not.toBe(previousMission.id);
+    expect(replacement?.prompt).not.toBe(previousMission.prompt);
+  });
+
   it('rejects non-host game start', () => {
     const service = createService();
     const created = service.createRoom({ nickname: 'host' });

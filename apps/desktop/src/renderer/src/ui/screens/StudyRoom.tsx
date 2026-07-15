@@ -60,6 +60,7 @@ interface StudyRoomProps extends ScreenProps {
   onSubmitBluffBet?: (targetId: string, predictsCrack: boolean) => void;
   onSubmitBluffSignals?: (signals: ExpressionSignals) => void;
   onAdvanceRelay?: (toId: string, similarity: number) => void;
+  onReadyNextRound?: () => void;
   participants: Participant[];
   goals: Goal[];
   roomiMessages: RoomiMessage[];
@@ -197,6 +198,7 @@ export function StudyRoom({
   onSubmitBluffBet,
   onSubmitBluffSignals,
   onAdvanceRelay,
+  onReadyNextRound,
   participants,
   goals,
   roomiMessages,
@@ -214,6 +216,7 @@ export function StudyRoom({
   const [bluffTargetId, setBluffTargetId] = useState('');
   const [relayTargetId, setRelayTargetId] = useState('');
   const [relaySimilarity, setRelaySimilarity] = useState(0.75);
+  const [resultsOpen, setResultsOpen] = useState(false);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [missionState, setMissionState] = useState<MissionCounterState>({
     count: 0,
@@ -279,7 +282,12 @@ export function StudyRoom({
   }, [focusDetection.focusSnapshot.label, focusDetection.status, onUpdatePresence]);
 
   useEffect(() => {
-    if (!privateMission || !focusDetection.expressionSignals) return;
+    setMissionState({ count: 0, previousActive: false });
+    reportedMissionRef.current = null;
+  }, [privateMission?.id]);
+
+  useEffect(() => {
+    if (!privateMission || currentGame?.status !== 'in_round' || !focusDetection.expressionSignals) return;
 
     setMissionState((current) =>
       updateHiddenMissionCounter(
@@ -289,10 +297,10 @@ export function StudyRoom({
         focusDetection.expressionSignals!
       )
     );
-  }, [focusDetection.expressionSignals, privateMission]);
+  }, [currentGame?.status, focusDetection.expressionSignals, privateMission]);
 
   useEffect(() => {
-    if (!privateMission || !onSubmitMissionResult) return;
+    if (!privateMission || currentGame?.status !== 'in_round' || !onSubmitMissionResult) return;
 
     const result = missionResultFromCounter({
       playerId: currentParticipantId,
@@ -316,7 +324,7 @@ export function StudyRoom({
       };
       onSubmitMissionResult(result);
     }
-  }, [currentParticipantId, missionState, onSubmitMissionResult, privateMission]);
+  }, [currentGame?.status, currentParticipantId, missionState, onSubmitMissionResult, privateMission]);
 
   const displayParticipants = useMemo(() => {
     const activeParticipants = participantsInStudyRoom(participants);
@@ -329,13 +337,14 @@ export function StudyRoom({
   }, [currentGame, participants, room.status]);
   const remainingSeconds = currentSession
     ? remainingSessionSeconds(currentSession, timestamp)
-    : currentGame?.round.endsAt
-      ? Math.max(0, Math.ceil((Date.parse(currentGame.round.endsAt) - timestamp) / 1_000))
+    : currentGame?.status === 'between_round' && currentGame.nextRoundStartsAt
+      ? Math.max(0, Math.ceil((Date.parse(currentGame.nextRoundStartsAt) - timestamp) / 1_000))
+      : currentGame?.round.endsAt
+        ? Math.max(0, Math.ceil((Date.parse(currentGame.round.endsAt) - timestamp) / 1_000))
       : room.settings.sessionMinutes * 60;
   const latestMessage = roomiMessages.at(-1);
   const goalByParticipant = new Map(goals.map((goal) => [goal.participantId, goal]));
   const myGoal = goalByParticipant.get(currentParticipantId);
-  const myScore = currentGame?.scores.find((score) => score.participantId === currentParticipantId);
   const otherParticipants = participants.filter((participant) => participant.id !== currentParticipantId);
   const selectableParticipants = otherParticipants.length > 0 ? otherParticipants : participants;
   const activeBluffTargetId =
@@ -349,6 +358,16 @@ export function StudyRoom({
   const isStudyMode = room.settings.activityKind === 'study';
   const goalCardTitle = isStudyMode ? '공부 목표' : '플레이 스타일';
   const emptyGoalText = isStudyMode ? '등록된 목표가 없어요' : '등록된 플레이 스타일이 없어요';
+  const ranking = rankGameScores(currentGame, participants);
+  const readyParticipantIds = new Set(currentGame?.nextRoundReadyParticipantIds ?? []);
+  const isNextRoundWaiting = currentGame?.status === 'between_round';
+  const hasMarkedNextReady = readyParticipantIds.has(currentParticipantId);
+  const gameTimerLabel = isNextRoundWaiting ? '다음 라운드' : '현재 라운드';
+  const gameTimerValue = currentGame
+    ? isNextRoundWaiting
+      ? `${currentGame.round.index + 1}라운드 시작까지 ${formatSessionTime(remainingSeconds)}`
+      : `${currentGame.round.index}/${currentGame.totalRounds ?? 1}라운드`
+    : `${room.settings.roundCount ?? 1}라운드 예정`;
   const tileCols = Math.min(2, Math.max(1, Math.ceil(Math.sqrt(displayParticipants.length))));
 
   const toggleAudio = () => {
@@ -374,8 +393,10 @@ export function StudyRoom({
         <main className="study__stage">
           <section className="study-timer-card">
             <div>
-              <span className="study-timer__label">{isStudyMode ? '공부 시간' : '게임 라운드'}</span>
-              <strong className="study-timer__value">{formatSessionTime(remainingSeconds)}</strong>
+              <span className="study-timer__label">{isStudyMode ? '공부 시간' : gameTimerLabel}</span>
+              <strong className={`study-timer__value${!isStudyMode ? ' study-timer__value--game' : ''}`}>
+                {isStudyMode ? formatSessionTime(remainingSeconds) : gameTimerValue}
+              </strong>
             </div>
             <div className="study-timer-card__meta">
               <span className="study-timer-card__participants">
@@ -388,6 +409,16 @@ export function StudyRoom({
                     ? gameKindLabel(currentGame.kind)
                     : '게임 시작 전'}
               </span>
+              {!isStudyMode && isNextRoundWaiting && (
+                <button
+                  type="button"
+                  className="btn btn--primary btn--compact"
+                  disabled={hasMarkedNextReady}
+                  onClick={onReadyNextRound}
+                >
+                  {hasMarkedNextReady ? '준비 완료' : '다음 라운드 준비'}
+                </button>
+              )}
             </div>
           </section>
 
@@ -426,6 +457,21 @@ export function StudyRoom({
               ? `화상 연결: ${dailyStatusLabel[status] ?? status}`
               : '로컬 데모 모드예요. 중앙 API가 연결되면 화상 입장이 열려요.'}
           </div>
+          {!isStudyMode && currentGame && currentGame.status !== 'in_round' && (
+            <div className="game-round-banner" role="status">
+              <strong>
+                {currentGame.status === 'between_round' ? `${currentGame.round.index}라운드 종료` : '게임 결과 공개'}
+              </strong>
+              <span>
+                {currentGame.status === 'between_round'
+                  ? '누군가 미션을 달성해서 라운드가 멈췄어요.'
+                  : '최종 결과를 확인할 수 있어요.'}
+              </span>
+              <button type="button" className="btn btn--primary" onClick={() => setResultsOpen(true)}>
+                게임 결과 확인
+              </button>
+            </div>
+          )}
         </main>
 
         <aside className="study__panel">
@@ -453,35 +499,65 @@ export function StudyRoom({
             </div>
           </section>
 
-          <section className="study-card">
-            <h2 className="study-card__title">{goalCardTitle}</h2>
-            {participants.map((participant) => {
-              const goal = goalByParticipant.get(participant.id);
-              const isMe = participant.id === currentParticipantId;
-              return (
-                <div className="goal goal--stacked" key={participant.id}>
-                  <span className="goal__who">{participant.nickname.slice(0, 2)}</span>
+          {isStudyMode ? (
+            <section className="study-card">
+              <h2 className="study-card__title">{goalCardTitle}</h2>
+              {participants.map((participant) => {
+                const goal = goalByParticipant.get(participant.id);
+                const isMe = participant.id === currentParticipantId;
+                return (
+                  <div className="goal goal--stacked" key={participant.id}>
+                    <span className="goal__who">{participant.nickname}</span>
+                    <p className="goal__text">
+                      <strong className="goal__owner">
+                        {participant.nickname}
+                      </strong>
+                      <span className="goal__note">{goal?.rawText ?? emptyGoalText}</span>
+                    </p>
+                    {isMe && (
+                      <label className="goal__achieved">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(myGoal?.achieved)}
+                          onChange={(event) => onToggleGoalAchieved(event.currentTarget.checked)}
+                        />
+                        <Flag size={14} />
+                        달성
+                      </label>
+                    )}
+                  </div>
+                );
+              })}
+            </section>
+          ) : (
+            <section className="study-card">
+              <div className="study-card__head">
+                <h2 className="study-card__title">현재 순위</h2>
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => setResultsOpen(true)}
+                >
+                  자세히 보기
+                </button>
+              </div>
+              {ranking.map((entry) => (
+                <div className="goal game-rank-row" key={entry.participant.id}>
+                  <span className="goal__who">{entry.rank}위</span>
                   <p className="goal__text">
-                    <strong className="goal__owner">
-                      {participant.nickname}
-                    </strong>
-                    <span className="goal__note">{goal?.rawText ?? emptyGoalText}</span>
+                    <strong className="goal__owner">{entry.participant.nickname}</strong>
+                    {isNextRoundWaiting && (
+                      <span className="goal__note">
+                        {readyParticipantIds.has(entry.participant.id) ? '다음 라운드 준비 완료' : '준비 대기 중'}
+                      </span>
+                    )}
                   </p>
-                  {isStudyMode && isMe && (
-                    <label className="goal__achieved">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(myGoal?.achieved)}
-                        onChange={(event) => onToggleGoalAchieved(event.currentTarget.checked)}
-                      />
-                      <Flag size={14} />
-                      달성
-                    </label>
-                  )}
+                  <strong>{entry.points}</strong>
                 </div>
-              );
-            })}
-          </section>
+              ))}
+              {!currentGame && <p className="study-focus__meta">게임이 시작되면 순위가 표시돼요.</p>}
+            </section>
+          )}
 
           {!isStudyMode && (
             <section className="study-card">
@@ -510,7 +586,7 @@ export function StudyRoom({
               {!currentGame && !isHost && (
                 <p className="study-focus__meta">방장이 게임을 시작하기를 기다리는 중이에요.</p>
               )}
-              {currentGame?.kind === 'hidden_mission' && (
+              {currentGame?.kind === 'hidden_mission' && currentGame.status === 'in_round' && (
                 privateMission ? (
                   <div className="goal">
                     <span className="goal__who">
@@ -631,24 +707,6 @@ export function StudyRoom({
             </section>
           )}
 
-          {!isStudyMode && (
-            <section className="study-card">
-              <h2 className="study-card__title">점수판</h2>
-              {(currentGame?.scores ?? []).map((score) => {
-                const participant = participants.find((item) => item.id === score.participantId);
-                return (
-                  <div className="goal" key={score.participantId}>
-                    <span className="goal__who">{participant?.nickname.slice(0, 2) ?? '??'}</span>
-                    <p className="goal__text">{participant?.nickname ?? '참가자'}</p>
-                    <strong>{score.points}</strong>
-                  </div>
-                );
-              })}
-              {!currentGame && <p className="study-focus__meta">라운드가 시작되면 점수가 표시돼요.</p>}
-              {myScore && <p className="study-focus__meta">내 점수: {myScore.points}</p>}
-            </section>
-          )}
-
         </aside>
       </div>
 
@@ -725,8 +783,93 @@ export function StudyRoom({
           </div>
         </div>
       )}
+      {resultsOpen && (
+        <div className="session-end-modal" role="dialog" aria-label="게임 결과 상세">
+          <div className="session-end-modal__panel game-results-modal">
+            <h2 className="session-end-modal__title">게임 결과 상세</h2>
+            <section className="game-results__section">
+              <h3>종합 순위</h3>
+              {ranking.map((entry) => (
+                <div className="game-results__row" key={entry.participant.id}>
+                  <span>{entry.rank}위</span>
+                  <strong>{entry.participant.nickname}</strong>
+                  <b>{entry.points}점</b>
+                </div>
+              ))}
+              {ranking.length === 0 && <p className="study-focus__meta">아직 점수가 없어요.</p>}
+            </section>
+            {isNextRoundWaiting && (
+              <section className="game-results__section">
+                <h3>다음 라운드 준비</h3>
+                {participants.map((participant) => (
+                  <div className="game-results__row" key={participant.id}>
+                    <strong>{participant.nickname}</strong>
+                    <span>{readyParticipantIds.has(participant.id) ? '준비 완료' : '대기 중'}</span>
+                  </div>
+                ))}
+              </section>
+            )}
+            <section className="game-results__section">
+              <h3>라운드별 결과</h3>
+              {(currentGame?.completedRounds ?? []).map((round) => (
+                <div className="game-results__round" key={round.roundIndex}>
+                  <strong>{round.roundIndex}라운드</strong>
+                  {rankScores(round.scores, participants).map((entry) => (
+                    <div className="game-results__row" key={entry.participant.id}>
+                      <span>{entry.rank}위</span>
+                      <span>{entry.participant.nickname}</span>
+                      <b>{entry.points}점</b>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              {(currentGame?.completedRounds ?? []).length === 0 && (
+                <p className="study-focus__meta">완료된 라운드가 아직 없어요.</p>
+              )}
+            </section>
+            <section className="game-results__section">
+              <h3>오늘의 플레이 스타일</h3>
+              {participants.map((participant) => {
+                const goal = goalByParticipant.get(participant.id);
+                return (
+                  <div className="game-results__row" key={participant.id}>
+                    <strong>{participant.nickname}</strong>
+                    <span>{goal?.rawText ?? emptyGoalText}</span>
+                  </div>
+                );
+              })}
+            </section>
+            <div className="session-end-modal__actions">
+              <button type="button" className="btn btn--primary" onClick={() => setResultsOpen(false)}>
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function rankGameScores(game: GameSession | undefined, participants: Participant[]) {
+  return rankScores(game?.scores ?? [], participants);
+}
+
+function rankScores(scores: GameSession['scores'], participants: Participant[]) {
+  const participantOrder = new Map(participants.map((participant, index) => [participant.id, index]));
+  return scores
+    .map((score) => {
+      const participant = participants.find((item) => item.id === score.participantId);
+      return participant ? { participant, points: score.points } : undefined;
+    })
+    .filter((entry): entry is { participant: Participant; points: number } => Boolean(entry))
+    .sort(
+      (left, right) =>
+        right.points - left.points ||
+        (participantOrder.get(left.participant.id) ?? 0) -
+          (participantOrder.get(right.participant.id) ?? 0)
+    )
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
 }
 
 function gameKindLabel(kind: GameSession['kind']) {

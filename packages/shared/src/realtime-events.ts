@@ -11,6 +11,7 @@ import type {
   BluffBetInput,
   RelayAdvanceInput,
   GameRevealInput,
+  GameNextRoundReadyInput,
   GameSession,
   HiddenMission,
   MissionResult
@@ -27,7 +28,8 @@ export const realtimeEvents = {
     reportExpression: 'expression:report',
     placeBluffBet: 'bluff:bet',
     advanceRelay: 'relay:advance',
-    revealGame: 'game:reveal'
+    revealGame: 'game:reveal',
+    nextRoundReady: 'game:next-round-ready'
   },
   server: {
     roomSnapshot: 'room:snapshot',
@@ -57,6 +59,7 @@ export type ClientToServerEvents = {
   [realtimeEvents.client.placeBluffBet]: (input: BluffBetInput) => void;
   [realtimeEvents.client.advanceRelay]: (input: RelayAdvanceInput) => void;
   [realtimeEvents.client.revealGame]: (input: GameRevealInput) => void;
+  [realtimeEvents.client.nextRoundReady]: (input: GameNextRoundReadyInput) => void;
 };
 
 export type ServerToClientEvents = {

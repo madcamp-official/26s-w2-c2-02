@@ -12,6 +12,7 @@ function room(status: RoomStatus = 'waiting', activityKind: RoomActivityKind = '
       activityKind,
       defaultGameKind: activityKind === 'study' ? 'hidden_mission' : activityKind,
       sessionMinutes: 50,
+      roundCount: 3,
       breakMode: 'room',
       breakMinutes: 10,
       defaultScoreVisibility: 'public',

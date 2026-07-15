@@ -6,7 +6,7 @@ export type GameKind = 'hidden_mission' | 'poker_bluff' | 'copycat_relay';
 
 export type RoomActivityKind = 'study' | GameKind;
 
-export type GameStatus = 'lobby' | 'in_round' | 'guessing' | 'reveal' | 'ended';
+export type GameStatus = 'lobby' | 'in_round' | 'guessing' | 'between_round' | 'reveal' | 'ended';
 
 export type ParticipantStatus =
   | 'online'
@@ -26,6 +26,7 @@ export type RoomSettings = {
   activityKind: RoomActivityKind;
   defaultGameKind: GameKind;
   sessionMinutes: number;
+  roundCount: number;
   breakMode: 'room' | 'individual';
   breakMinutes: number;
   defaultScoreVisibility: 'public' | 'private';
@@ -154,11 +155,22 @@ export type GameRound = {
   startedAt?: ISODateString;
   endsAt?: ISODateString;
   revealAt?: ISODateString;
+  nextStartsAt?: ISODateString;
 };
 
 export type GameScore = {
   participantId: string;
   points: number;
+};
+
+export type GameRoundSummary = {
+  roundIndex: number;
+  status: 'completed' | 'revealed';
+  endedAt: ISODateString;
+  scores: GameScore[];
+  missionResults?: MissionResult[];
+  bluffResult?: BluffResult;
+  relayLinks?: RelayLink[];
 };
 
 export type GameSession = {
@@ -167,6 +179,10 @@ export type GameSession = {
   kind: GameKind;
   status: GameStatus;
   round: GameRound;
+  totalRounds: number;
+  completedRounds?: GameRoundSummary[];
+  nextRoundReadyParticipantIds?: string[];
+  nextRoundStartsAt?: ISODateString;
   scores: GameScore[];
   missions?: HiddenMission[];
   missionResults?: MissionResult[];
@@ -320,6 +336,12 @@ export type RelayAdvanceInput = {
 };
 
 export type GameRevealInput = {
+  roomId: string;
+  participantId: string;
+  gameId: string;
+};
+
+export type GameNextRoundReadyInput = {
   roomId: string;
   participantId: string;
   gameId: string;

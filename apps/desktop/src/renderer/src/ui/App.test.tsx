@@ -369,6 +369,7 @@ function defaultTestRoomSettings() {
     rankingMetric: 'focus_minutes',
     roomiTone: 'friendly_casual',
     sessionMinutes: 50,
+    roundCount: 3,
     videoProvider: 'daily',
     videoRequired: true
   };

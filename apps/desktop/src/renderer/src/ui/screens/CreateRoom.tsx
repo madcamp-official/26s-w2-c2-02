@@ -55,6 +55,7 @@ const activityOptions: Array<{
 export function CreateRoom({ error, isCreating = false, onCreateRoom, go }: CreateRoomProps) {
   const [activityKind, setActivityKind] = useState<RoomActivityKind>('study');
   const [minutes, setMinutes] = useState(50);
+  const [roundCount, setRoundCount] = useState(3);
   const [breakMode, setBreakMode] = useState<'room' | 'individual'>('room');
   const [breakMinutes, setBreakMinutes] = useState(10);
   const [scorePublic, setScorePublic] = useState(true);
@@ -70,6 +71,7 @@ export function CreateRoom({ error, isCreating = false, onCreateRoom, go }: Crea
       activityKind,
       defaultGameKind: selectedGameKind,
       sessionMinutes: minutes,
+      roundCount,
       breakMode,
       breakMinutes,
       defaultScoreVisibility: scorePublic ? 'public' : 'private',
@@ -138,18 +140,31 @@ export function CreateRoom({ error, isCreating = false, onCreateRoom, go }: Crea
           </div>
 
           <div className="create__section">
-            <div className="create__section-label">세션 시간</div>
+            <div className="create__section-label">
+              {isStudyMode ? '세션 시간' : '라운드 수'}
+            </div>
             <div className="create__chips">
-              {[25, 50, 90].map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  className={`chip${minutes === m ? ' chip--active' : ''}`}
-                  onClick={() => setMinutes(m)}
-                >
-                  {m}분
-                </button>
-              ))}
+              {isStudyMode
+                ? [25, 50, 90].map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={`chip${minutes === m ? ' chip--active' : ''}`}
+                      onClick={() => setMinutes(m)}
+                    >
+                      {m}분
+                    </button>
+                  ))
+                : [1, 3, 5, 7].map((count) => (
+                    <button
+                      key={count}
+                      type="button"
+                      className={`chip${roundCount === count ? ' chip--active' : ''}`}
+                      onClick={() => setRoundCount(count)}
+                    >
+                      {count}라운드
+                    </button>
+                  ))}
             </div>
           </div>
 

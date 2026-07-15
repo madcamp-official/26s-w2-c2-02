@@ -27,13 +27,16 @@ describe('CreateRoom game setup', () => {
     fireEvent.click(screen.getByRole('button', { name: /게임 2 · 포커페이스 블러프/ }));
     expect(screen.getByText('맞힌 베팅은 4점')).toBeInTheDocument();
     expect(screen.queryByText('방 전체 휴식')).not.toBeInTheDocument();
+    expect(screen.getByText('라운드 수')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '5라운드' }));
 
     fireEvent.click(screen.getByRole('button', { name: '방 만들고 대기실로 가기' }));
 
     expect(onCreateRoom).toHaveBeenCalledWith(
       expect.objectContaining({
         activityKind: 'poker_bluff',
-        defaultGameKind: 'poker_bluff'
+        defaultGameKind: 'poker_bluff',
+        roundCount: 5
       })
     );
   });
