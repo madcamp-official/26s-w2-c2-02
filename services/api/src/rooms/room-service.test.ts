@@ -511,7 +511,10 @@ describe('RoomService.setGoalAchieved', () => {
 
 describe('RoomService face party games', () => {
   it('keeps hidden mission templates curated', () => {
-    expect(hiddenMissionTemplates).toHaveLength(14);
+    expect(hiddenMissionTemplates).toHaveLength(12);
+    expect(hiddenMissionTemplates.map((mission) => mission.verify)).not.toContain(
+      'cheek_puff_count'
+    );
     expect(hiddenMissionTemplates.map((mission) => mission.prompt)).not.toContain(
       '생각하는 척하며 볼을 3번 부풀리기'
     );

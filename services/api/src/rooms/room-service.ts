@@ -51,9 +51,7 @@ export const hiddenMissionTemplates: ReadonlyArray<Omit<HiddenMission, 'id' | 'p
   { prompt: '놀란 척하지 말고 입 벌림을 끝까지 숨기기', verify: 'no_jaw_open', target: 0 },
   { prompt: '눈썹을 살짝 3번 올리기', verify: 'brow_count', target: 3 },
   { prompt: '중요한 말이 나올 때 눈썹 리액션 4번 하기', verify: 'brow_count', target: 4 },
-  { prompt: '카메라 쪽으로 눈썹을 5번 들어 올리기', verify: 'brow_count', target: 5 },
-  { prompt: '볼을 조용히 2번 부풀리기', verify: 'cheek_puff_count', target: 2 },
-  { prompt: '아무도 모르게 짧은 볼 puff 4번 넣기', verify: 'cheek_puff_count', target: 4 }
+  { prompt: '카메라 쪽으로 눈썹을 5번 들어 올리기', verify: 'brow_count', target: 5 }
 ];
 
 type FocusTrackerEntry = {

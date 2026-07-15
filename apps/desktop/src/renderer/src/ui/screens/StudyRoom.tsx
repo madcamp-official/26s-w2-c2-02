@@ -398,10 +398,13 @@ export function StudyRoom({
   const ranking = rankGameScores(currentGame, participants);
   const readyParticipantIds = new Set(currentGame?.nextRoundReadyParticipantIds ?? []);
   const isNextRoundWaiting = currentGame?.status === 'between_round';
+  const isGameEnded = currentGame?.status === 'reveal';
   const hasMarkedNextReady = readyParticipantIds.has(currentParticipantId);
-  const gameTimerLabel = isNextRoundWaiting ? '다음 라운드' : '현재 라운드';
+  const gameTimerLabel = isGameEnded ? '게임 상태' : isNextRoundWaiting ? '다음 라운드' : '현재 라운드';
   const gameTimerValue = currentGame
-    ? isNextRoundWaiting
+    ? isGameEnded
+      ? '게임 종료'
+      : isNextRoundWaiting
       ? `${currentGame.round.index + 1}라운드 시작까지 ${formatSessionTime(remainingSeconds)}`
       : `${currentGame.round.index}/${currentGame.totalRounds ?? 1}라운드`
     : `${room.settings.roundCount ?? 1}라운드 예정`;

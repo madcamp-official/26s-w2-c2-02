@@ -215,9 +215,7 @@ function createLocalGame(room: Room, participants: Participant[], kind: GameKind
     { prompt: '큰 리액션이 나와도 입 벌림을 참기', verify: 'no_jaw_open', target: 0 },
     { prompt: '눈썹을 살짝 3번 올리기', verify: 'brow_count', target: 3 },
     { prompt: '반응할 때 눈썹을 4번 들어 올리기', verify: 'brow_count', target: 4 },
-    { prompt: '카메라 쪽으로 눈썹을 5번 올리기', verify: 'brow_count', target: 5 },
-    { prompt: '볼을 조용히 2번 부풀리기', verify: 'cheek_puff_count', target: 2 },
-    { prompt: '아무도 모르게 짧은 볼 부풀리기 3번 하기', verify: 'cheek_puff_count', target: 3 }
+    { prompt: '카메라 쪽으로 눈썹을 5번 올리기', verify: 'brow_count', target: 5 }
   ];
   const shuffled = [...templates].sort(() => Math.random() - 0.5);
 

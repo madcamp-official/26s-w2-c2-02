@@ -299,6 +299,30 @@ describe('StudyRoom hidden mission progress', () => {
     expect(onStartGame).toHaveBeenCalledWith('poker_bluff');
   });
 
+  it('shows game ended in the top round field after the final reveal', () => {
+    const participant = createParticipant('participant-host', 'Host');
+    const room = createRoom();
+    const currentGame: GameSession = {
+      ...createGame(room, [participant], 'hidden_mission'),
+      status: 'reveal',
+      round: {
+        ...createGame(room, [participant], 'hidden_mission').round,
+        status: 'reveal',
+        revealAt: '2026-07-15T00:02:00.000Z'
+      }
+    };
+
+    render(
+      <StudyRoom
+        {...baseStudyRoomProps(participant)}
+        room={room}
+        currentGame={currentGame}
+      />
+    );
+
+    expect(screen.getByText('게임 종료')).toBeInTheDocument();
+  });
+
   it('increments the secret mission count when expression signals cross the mission threshold', async () => {
     const participant = createParticipant('participant-host', 'Host');
     const room = createRoom();
