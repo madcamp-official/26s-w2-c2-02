@@ -64,12 +64,14 @@
 
 .study__grid {
   display: grid;
+  grid-area: 1 / 1;
   grid-template-columns: repeat(var(--tile-cols, 2), 1fr);
   gap: 14px;
 }
 
 .study__grid-wrap {
   position: relative;
+  display: grid;
   min-height: 260px;
 }
 
@@ -99,12 +101,12 @@
 }
 
 .study-distraction {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  grid-area: 1 / 1;
   z-index: 3;
   display: grid;
   place-items: center;
-  min-height: 260px;
+  min-height: 100%;
   padding: 22px;
   border-radius: var(--r-lg);
   background:

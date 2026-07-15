@@ -37,23 +37,24 @@ const activityOptions: Array<{
     Icon: EyeOff
   },
   {
-    kind: 'poker_bluff',
-    title: '게임 2 · 포커페이스 블러프',
-    desc: '누가 표정 신호를 드러낼지 베팅하고 판정해요.',
-    rules: ['상대가 무너질지 먼저 예측', '맞힌 베팅은 4점', '끝까지 버티면 대상자 8점'],
-    Icon: Smile
-  },
-  {
     kind: 'copycat_relay',
-    title: '게임 3 · 카피캣 릴레이',
+    title: '게임 2 · 카피캣 릴레이',
     desc: '다음 플레이어가 표정을 얼마나 비슷하게 따라 하는지 겨뤄요.',
     rules: ['대상을 골라 릴레이 전달', '유사도에 따라 최대 10점', '표정 프롬프트를 이어서 진행'],
     Icon: Repeat2
+  },
+  {
+    kind: 'poker_bluff',
+    title: '게임 3 · 포커페이스 블러프',
+    desc: '누가 표정 신호를 드러낼지 베팅하고 판정해요.',
+    rules: ['상대가 무너질지 먼저 예측', '맞힌 베팅은 4점', '끝까지 버티면 대상자 8점'],
+    Icon: Smile
   }
 ];
 
 export function CreateRoom({ error, isCreating = false, onCreateRoom, go }: CreateRoomProps) {
   const [activityKind, setActivityKind] = useState<RoomActivityKind>('study');
+  const [unavailableMessage, setUnavailableMessage] = useState('');
   const [minutes, setMinutes] = useState(50);
   const [roundCount, setRoundCount] = useState(3);
   const [breakMode, setBreakMode] = useState<'room' | 'individual'>('room');
@@ -106,22 +107,33 @@ export function CreateRoom({ error, isCreating = false, onCreateRoom, go }: Crea
           <div className="create__section">
             <div className="create__section-label">방 방식</div>
             <div className="create__game-grid">
-              {activityOptions.map(({ kind, title, desc, Icon }) => (
-                <button
-                  key={kind}
-                  type="button"
-                  className={`create-opt create-game${activityKind === kind ? ' create-opt--active' : ''}`}
-                  onClick={() => setActivityKind(kind)}
-                >
-                  <span className="create-game__head">
-                    <span className="create-game__icon">
-                      <Icon size={18} />
+              {activityOptions.map(({ kind, title, desc, Icon }) => {
+                const isUnavailable = kind === 'poker_bluff';
+                return (
+                  <button
+                    key={kind}
+                    type="button"
+                    aria-disabled={isUnavailable}
+                    className={`create-opt create-game${activityKind === kind ? ' create-opt--active' : ''}${isUnavailable ? ' create-opt--disabled' : ''}`}
+                    onClick={() => {
+                      if (isUnavailable) {
+                        setUnavailableMessage('다음 업데이트를 기다려주세요');
+                        return;
+                      }
+                      setUnavailableMessage('');
+                      setActivityKind(kind);
+                    }}
+                  >
+                    <span className="create-game__head">
+                      <span className="create-game__icon">
+                        <Icon size={18} />
+                      </span>
+                      <span className="create-opt__title">{title}</span>
                     </span>
-                    <span className="create-opt__title">{title}</span>
-                  </span>
-                  <span className="create-opt__desc">{desc}</span>
-                </button>
-              ))}
+                    <span className="create-opt__desc">{desc}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -235,7 +247,7 @@ export function CreateRoom({ error, isCreating = false, onCreateRoom, go }: Crea
           </div>
 
           <p className={`create__hint${error ? ' create__hint--error' : ''}`} aria-live="polite">
-            {error ?? '최대 4명까지 함께할 수 있어요.'}
+            {error ?? (unavailableMessage || '최대 4명까지 함께할 수 있어요.')}
           </p>
 
           <button
