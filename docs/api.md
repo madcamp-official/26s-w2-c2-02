@@ -80,7 +80,9 @@ and rolls back the participant instead of returning a local-only video session.
   player reactions, and reveal. The API asks the configured LLM for these lines
   and falls back to templates when the LLM is unavailable; prompts include only
   game actions, visible expression signals, and participant-authored play style
-  text, not raw camera frames.
+  text, not raw camera frames. Hidden mission live reactions avoid naming the
+  player or declaring mission success; they only hint at visible expression
+  clues such as a raised brow or brief smile.
 - The server owns the round timer through `currentSession.startedAt`,
   `currentSession.plannedMinutes`, and optional `breakEndsAt`. Clients calculate
   remaining time from server timestamps, so late joiners see the same clock.

@@ -324,12 +324,13 @@ describe('RoomiOrchestrator face party games', () => {
       game: 'hidden_mission',
       event: 'mission_progress',
       actorNickname: '소요',
-      visibleSignals: ['미션 집계 1회'],
+      visibleSignals: ['눈썹을 치켜뜬 움직임'],
       tone: 'playful'
     });
 
-    expect(reaction).toContain('소요');
-    expect(reaction).toContain('카운트');
-    expect(reaction).toContain('미션 집계 1회');
+    expect(reaction).toContain('누군가');
+    expect(reaction).toContain('눈썹을 치켜뜬 움직임');
+    expect(reaction).not.toContain('소요');
+    expect(reaction).not.toMatch(/미션|성공|카운트/);
   });
 });

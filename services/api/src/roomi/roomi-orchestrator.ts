@@ -378,13 +378,13 @@ export class RoomiOrchestrator {
     const targetStyle = input.targetPlayStyle ? ` ${input.targetPlayStyle} 모드로 받아쳐보자.` : '';
 
     if (input.event === 'mission_success') {
-      return `${actor}의 비밀 미션 성공${signals}.${points}${actorStyle}`;
+      return this.templateHiddenMissionSignalNudge(input.visibleSignals);
     }
     if (input.event === 'mission_progress') {
-      return `${actor}의 비밀 미션 카운트가 올라갔어${signals}. 아직 공개 전이니까 자연스럽게 이어가자.${actorStyle}`;
+      return this.templateHiddenMissionSignalNudge(input.visibleSignals);
     }
     if (input.event === 'mission_fail') {
-      return `${actor}의 비밀 미션 기록이 공개됐어${signals}. 공개 때 참고할 단서가 됐어.${actorStyle}`;
+      return this.templateHiddenMissionSignalNudge(input.visibleSignals);
     }
     if (input.event === 'bluff_bet') {
       return `${actor}가${target} 블러프 판정을 걸었어. 타이밍, 제스처, 표정 움직임만 보자.${targetStyle}`;
@@ -396,6 +396,11 @@ export class RoomiOrchestrator {
       return `${actor}가 포커페이스를 지켰어${signals}.${points}${actorStyle}`;
     }
     return `${actor}가${target} 카피캣 릴레이를 넘겼어${signals}.${points}${actorStyle}${targetStyle}`;
+  }
+
+  private templateHiddenMissionSignalNudge(signals?: string[]): string {
+    const clue = signals?.[0] ?? '보이는 표정 신호';
+    return `방금 누군가 ${clue} 살짝 보인 것 같은데...? 못 본 척 자연스럽게 이어가자.`;
   }
 
   private templateGameSummaryMessage(input: FacePartyGameMessageInput): string {
@@ -464,20 +469,24 @@ export class RoomiOrchestrator {
   }
 
   private buildFacePartyReactionPrompt(input: FacePartyGameReactionInput): string {
+    const isHiddenMissionEvent = input.game === 'hidden_mission' && input.event.startsWith('mission_');
     return [
       '표정 파티 게임 진행자 루미의 짧은 실시간 반응을 만들어줘.',
       `게임: ${this.faceGameName(input.game)}`,
-      `이벤트: ${input.event}`,
-      `행동한 참가자: ${input.actorNickname ?? '미지정'}`,
+      `이벤트: ${isHiddenMissionEvent ? '숨은 표정 단서 포착' : input.event}`,
+      `행동한 참가자: ${isHiddenMissionEvent ? '비공개' : input.actorNickname ?? '미지정'}`,
       `대상 참가자: ${input.targetNickname ?? '미지정'}`,
-      `행동한 참가자 플레이 스타일: ${input.actorPlayStyle ?? '제공 없음'}`,
+      `행동한 참가자 플레이 스타일: ${isHiddenMissionEvent ? '비공개' : input.actorPlayStyle ?? '제공 없음'}`,
       `대상 참가자 플레이 스타일: ${input.targetPlayStyle ?? '제공 없음'}`,
-      `점수: ${input.points ?? '없음'}`,
+      `점수: ${isHiddenMissionEvent ? '비공개' : input.points ?? '없음'}`,
       `보이는 신호: ${(input.visibleSignals ?? []).join(', ') || '제공 없음'}`,
       `톤: ${input.tone ?? '장난스럽고 가벼움'}`,
       '규칙: 반드시 한국어로만 출력. 게임 행동, 보이는 신호, 참가자가 직접 정한 플레이 스타일만 언급하고 감정, 거짓말, 의도, 호감, 건강, 정체성 특성을 탐지했다고 말하지 마.',
+      isHiddenMissionEvent
+        ? '숨은 표정 미션 이벤트는 참가자 이름, 성공 여부, 점수, 카운트, "미션 성공"이라는 표현을 말하지 말고 "방금 누군가 눈썹을 치켜뜬 것 같은데...?"처럼 넌지시 암시해.'
+        : '',
       '짧은 한 문장만 출력해.'
-    ].join('\n');
+    ].filter(Boolean).join('\n');
   }
 
   private parsePokerBluffOutput(rawOutput: string): PokerBluffPrompt | null {

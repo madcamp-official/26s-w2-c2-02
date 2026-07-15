@@ -2,6 +2,7 @@ import type { Server as HttpServer } from 'node:http';
 import {
   realtimeEvents,
   type GameSession,
+  type HiddenMissionVerify,
   type MissionResult,
   type RoomSnapshot,
   type ClientToServerEvents,
@@ -300,14 +301,13 @@ export function registerRealtimeGateway(
 
   async function sendMissionReaction(roomId: string, result: MissionResult) {
     const snapshot = roomService.getByRoomId(roomId);
-    const actor = snapshot?.participants.find((participant) => participant.id === result.playerId);
+    const mission = snapshot?.currentGame?.missions?.find(
+      (item) => item.id === result.missionId && item.playerId === result.playerId
+    );
     const text = await roomiOrchestrator.generateGameReactionMessage({
       game: 'hidden_mission',
       event: result.success ? 'mission_success' : result.count > 0 ? 'mission_progress' : 'mission_fail',
-      actorNickname: actor?.nickname,
-      actorPlayStyle: playStyleFor(snapshot, result.playerId),
-      points: result.success ? 10 : undefined,
-      visibleSignals: [`미션 집계 ${result.count}회`],
+      visibleSignals: [hiddenMissionSignalHint(mission?.verify)],
       tone: 'playful'
     });
     roomService.addRoomiMessage({ roomId, kind: 'round_prompt', text });
@@ -418,6 +418,15 @@ function visibleTellLabel(tell: NonNullable<GameSession['bluffResult']>['tell'])
   if (tell === 'smile') return '미소';
   if (tell === 'jaw') return '입 벌림';
   if (tell === 'brow') return '눈썹 움직임';
+  return '보이는 표정 신호';
+}
+
+function hiddenMissionSignalHint(verify: HiddenMissionVerify | undefined): string {
+  if (verify === 'wink_count') return '윙크처럼 보이는 깜빡임';
+  if (verify === 'smile_count') return '작은 미소가 스친 순간';
+  if (verify === 'brow_count') return '눈썹을 치켜뜬 움직임';
+  if (verify === 'cheek_puff_count') return '볼이 살짝 부푼 움직임';
+  if (verify === 'no_jaw_open') return '입 벌림 신호';
   return '보이는 표정 신호';
 }
 

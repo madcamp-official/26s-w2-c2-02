@@ -277,7 +277,7 @@ describe('StudyRoom hidden mission progress', () => {
     const { rerender } = render(<StudyRoom {...props} />);
     expect(screen.getByText(/진행: 0\/2/)).toBeInTheDocument();
 
-    focusDetectionMock.snapshot.expressionSignals = expressionSignal({ smile: 0.8 });
+    focusDetectionMock.snapshot.expressionSignals = expressionSignal({ timestamp: 1_000, smile: 0.8 });
     rerender(<StudyRoom {...props} />);
     await waitFor(() => expect(screen.getByText(/진행: 1\/2/)).toBeInTheDocument());
     await waitFor(() =>
@@ -289,11 +289,11 @@ describe('StudyRoom hidden mission progress', () => {
       })
     );
 
-    focusDetectionMock.snapshot.expressionSignals = expressionSignal({ smile: 0.1 });
+    focusDetectionMock.snapshot.expressionSignals = expressionSignal({ timestamp: 1_100, smile: 0.1 });
     rerender(<StudyRoom {...props} />);
     await waitFor(() => expect(screen.getByText(/진행: 1\/2/)).toBeInTheDocument());
 
-    focusDetectionMock.snapshot.expressionSignals = expressionSignal({ smile: 0.8 });
+    focusDetectionMock.snapshot.expressionSignals = expressionSignal({ timestamp: 2_100, smile: 0.8 });
     rerender(<StudyRoom {...props} />);
     await waitFor(() => expect(screen.getByText(/진행: 2\/2/)).toBeInTheDocument());
     await waitFor(() =>

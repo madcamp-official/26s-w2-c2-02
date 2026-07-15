@@ -9,6 +9,7 @@ import {
   type GameSession,
   type Goal,
   type HiddenMission,
+  type HiddenMissionVerify,
   type MissionResult,
   type Participant,
   type ParticipantStatus,
@@ -734,7 +735,9 @@ export function App() {
 
     setRoomDraft((current) => {
       if (!current?.currentGame) return current;
-      const actor = participantNickname(current.participants, result.playerId);
+      const mission = current.currentGame.missions?.find(
+        (item) => item.id === result.missionId && item.playerId === result.playerId
+      );
       const next: RoomDraft = {
         ...current,
         currentGame: {
@@ -750,11 +753,7 @@ export function App() {
       return appendLocalRoomiMessage(
         next,
         'round_prompt',
-        result.success
-          ? `${actor}의 비밀 미션 성공! 집계된 움직임은 ${result.count}번이야.`
-          : result.count > 0
-            ? `${actor}의 비밀 미션 카운트가 올라갔어. 집계된 움직임은 ${result.count}번이야.`
-            : `${actor}의 비밀 미션 기록이 공개됐어. 집계된 움직임은 ${result.count}번이야.`
+        hiddenMissionSignalNudge(mission?.verify)
       );
     });
   };
@@ -1159,6 +1158,22 @@ function bluffTellLabel(tell: BluffTell): string {
   if (tell === 'jaw') return '입 벌림';
   if (tell === 'brow') return '눈썹 움직임';
   return '보이는 신호';
+}
+
+function hiddenMissionSignalNudge(verify: HiddenMissionVerify | undefined): string {
+  const clue =
+    verify === 'wink_count'
+      ? '윙크처럼 보이는 깜빡임'
+      : verify === 'smile_count'
+        ? '작은 미소가 스친 순간'
+        : verify === 'brow_count'
+          ? '눈썹을 치켜뜬 움직임'
+          : verify === 'cheek_puff_count'
+            ? '볼이 살짝 부푼 움직임'
+            : verify === 'no_jaw_open'
+              ? '입 벌림 신호'
+              : '보이는 표정 신호';
+  return `방금 누군가 ${clue} 살짝 보인 것 같은데...? 못 본 척 자연스럽게 이어가자.`;
 }
 
 function gameLabel(kind: GameKind) {

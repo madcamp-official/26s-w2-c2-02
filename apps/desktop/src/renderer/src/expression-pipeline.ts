@@ -13,11 +13,13 @@ export type ExpressionSettings = {
   browThreshold: number;
   cheekPuffThreshold: number;
   mouthPuckerThreshold: number;
+  missionCountCooldownMs: number;
 };
 
 export type MissionCounterState = {
   count: number;
   previousActive: boolean;
+  lastCountedAt?: number;
   failed?: boolean;
 };
 
@@ -28,7 +30,8 @@ export const defaultExpressionSettings: ExpressionSettings = {
   winkOpenThreshold: 0.25,
   browThreshold: 0.42,
   cheekPuffThreshold: 0.35,
-  mouthPuckerThreshold: 0.45
+  mouthPuckerThreshold: 0.45,
+  missionCountCooldownMs: 1_000
 };
 
 export function expressionSignalsFromBlendshapes(
@@ -83,10 +86,15 @@ export function updateHiddenMissionCounter(
           ? signals.browRaise >= settings.browThreshold
           : signals.cheekPuff >= settings.cheekPuffThreshold;
 
-  const count = active && !state.previousActive ? state.count + 1 : state.count;
+  const cooldownPassed =
+    state.lastCountedAt === undefined ||
+    signals.timestamp - state.lastCountedAt >= settings.missionCountCooldownMs;
+  const shouldCount = active && !state.previousActive && cooldownPassed;
+  const count = shouldCount ? state.count + 1 : state.count;
   return {
     count,
     previousActive: active,
+    lastCountedAt: shouldCount ? signals.timestamp : state.lastCountedAt,
     failed: state.failed || count < 0 || target < 0
   };
 }

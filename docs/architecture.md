@@ -84,7 +84,9 @@ fallback messages otherwise. These prompts only receive player nicknames, game
 actions, scores, participant-authored play styles, and visible expression signal
 labels; raw video frames and facial landmarks stay out of the LLM path.
 Hidden mission clients report intermediate count increases as well as final
-success, so Roomi can react as soon as a visible mission action is detected.
+success, so Roomi can react as soon as a visible mission action is detected, but
+live hidden-mission reactions avoid naming the player or announcing success and
+instead hint only at visible clues like a raised brow or brief smile.
 
 When the central API is unavailable, the desktop renderer can enter a local
 single-machine demo room so UI and local expression work can continue. That path

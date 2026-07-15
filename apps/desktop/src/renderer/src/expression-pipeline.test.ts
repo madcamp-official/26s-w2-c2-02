@@ -38,13 +38,15 @@ describe('expression-pipeline', () => {
 
   it('counts only rising edges for hidden mission events', () => {
     let state = { count: 0, previousActive: false };
-    const active = expressionSignalsFromBlendshapes(categories({ mouthSmileLeft: 0.7 }));
-    const idle = expressionSignalsFromBlendshapes(categories({ mouthSmileLeft: 0.1 }));
+    const active = (timestamp: number) =>
+      expressionSignalsFromBlendshapes(categories({ mouthSmileLeft: 0.7 }), undefined, timestamp);
+    const idle = (timestamp: number) =>
+      expressionSignalsFromBlendshapes(categories({ mouthSmileLeft: 0.1 }), undefined, timestamp);
 
-    state = updateHiddenMissionCounter(state, 'smile_count', 2, active);
-    state = updateHiddenMissionCounter(state, 'smile_count', 2, active);
-    state = updateHiddenMissionCounter(state, 'smile_count', 2, idle);
-    state = updateHiddenMissionCounter(state, 'smile_count', 2, active);
+    state = updateHiddenMissionCounter(state, 'smile_count', 2, active(1_000));
+    state = updateHiddenMissionCounter(state, 'smile_count', 2, active(1_100));
+    state = updateHiddenMissionCounter(state, 'smile_count', 2, idle(1_200));
+    state = updateHiddenMissionCounter(state, 'smile_count', 2, active(2_100));
 
     expect(state.count).toBe(2);
     expect(
@@ -56,6 +58,22 @@ describe('expression-pipeline', () => {
         state
       }).success
     ).toBe(true);
+  });
+
+  it('does not count repeated brow raises inside the mission cooldown', () => {
+    let state = { count: 0, previousActive: false };
+    const active = (timestamp: number) =>
+      expressionSignalsFromBlendshapes(categories({ browInnerUp: 0.7 }), undefined, timestamp);
+    const idle = (timestamp: number) =>
+      expressionSignalsFromBlendshapes(categories({ browInnerUp: 0.1 }), undefined, timestamp);
+
+    state = updateHiddenMissionCounter(state, 'brow_count', 3, active(1_000));
+    state = updateHiddenMissionCounter(state, 'brow_count', 3, idle(1_100));
+    state = updateHiddenMissionCounter(state, 'brow_count', 3, active(1_500));
+    state = updateHiddenMissionCounter(state, 'brow_count', 3, idle(1_600));
+    state = updateHiddenMissionCounter(state, 'brow_count', 3, active(2_000));
+
+    expect(state.count).toBe(2);
   });
 
   it('marks no-jaw-open missions failed without exposing raw landmarks', () => {
