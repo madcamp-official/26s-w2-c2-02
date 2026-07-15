@@ -115,6 +115,14 @@ export function setDailyCameraEnabled(
   callObject.setLocalVideo(false);
 }
 
+export function shouldUseLocalCameraFallback(
+  videoJoin: VideoJoinInfo | undefined,
+  _cameraOn: boolean,
+  dailyVideoTrack: MediaStreamTrack | null
+) {
+  return !videoJoin || !dailyVideoTrack;
+}
+
 export function DailyParticipantMedia({
   fallbackInitial,
   fallbackTrack,
@@ -196,10 +204,11 @@ export function StudyRoom({
     useDailyRoom(videoJoin);
   const localDailyParticipant = participantsByRoomiId.get(currentParticipantId);
   const localFallbackVideoTrack = getVideoTracks(localStream)[0] ?? null;
-  const localVideoTrack =
+  const dailyVideoTrack =
     localDailyParticipant?.tracks?.video?.state === 'playable'
-      ? localDailyParticipant.tracks.video.track
-      : localFallbackVideoTrack;
+      ? (localDailyParticipant.tracks.video.track ?? null)
+      : null;
+  const localVideoTrack = dailyVideoTrack ?? localFallbackVideoTrack;
   const focusDetection = useFocusDetection({
     enabled: cameraOn && typeof MediaStream !== 'undefined',
     track: localVideoTrack ?? null,
@@ -216,7 +225,12 @@ export function StudyRoom({
   }, []);
 
   useEffect(() => {
-    if (videoJoin || !navigator.mediaDevices?.getUserMedia) return undefined;
+    const needsLocalCameraFallback = shouldUseLocalCameraFallback(
+      videoJoin,
+      cameraOn,
+      dailyVideoTrack
+    );
+    if (!needsLocalCameraFallback || !navigator.mediaDevices?.getUserMedia) return undefined;
 
     let cancelled = false;
     void navigator.mediaDevices
@@ -237,7 +251,7 @@ export function StudyRoom({
         return null;
       });
     };
-  }, [videoJoin]);
+  }, [dailyVideoTrack, videoJoin]);
 
   useEffect(() => {
     const nextStatus = focusLabelToParticipantStatus(focusDetection.focusSnapshot.label);
