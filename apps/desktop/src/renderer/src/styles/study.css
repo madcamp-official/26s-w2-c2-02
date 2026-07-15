@@ -147,6 +147,10 @@
   line-height: 1.5;
 }
 
+.study-distraction__intro {
+  font-weight: 700;
+}
+
 .study-distraction__choices {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

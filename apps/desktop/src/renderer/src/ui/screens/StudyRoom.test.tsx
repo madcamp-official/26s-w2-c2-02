@@ -883,8 +883,12 @@ describe('StudyRoom hidden mission progress', () => {
     });
 
     expect(screen.getByLabelText('루미 방해 카드')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '순간 기억 1/3' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '7' })).not.toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
     expect(screen.getByText('방해 카드를 풀어야 미션이 다시 진행돼요.')).toBeInTheDocument();
-    vi.useRealTimers();
 
     focusDetectionMock.snapshot.expressionSignals = expressionSignal({ timestamp: 1_000, smile: 0.8 });
     rerender(
@@ -905,6 +909,17 @@ describe('StudyRoom hidden mission progress', () => {
     expect(screen.queryByLabelText('루미 방해 카드')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /방해 카드 보기/ }));
     fireEvent.click(screen.getByRole('button', { name: '7' }));
+    expect(screen.getByRole('heading', { name: '순간 기억 2/3' })).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+    fireEvent.click(screen.getByRole('button', { name: '7' }));
+    expect(screen.getByRole('heading', { name: '순간 기억 3/3' })).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+    fireEvent.click(screen.getByRole('button', { name: '7' }));
+    vi.useRealTimers();
 
     await waitFor(() =>
       expect(onSubmitMissionResult).toHaveBeenCalledWith({
@@ -916,7 +931,9 @@ describe('StudyRoom hidden mission progress', () => {
     );
   });
 
-  it('opens a mission guess for another participant without waiting for mission progress', async () => {
+  it('allows accusing any other participant but only wins inside the mission progress window', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-15T00:00:00.000Z'));
     const host = createParticipant('participant-host', 'Host');
     const member = { ...createParticipant('participant-member', 'Member'), role: 'member' as const };
     const room = createRoom();
@@ -955,8 +972,32 @@ describe('StudyRoom hidden mission progress', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Member' }));
     expect(screen.getByRole('dialog', { name: '미션 맞추기' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: memberMission.prompt }));
+    expect(onWinByMissionGuess).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    const nextGame = {
+      ...currentGame,
+      missionResults: [
+        { playerId: member.id, missionId: memberMission.id, count: 1, success: false }
+      ]
+    };
+    rerender(
+      <StudyRoom
+        {...baseStudyRoomProps(host)}
+        currentGame={nextGame}
+        participants={[host, member]}
+        room={room}
+        privateMission={hostMission}
+        onWinByMissionGuess={onWinByMissionGuess}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Member' }));
+    fireEvent.click(screen.getByRole('button', { name: memberMission.prompt }));
 
     expect(onWinByMissionGuess).toHaveBeenCalledWith(host.id, member.id, memberMission.id);
+    vi.useRealTimers();
   });
 
   it('resets the secret mission count when the round changes even if the mission id is reused', async () => {

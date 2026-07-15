@@ -70,6 +70,9 @@ type DistractionCard = {
 
 const distractionCardMinDelayMs = 10_000;
 const distractionCardMaxDelayMs = 30_000;
+const distractionCardStepCount = 3;
+const distractionCardIntroMs = 1_000;
+const accusationWindowMs = 1_500;
 const accusationCooldownMs = 10_000;
 const distractionScoreThreshold = 70;
 const focusCheckCooldownMs = 45_000;
@@ -85,6 +88,12 @@ type MissionAccusationPrompt = {
   missionId: string;
   choices: string[];
   answer: string;
+};
+
+type MissionProgressSignal = {
+  playerId: string;
+  count: number;
+  recordedAt: number;
 };
 
 interface StudyRoomProps extends ScreenProps {
@@ -577,6 +586,8 @@ export function StudyRoom({
   const [distractionVisible, setDistractionVisible] = useState(true);
   const [distractionWrong, setDistractionWrong] = useState(false);
   const [distractionCycle, setDistractionCycle] = useState(0);
+  const [distractionStepIndex, setDistractionStepIndex] = useState(0);
+  const [distractionIntroVisible, setDistractionIntroVisible] = useState(false);
   const [accusationPrompt, setAccusationPrompt] = useState<MissionAccusationPrompt | null>(null);
   const [accusationCooldownUntil, setAccusationCooldownUntil] = useState(0);
   const [calibratedRuleSettings, setCalibratedRuleSettings] = useState<RuleSettings | null>(null);
@@ -587,6 +598,8 @@ export function StudyRoom({
   const [focusCheckDismissedUntil, setFocusCheckDismissedUntil] = useState(0);
   const lastReportedFocusKeyRef = useRef('');
   const reportedMissionRef = useRef<{ missionId: string; count: number; success: boolean } | null>(null);
+  const previousMissionCountsRef = useRef<Map<string, number>>(new Map());
+  const recentMissionProgressRef = useRef<MissionProgressSignal | null>(null);
   const { callObject, localMedia, participantsByRoomiId, restart } =
     useDailyRoom(videoJoin);
   const localDailyParticipant = participantsByRoomiId.get(currentParticipantId);
@@ -708,8 +721,12 @@ export function StudyRoom({
     setDistractionSolvedId(null);
     setDistractionVisible(false);
     setDistractionWrong(false);
+    setDistractionStepIndex(0);
+    setDistractionIntroVisible(false);
     setAccusationPrompt(null);
     setAccusationCooldownUntil(0);
+    previousMissionCountsRef.current = new Map();
+    recentMissionProgressRef.current = null;
   }, [currentGame?.round.id]);
 
   useEffect(() => {
@@ -722,6 +739,8 @@ export function StudyRoom({
       setDistractionSolvedId(null);
       setDistractionVisible(false);
       setDistractionWrong(false);
+      setDistractionStepIndex(0);
+      setDistractionIntroVisible(false);
       return;
     }
 
@@ -730,6 +749,8 @@ export function StudyRoom({
     setDistractionSolvedId(null);
     setDistractionVisible(false);
     setDistractionWrong(false);
+    setDistractionStepIndex(0);
+    setDistractionIntroVisible(false);
 
     const delayMs =
       distractionCardMinDelayMs +
@@ -740,6 +761,8 @@ export function StudyRoom({
       setDistractionSolvedId(null);
       setDistractionVisible(true);
       setDistractionWrong(false);
+      setDistractionStepIndex(0);
+      setDistractionIntroVisible(true);
     }, delayMs);
 
     return () => window.clearTimeout(timerId);
@@ -760,6 +783,28 @@ export function StudyRoom({
       currentGame.status === 'in_round' &&
       distractionSolvedId !== distractionCard.id
   );
+
+  useEffect(() => {
+    if (currentGame?.kind !== 'hidden_mission' || currentGame.status !== 'in_round') {
+      previousMissionCountsRef.current = new Map();
+      recentMissionProgressRef.current = null;
+      return;
+    }
+
+    const nextCounts = new Map(previousMissionCountsRef.current);
+    for (const result of currentGame.missionResults ?? []) {
+      const previousCount = previousMissionCountsRef.current.get(result.playerId) ?? 0;
+      if (result.count > previousCount) {
+        recentMissionProgressRef.current = {
+          playerId: result.playerId,
+          count: result.count,
+          recordedAt: Date.now()
+        };
+      }
+      nextCounts.set(result.playerId, result.count);
+    }
+    previousMissionCountsRef.current = nextCounts;
+  }, [currentGame?.kind, currentGame?.missionResults, currentGame?.round.id, currentGame?.status]);
 
   useEffect(() => {
     if (
@@ -880,16 +925,30 @@ export function StudyRoom({
   const answerDistractionCard = (choice: string) => {
     if (!distractionCard) return;
     if (choice === distractionCard.answer) {
-      setDistractionSolvedId(distractionCard.id);
-      setDistractionCard(null);
-      setDistractionVisible(false);
       setDistractionWrong(false);
-      setDistractionCycle((current) => current + 1);
+      if (distractionStepIndex >= distractionCardStepCount - 1) {
+        setDistractionSolvedId(distractionCard.id);
+        setDistractionCard(null);
+        setDistractionVisible(false);
+        setDistractionStepIndex(0);
+        setDistractionIntroVisible(false);
+        setDistractionCycle((current) => current + 1);
+        return;
+      }
+
+      setDistractionStepIndex((current) => current + 1);
+      setDistractionIntroVisible(true);
       return;
     }
 
     setDistractionWrong(true);
   };
+
+  useEffect(() => {
+    if (!distractionCard || !distractionVisible || !distractionIntroVisible) return undefined;
+    const timerId = window.setTimeout(() => setDistractionIntroVisible(false), distractionCardIntroMs);
+    return () => window.clearTimeout(timerId);
+  }, [distractionCard, distractionIntroVisible, distractionStepIndex, distractionVisible]);
 
   const accuseMissionActor = (targetId: string) => {
     if (!currentGame || Date.now() < accusationCooldownUntil) return;
@@ -906,7 +965,11 @@ export function StudyRoom({
 
   const answerMissionAccusation = (choice: string) => {
     if (!accusationPrompt) return;
-    if (choice === accusationPrompt.answer) {
+    const recentProgress = recentMissionProgressRef.current;
+    const accusedRecentActor =
+      recentProgress?.playerId === accusationPrompt.targetId &&
+      Date.now() - recentProgress.recordedAt <= accusationWindowMs;
+    if (choice === accusationPrompt.answer && accusedRecentActor) {
       onWinByMissionGuess?.(
         currentParticipantId,
         accusationPrompt.targetId,
@@ -1045,22 +1108,30 @@ export function StudyRoom({
               >
                 <div className="study-distraction__panel">
                   <span className="study-distraction__eyebrow">루미 방해 카드</span>
-                  <h2>{distractionCard.title}</h2>
-                  <p>{distractionCard.prompt}</p>
-                  <div className="study-distraction__choices">
-                    {distractionCard.choices.map((choice, index) => (
-                      <button
-                        type="button"
-                        className="btn btn--soft"
-                        key={`${choice}-${index}`}
-                        onClick={() => answerDistractionCard(choice)}
-                      >
-                        {choice}
-                      </button>
-                    ))}
-                  </div>
-                  {distractionWrong && (
-                    <p className="study-distraction__feedback">다시 골라야 미션 잠금이 풀려요.</p>
+                  <h2>
+                    {distractionCard.title} {distractionStepIndex + 1}/{distractionCardStepCount}
+                  </h2>
+                  {distractionIntroVisible ? (
+                    <p className="study-distraction__intro">잠시 후 문제가 시작돼요.</p>
+                  ) : (
+                    <>
+                      <p>{distractionCard.prompt}</p>
+                      <div className="study-distraction__choices">
+                        {distractionCard.choices.map((choice, index) => (
+                          <button
+                            type="button"
+                            className="btn btn--soft"
+                            key={`${choice}-${index}`}
+                            onClick={() => answerDistractionCard(choice)}
+                          >
+                            {choice}
+                          </button>
+                        ))}
+                      </div>
+                      {distractionWrong && (
+                        <p className="study-distraction__feedback">다시 골라야 미션 잠금이 풀려요.</p>
+                      )}
+                    </>
                   )}
                   <button
                     type="button"
