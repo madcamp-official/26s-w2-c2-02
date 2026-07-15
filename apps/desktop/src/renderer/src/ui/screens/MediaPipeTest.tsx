@@ -107,6 +107,22 @@ const settingGroups: Array<{
         max: 50,
         step: 1,
         unit: '°'
+      },
+      {
+        key: 'mouthAspectRatioThreshold',
+        label: '입 벌림 MAR',
+        min: 0.3,
+        max: 0.9,
+        step: 0.05,
+        unit: ''
+      },
+      {
+        key: 'yawningSeconds',
+        label: '하품 지속',
+        min: 0.5,
+        max: 4,
+        step: 0.1,
+        unit: '초'
       }
     ]
   },
@@ -558,11 +574,19 @@ export function MediaPipeTest({ go }: ScreenProps) {
             <FeatureMeter label="눈 감김" value={focusSnapshot.durations.eyes_closed} unit="초" />
             <FeatureMeter label="고개 돌림" value={focusSnapshot.durations.head_turned} unit="초" />
             <FeatureMeter label="고개 숙임" value={focusSnapshot.durations.head_down} unit="초" />
+            <FeatureMeter label="하품" value={focusSnapshot.durations.yawning} unit="초" />
             <FeatureMeter
               label="EAR"
               value={round(focusSnapshot.current.eyeAspectRatio, 2)}
               unit=""
             />
+            <FeatureMeter
+              label="MAR"
+              value={round(focusSnapshot.current.mouthAspectRatio, 2)}
+              unit=""
+            />
+            <FeatureMeter label="깜빡임" value={focusSnapshot.blinksPerMinute} unit="회/분" />
+            <FeatureMeter label="하품 횟수" value={focusSnapshot.yawnCount} unit="회" />
             <FeatureMeter
               label="yaw 비율"
               value={round(focusSnapshot.current.headYawRatio, 2)}

@@ -18,9 +18,11 @@ const focusedFrame: Omit<FrameSignals, 'timestamp'> = {
   headYawRatio: 0,
   headPitchRatio: 0,
   headPose: null,
+  mouthAspectRatio: 0.1,
   eyesClosed: false,
   headTurned: false,
-  headDown: false
+  headDown: false,
+  mouthOpen: false
 };
 
 /** Frames spanning `seconds`, sampled every 100ms, ending at t = seconds * 1000. */
@@ -109,6 +111,64 @@ describe('classifyFocus', () => {
 
     expect(snapshot.label).toBe('focused');
     expect(snapshot.activeSignals).not.toContain('face_missing');
+  });
+});
+
+describe('fatigue signals', () => {
+  const yawning = { mouthOpen: true, mouthAspectRatio: 0.7 };
+
+  it('treats a sustained wide-open mouth as a yawn', () => {
+    // Runs to the end of the window, so the yawn is still in progress.
+    const frames = windowWithRuns(7, { starts: [5], runSeconds: 2.5, apply: yawning });
+    const snapshot = classifyFocus(frames, defaultRuleSettings);
+
+    expect(snapshot.activeSignals).toContain('yawning');
+  });
+
+  it('does not let a single yawn pause someone who is still working', () => {
+    const frames = windowWithRuns(7, { starts: [5], runSeconds: 2.5, apply: yawning });
+    const snapshot = classifyFocus(frames, defaultRuleSettings);
+
+    // Yawning is tiredness, not absence. It dents the score but must not flip the
+    // label, because `sleepy` maps to a `paused` presence in the study room.
+    expect(snapshot.score).toBe(85);
+    expect(snapshot.label).toBe('focused');
+  });
+
+  it('does not mistake talking for yawning', () => {
+    const frames = windowWithRuns(20, {
+      starts: [2, 5, 8, 11, 14],
+      runSeconds: 0.6,
+      apply: yawning
+    });
+    const snapshot = classifyFocus(frames, defaultRuleSettings);
+
+    expect(snapshot.activeSignals).not.toContain('yawning');
+    expect(snapshot.yawnCount).toBe(0);
+    expect(snapshot.score).toBe(100);
+  });
+
+  it('counts completed yawns across the window', () => {
+    const frames = windowWithRuns(30, { starts: [2, 12, 22], runSeconds: 2, apply: yawning });
+
+    expect(classifyFocus(frames, defaultRuleSettings).yawnCount).toBe(3);
+  });
+
+  it('reports the blink rate per minute', () => {
+    const frames = windowWithRuns(30, {
+      starts: [2, 8, 14, 20, 26],
+      runSeconds: 0.2,
+      apply: { eyesClosed: true }
+    });
+
+    // 5 blinks across a 30 second window.
+    expect(classifyFocus(frames, defaultRuleSettings).blinksPerMinute).toBe(10);
+  });
+
+  it('does not count a drowsy eye closure as a blink', () => {
+    const frames = windowWithRuns(30, { starts: [5], runSeconds: 5, apply: { eyesClosed: true } });
+
+    expect(classifyFocus(frames, defaultRuleSettings).blinksPerMinute).toBe(0);
   });
 });
 
@@ -326,6 +386,23 @@ describe('extractFrameSignals', () => {
     expect(comfortable.headTurned).toBe(false);
   });
 });
+
+/**
+ * A window of `totalSeconds` sampled every 100ms, where `apply` is set during
+ * each run starting at `starts` (seconds) and lasting `runSeconds`.
+ */
+function windowWithRuns(
+  totalSeconds: number,
+  options: { starts: number[]; runSeconds: number; apply: Partial<FrameSignals> }
+): FrameSignals[] {
+  return Array.from({ length: totalSeconds * 10 + 1 }, (_, index) => {
+    const timestamp = index * 100;
+    const inRun = options.starts.some(
+      (start) => timestamp >= start * 1000 && timestamp < (start + options.runSeconds) * 1000
+    );
+    return { ...focusedFrame, timestamp, ...(inRun ? options.apply : {}) };
+  });
+}
 
 /** A head facing the camera, in MediaPipe's column-major 4x4 layout. */
 function identityMatrix(): number[] {

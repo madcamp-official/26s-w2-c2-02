@@ -138,9 +138,11 @@ describe('StudyRoom focus detection status mapping', () => {
       headYawRatio: 0,
       headPitchRatio: 0,
       headPose: null,
+      mouthAspectRatio: 0.1,
       eyesClosed: false,
       headTurned: false,
-      headDown: false
+      headDown: false,
+      mouthOpen: false
     };
 
     expect(

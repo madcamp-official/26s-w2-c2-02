@@ -10,7 +10,12 @@ import { headPoseFromMatrix, type HeadPose } from './head-pose';
 
 export type FocusLabel = 'focused' | 'distracted' | 'away' | 'sleepy' | 'uncertain' | 'paused';
 
-export type FocusSignalName = 'face_missing' | 'eyes_closed' | 'head_turned' | 'head_down';
+export type FocusSignalName =
+  | 'face_missing'
+  | 'eyes_closed'
+  | 'head_turned'
+  | 'head_down'
+  | 'yawning';
 
 export type LandmarkPoint = {
   x: number;
@@ -29,10 +34,20 @@ export type RuleSettings = {
   headTurnDegreesThreshold: number;
   /** Degrees of downward pitch before the head counts as down. */
   headDownDegreesThreshold: number;
+  /** Mouth aspect ratio above which the mouth counts as wide open. */
+  mouthAspectRatioThreshold: number;
+  /**
+   * How long the mouth must stay wide open to count as a yawn. This is what
+   * separates a yawn from talking or laughing, which open the mouth in bursts.
+   */
+  yawningSeconds: number;
+  /** An eye closure shorter than this is a blink; a longer one means drowsy. */
+  blinkMaxSeconds: number;
   faceMissingPenalty: number;
   eyesClosedPenalty: number;
   headTurnedPenalty: number;
   headDownPenalty: number;
+  yawningPenalty: number;
 };
 
 export type FrameSignals = {
@@ -42,15 +57,16 @@ export type FrameSignals = {
   headYawRatio: number;
   headPitchRatio: number;
   /**
-   * Real 6DoF angles when MediaPipe supplied a transformation matrix. The rule
-   * thresholds above still run on the landmark ratios they were tuned against;
-   * this is what the ML feature window reports and what the tuning screen shows,
-   * and it is the input a future degree-based rule should switch to.
+   * Real 6DoF angles, and the source the head rules judge against. Null when
+   * MediaPipe supplied no transformation matrix for the frame, which is the only
+   * case where the ratios above are still used to derive an angle.
    */
   headPose: HeadPose | null;
+  mouthAspectRatio: number;
   eyesClosed: boolean;
   headTurned: boolean;
   headDown: boolean;
+  mouthOpen: boolean;
 };
 
 export type FocusSnapshot = {
@@ -58,6 +74,15 @@ export type FocusSnapshot = {
   score: number;
   activeSignals: FocusSignalName[];
   durations: Record<FocusSignalName, number>;
+  /**
+   * Fatigue readings aggregated over the window. They are reported but not scored:
+   * a resting blink rate is personal (roughly 15-20 per minute, but far outside
+   * that for plenty of people), so a fixed threshold here would invent the same
+   * false positives the angle thresholds were tuned to avoid. Judge these once
+   * per-participant baselines exist.
+   */
+  blinksPerMinute: number;
+  yawnCount: number;
   current: Omit<FrameSignals, 'timestamp'>;
 };
 
@@ -80,10 +105,17 @@ export const defaultRuleSettings: RuleSettings = {
   // from the desk goes well past these.
   headTurnDegreesThreshold: 30,
   headDownDegreesThreshold: 25,
+  mouthAspectRatioThreshold: 0.6,
+  yawningSeconds: 1.5,
+  blinkMaxSeconds: 1,
   faceMissingPenalty: 70,
   eyesClosedPenalty: 45,
   headTurnedPenalty: 30,
-  headDownPenalty: 35
+  headDownPenalty: 35,
+  // A yawn says tired, not distracted, and tired people are usually still working.
+  // The penalty is small on purpose: it should nudge the score toward a break
+  // suggestion, not on its own drag someone out of `focused`.
+  yawningPenalty: 15
 };
 
 export const emptyFocusSnapshot: FocusSnapshot = {
@@ -94,17 +126,22 @@ export const emptyFocusSnapshot: FocusSnapshot = {
     face_missing: 0,
     eyes_closed: 0,
     head_turned: 0,
-    head_down: 0
+    head_down: 0,
+    yawning: 0
   },
+  blinksPerMinute: 0,
+  yawnCount: 0,
   current: {
     facePresent: false,
     eyeAspectRatio: 0,
     headYawRatio: 0,
     headPitchRatio: 0,
     headPose: null,
+    mouthAspectRatio: 0,
     eyesClosed: false,
     headTurned: false,
-    headDown: false
+    headDown: false,
+    mouthOpen: false
   }
 };
 
@@ -123,9 +160,11 @@ export function extractFrameSignals(
       headYawRatio: 0,
       headPitchRatio: 0,
       headPose: null,
+      mouthAspectRatio: 0,
       eyesClosed: false,
       headTurned: false,
-      headDown: false
+      headDown: false,
+      mouthOpen: false
     };
   }
 
@@ -136,6 +175,7 @@ export function extractFrameSignals(
   const leftEar = calculateEyeAspectRatio(face, [33, 160, 158, 133, 153, 144]);
   const rightEar = calculateEyeAspectRatio(face, [362, 385, 387, 263, 373, 380]);
   const eyeAspectRatio = (leftEar + rightEar) / 2;
+  const mouthAspectRatio = calculateMouthAspectRatio(face);
   const eyeCenterY = averagePoints(face, [33, 133, 362, 263]).y;
   const faceCenterX = bounds.left + faceWidth / 2;
   const headYawRatio = (nose.x - faceCenterX) / faceWidth;
@@ -153,10 +193,12 @@ export function extractFrameSignals(
     headYawRatio,
     headPitchRatio,
     headPose,
+    mouthAspectRatio,
     eyesClosed: eyeAspectRatio < settings.eyeAspectRatioThreshold,
     headTurned:
       Math.abs(frameYawDegrees(frame)) > settings.headTurnDegreesThreshold + motionBoost,
-    headDown: framePitchDegrees(frame) > settings.headDownDegreesThreshold
+    headDown: framePitchDegrees(frame) > settings.headDownDegreesThreshold,
+    mouthOpen: mouthAspectRatio > settings.mouthAspectRatioThreshold
   };
 }
 
@@ -180,7 +222,8 @@ export function classifyFocus(windowFrames: FrameSignals[], settings: RuleSettin
     face_missing: getLatestDuration(windowFrames, (frame) => !frame.facePresent),
     eyes_closed: getLatestDuration(windowFrames, (frame) => frame.eyesClosed),
     head_turned: getLatestDuration(windowFrames, (frame) => frame.headTurned),
-    head_down: getLatestDuration(windowFrames, (frame) => frame.headDown)
+    head_down: getLatestDuration(windowFrames, (frame) => frame.headDown),
+    yawning: getLatestDuration(windowFrames, (frame) => frame.mouthOpen)
   };
   const activeSignals: FocusSignalName[] = [];
   let penalty = 0;
@@ -201,6 +244,10 @@ export function classifyFocus(windowFrames: FrameSignals[], settings: RuleSettin
     activeSignals.push('head_down');
     penalty += settings.headDownPenalty;
   }
+  if (durations.yawning >= settings.yawningSeconds) {
+    activeSignals.push('yawning');
+    penalty += settings.yawningPenalty;
+  }
 
   const score = clamp(Math.round(100 - penalty), 0, 100);
   const label = getFocusLabel(score, activeSignals, settings);
@@ -210,12 +257,18 @@ export function classifyFocus(windowFrames: FrameSignals[], settings: RuleSettin
     score,
     activeSignals,
     durations,
+    blinksPerMinute: getBlinksPerMinute(windowFrames, settings),
+    yawnCount: countSignalRuns(windowFrames, (frame) => frame.mouthOpen, {
+      minSeconds: settings.yawningSeconds
+    }),
     current: {
       facePresent: latest.facePresent,
       eyeAspectRatio: latest.eyeAspectRatio,
       headYawRatio: latest.headYawRatio,
       headPitchRatio: latest.headPitchRatio,
       headPose: latest.headPose,
+      mouthAspectRatio: latest.mouthAspectRatio,
+      mouthOpen: latest.mouthOpen,
       eyesClosed: latest.eyesClosed,
       headTurned: latest.headTurned,
       headDown: latest.headDown
@@ -392,6 +445,78 @@ export function getMotionAmount(frames: FrameSignals[]) {
   });
 
   return round(mean(deltas) * 100, 3);
+}
+
+/**
+ * Counts completed runs of `predicate` inside the window, optionally bounded by
+ * how long each run lasted. The trailing run is excluded: it is still going, so
+ * its duration is not known yet and counting it would double-count on the next
+ * frame.
+ */
+export function countSignalRuns(
+  frames: FrameSignals[],
+  predicate: (frame: FrameSignals) => boolean,
+  bounds: { minSeconds?: number; maxSeconds?: number } = {}
+) {
+  const minSeconds = bounds.minSeconds ?? 0;
+  const maxSeconds = bounds.maxSeconds ?? Infinity;
+  let runs = 0;
+  let runStart: number | null = null;
+
+  frames.forEach((frame, index) => {
+    if (predicate(frame)) {
+      runStart ??= frame.timestamp;
+      return;
+    }
+
+    if (runStart === null) {
+      return;
+    }
+
+    const runSeconds = (frames[index - 1]!.timestamp - runStart) / 1000;
+    if (runSeconds >= minSeconds && runSeconds <= maxSeconds) {
+      runs += 1;
+    }
+    runStart = null;
+  });
+
+  return runs;
+}
+
+export function getBlinksPerMinute(frames: FrameSignals[], settings: RuleSettings) {
+  const windowSeconds = getWindowSeconds(frames);
+
+  if (windowSeconds <= 0) {
+    return 0;
+  }
+
+  const blinks = countSignalRuns(frames, (frame) => frame.eyesClosed, {
+    maxSeconds: settings.blinkMaxSeconds
+  });
+  return round((blinks / windowSeconds) * 60, 1);
+}
+
+function getWindowSeconds(frames: FrameSignals[]) {
+  const first = frames.at(0);
+  const last = frames.at(-1);
+  return first && last ? (last.timestamp - first.timestamp) / 1000 : 0;
+}
+
+/**
+ * Vertical lip gap over mouth width, using the inner lip landmarks so lip
+ * thickness does not shift the ratio.
+ */
+export function calculateMouthAspectRatio(face: LandmarkPoint[]) {
+  const upperLip = face[13];
+  const lowerLip = face[14];
+  const leftCorner = face[61];
+  const rightCorner = face[291];
+
+  if (!upperLip || !lowerLip || !leftCorner || !rightCorner) {
+    return 0;
+  }
+
+  return distance(upperLip, lowerLip) / Math.max(0.001, distance(leftCorner, rightCorner));
 }
 
 export function calculateEyeAspectRatio(

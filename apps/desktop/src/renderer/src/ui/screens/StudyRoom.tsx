@@ -129,6 +129,9 @@ export function participantStatusLabel(
     if (activeSignals.has('head_turned')) {
       return '시선 이탈';
     }
+    if (activeSignals.has('yawning')) {
+      return '하품';
+    }
     if (focusSnapshot.label === 'uncertain') {
       return '집중 흔들림';
     }
