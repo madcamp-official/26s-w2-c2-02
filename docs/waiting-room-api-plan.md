@@ -75,6 +75,7 @@
 ### 5. 루미 목표 다듬기 API (LLM) ✅ (완료)
 - **행동**: `POST /goals/refine`(`rawGoal`, `sessionMinutes`) → `RoomiOrchestrator.refineGoal()`가 `{ refinedText, reason, source }` 반환. **Gemini(`gemini-2.5-flash`) 호출 실패·무키 시 템플릿 fallback**. 원본 rawGoal은 서버에만(응답에 미포함).
 - **아키텍처**: `GeminiClient`(raw fetch, 외부 경계 1곳: `GEMINI_API_KEY`·모델·타임아웃) → `RoomiOrchestrator`(seam: kind별 프롬프트+fallback, `TextGenerator` 주입). `.env`에 `GEMINI_API_KEY`만 넣으면 라이브, 없으면 템플릿 자동. 나머지 kind(start/focus/break/summary)는 같은 client·패턴 재사용.
+- **[갱신 2026-07] LLM 프로바이더 변경**: 이후 작업에서 Gemini가 Ollama로 교체됨 — 현재 `services/api/src/roomi/ollama-client.ts`가 `OLLAMA_BASE_URL`/`OLLAMA_MODEL`/`OLLAMA_TIMEOUT_MS`로 동작하며 `GeminiClient`/`GEMINI_API_KEY`는 코드에 존재하지 않는다. 최신 계약은 [`api.md`](./api.md) Environment 절 참고. 이 절의 나머지 서술(아키텍처 seam, fallback 동작)은 Gemini→Ollama 교체 후에도 구조적으로 유효하다.
 - **위험**: LLM 키/네트워크 실패로 흐름 블록 → try/catch 동기 fallback으로 항상 200.
 - **검증**: orchestrator 단위 3건(gemini/throw→template/무generator→template) + GeminiClient fetch-mock 3건(무키 throw/파싱/비정상응답) + REST 2건(무LLM 200 template / generator 주입 시 gemini). vitest 27건 통과. 키 없는 상태에서도 200 + 템플릿 확인.
 

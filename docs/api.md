@@ -20,6 +20,7 @@
 | `POST` | `/sessions/break/extend` | Host pushes `currentSession.breakEndsAt` out by `minutes` (default `5`) (`roomId`, `participantId`, `minutes?`). `403` for non-host, `409` if no break is active. |
 | `POST` | `/sessions/end` | Host ends the active session (`roomId`, `participantId`). Sets `room.status = 'ended'`, settles every tracked participant's accumulated focus time, and attaches a `SessionSummary` (with the focus ranking below and a Roomi-generated retrospective) to `currentSession.summary`. Broadcasts a `summary` Roomi message. `403` for non-host, `409` if no session is active, `404` for unknown room. |
 | `GET` | `/rooms/:inviteCode` | Read a room snapshot by invite code. |
+| `POST` | `/rooms/:roomId/goals/achieved` | Set the calling participant's goal `achieved` flag (`participantId`, `achieved`) and return the room snapshot. |
 
 Invite codes are 6-character uppercase alphanumeric strings. Roomi excludes ambiguous characters (`0`, `O`, `1`, `I`, `L`) and normalizes user input before lookup.
 
@@ -87,6 +88,8 @@ Client events are defined in `packages/shared/src/realtime-events.ts`.
 | `room:snapshot` | server to client | Send the current room snapshot to a newly subscribed client. |
 | `room:updated` | server to client | Broadcast the latest room snapshot. |
 | `roomi:message` | server to client | Send a typed Roomi operator message. Session-start messages go to the room; `focus_recovery` messages are delivered only to `targetParticipantId`. |
+| `chat:send` | client to server | Send a chat message (`roomId`, `participantId`, `text`) to the room. |
+| `chat:message` | server to client | Broadcast a chat message to every subscribed participant. |
 | `focus:ranking-updated` | server to client | Broadcast `{ roomId, ranking: FocusRankingEntry[] }` — the live focus-minutes ranking while a session is `studying`. Fires immediately on any `participant:update-status`/`room:leave` during the session, plus a 12s heartbeat (`focusRankingHeartbeatMs`) so ranking keeps ticking for a participant who never changes status. Reuses the same `getFocusRanking` formula as `POST /sessions/end`, so live and final numbers never diverge. |
 | `error` | server to client | Report a recoverable realtime error. |
 
@@ -111,8 +114,8 @@ Keep server secrets only on the machine that runs the central API server.
 
 ### API Server Environment
 
-Copy the root `.env.example` to the repository root `.env` on the API server machine.
-The API server loads the root `.env` first, then loads `services/api/.env` if it exists. Values in `services/api/.env` override the root file, which is useful for server-specific deployment settings.
+Copy `services/api/.env.example` to `services/api/.env` on the API server machine (there is no root-level `.env.example`).
+The API server loads the repository root `.env` first, then loads `services/api/.env` if it exists. Values in `services/api/.env` override the root file, which is useful for server-specific deployment settings. For most setups, `services/api/.env` alone is enough.
 
 | Variable | Purpose |
 |---|---|

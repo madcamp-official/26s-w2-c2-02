@@ -346,22 +346,23 @@ type SessionSummary = {
 
 - **산출물 설명:** 루미 데스크톱 MVP. 친구 2명 이상, 최대 4명이 같은 방에서 영상으로 함께 공부하고, AI 운영자가 목표 설정/집중 회복/휴식 복귀/회고를 돕습니다.
 - **실행 환경:** Node.js 20+, Electron, React, TypeScript, Socket.IO 서버, SQLite 또는 PostgreSQL, Daily 계정, LLM API 키
-- **실행 방법:** 실제 앱 코드와 실행 진입점 확정 후 갱신합니다.
+- **실행 방법:** 아래 「실행 방법」 절 참고 (`pnpm dev:api` / `pnpm dev:desktop`).
 - **시연 영상 / 이미지:** 구현 후 앱 실행 화면, 방 입장 화면, 스터디룸 화면, 회고 화면 캡처 또는 짧은 시연 영상을 첨부합니다.
 
 ### 실행 방법
 
 ```bash
-# server
-cd server
-npm install
-npm run dev
+# 최초 1회, 저장소 루트에서
+pnpm install
 
-# desktop app
-cd app
-npm install
-npm run dev
+# API 서버 (services/api)
+pnpm dev:api
+
+# 데스크톱 앱 (apps/desktop)
+pnpm dev:desktop
 ```
+
+세부 환경변수/배포 설정은 [`docs/api.md`](./docs/api.md), [`docs/development_and_distribution.md`](./docs/development_and_distribution.md) 참고.
 
 ### 기술 구성
 
