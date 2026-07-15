@@ -916,8 +916,7 @@ describe('StudyRoom hidden mission progress', () => {
     );
   });
 
-  it('opens a mission guess when the actor is accused within the reaction window', async () => {
-    vi.useFakeTimers();
+  it('opens a mission guess for another participant without waiting for mission progress', async () => {
     const host = createParticipant('participant-host', 'Host');
     const member = { ...createParticipant('participant-member', 'Member'), role: 'member' as const };
     const room = createRoom();
@@ -952,23 +951,7 @@ describe('StudyRoom hidden mission progress', () => {
       />
     );
 
-    const nextGame = {
-      ...currentGame,
-      missionResults: [
-        { playerId: member.id, missionId: memberMission.id, count: 1, success: false }
-      ]
-    };
-    rerender(
-      <StudyRoom
-        {...baseStudyRoomProps(host)}
-        currentGame={nextGame}
-        participants={[host, member]}
-        room={room}
-        privateMission={hostMission}
-        onWinByMissionGuess={onWinByMissionGuess}
-      />
-    );
-
+    expect(screen.getByRole('button', { name: 'Host' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Member' }));
     expect(screen.getByRole('dialog', { name: '미션 맞추기' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: memberMission.prompt }));

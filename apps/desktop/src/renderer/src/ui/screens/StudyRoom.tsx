@@ -70,7 +70,6 @@ type DistractionCard = {
 
 const distractionCardMinDelayMs = 10_000;
 const distractionCardMaxDelayMs = 30_000;
-const accusationWindowMs = 1_500;
 const accusationCooldownMs = 10_000;
 const distractionScoreThreshold = 70;
 const focusCheckCooldownMs = 45_000;
@@ -578,7 +577,6 @@ export function StudyRoom({
   const [distractionVisible, setDistractionVisible] = useState(true);
   const [distractionWrong, setDistractionWrong] = useState(false);
   const [distractionCycle, setDistractionCycle] = useState(0);
-  const [activeMissionActorId, setActiveMissionActorId] = useState<string | null>(null);
   const [accusationPrompt, setAccusationPrompt] = useState<MissionAccusationPrompt | null>(null);
   const [accusationCooldownUntil, setAccusationCooldownUntil] = useState(0);
   const [calibratedRuleSettings, setCalibratedRuleSettings] = useState<RuleSettings | null>(null);
@@ -588,7 +586,6 @@ export function StudyRoom({
   const [dismissedRestSuggestion, setDismissedRestSuggestion] = useState(false);
   const [focusCheckDismissedUntil, setFocusCheckDismissedUntil] = useState(0);
   const lastReportedFocusKeyRef = useRef('');
-  const previousMissionCountsRef = useRef<Map<string, number>>(new Map());
   const reportedMissionRef = useRef<{ missionId: string; count: number; success: boolean } | null>(null);
   const { callObject, localMedia, participantsByRoomiId, restart } =
     useDailyRoom(videoJoin);
@@ -711,8 +708,6 @@ export function StudyRoom({
     setDistractionSolvedId(null);
     setDistractionVisible(false);
     setDistractionWrong(false);
-    previousMissionCountsRef.current = new Map();
-    setActiveMissionActorId(null);
     setAccusationPrompt(null);
     setAccusationCooldownUntil(0);
   }, [currentGame?.round.id]);
@@ -758,32 +753,6 @@ export function StudyRoom({
     distractionCycle,
     distractionSolvedId
   ]);
-
-  useEffect(() => {
-    if (currentGame?.kind !== 'hidden_mission' || currentGame.status !== 'in_round') {
-      previousMissionCountsRef.current = new Map();
-      setActiveMissionActorId(null);
-      setAccusationPrompt(null);
-      return;
-    }
-
-    let latestActorId: string | null = null;
-    const nextCounts = new Map(previousMissionCountsRef.current);
-    for (const result of currentGame.missionResults ?? []) {
-      const previousCount = previousMissionCountsRef.current.get(result.playerId) ?? 0;
-      if (result.count > previousCount) latestActorId = result.playerId;
-      nextCounts.set(result.playerId, result.count);
-    }
-    previousMissionCountsRef.current = nextCounts;
-    if (!latestActorId) return;
-
-    setActiveMissionActorId(latestActorId);
-    const timerId = window.setTimeout(() => {
-      setActiveMissionActorId((current) => (current === latestActorId ? null : current));
-    }, accusationWindowMs);
-
-    return () => window.clearTimeout(timerId);
-  }, [currentGame?.kind, currentGame?.missionResults, currentGame?.round.id, currentGame?.status]);
 
   const distractionLocksMission = Boolean(
     distractionCard &&
@@ -924,7 +893,7 @@ export function StudyRoom({
 
   const accuseMissionActor = (targetId: string) => {
     if (!currentGame || Date.now() < accusationCooldownUntil) return;
-    if (targetId !== activeMissionActorId) return;
+    if (targetId === currentParticipantId) return;
     const mission = currentGame.missions?.find((item) => item.playerId === targetId);
     if (!mission) return;
     setAccusationPrompt({
@@ -933,7 +902,6 @@ export function StudyRoom({
       answer: mission.prompt,
       choices: missionGuessChoices(mission, currentGame.missions ?? [])
     });
-    setActiveMissionActorId(null);
   };
 
   const answerMissionAccusation = (choice: string) => {
@@ -949,7 +917,6 @@ export function StudyRoom({
     }
 
     setAccusationPrompt(null);
-    setActiveMissionActorId(null);
     setAccusationCooldownUntil(Date.now() + accusationCooldownMs);
   };
 
@@ -1195,7 +1162,7 @@ export function StudyRoom({
                 {participants.slice(0, 4).map((participant) => {
                   const disabled =
                     timestamp < accusationCooldownUntil ||
-                    participant.id !== activeMissionActorId ||
+                    participant.id === currentParticipantId ||
                     Boolean(accusationPrompt);
                   return (
                     <button
