@@ -93,20 +93,20 @@ const settingGroups: Array<{
         unit: ''
       },
       {
-        key: 'headTurnRatioThreshold',
-        label: '고개 돌림 비율',
-        min: 0.08,
-        max: 0.35,
-        step: 0.01,
-        unit: ''
+        key: 'headTurnDegreesThreshold',
+        label: '고개 돌림 각도',
+        min: 15,
+        max: 60,
+        step: 1,
+        unit: '°'
       },
       {
-        key: 'headDownRatioThreshold',
-        label: '고개 숙임 비율',
-        min: 0.24,
-        max: 0.5,
-        step: 0.01,
-        unit: ''
+        key: 'headDownDegreesThreshold',
+        label: '고개 숙임 각도',
+        min: 10,
+        max: 50,
+        step: 1,
+        unit: '°'
       }
     ]
   },
@@ -591,9 +591,9 @@ export function MediaPipeTest({ go }: ScreenProps) {
           </div>
 
           <p className="mediapipe-test__note">
-            각도는 MediaPipe 6DoF 행렬에서 바로 계산한 값이고, 아직 판정에는 쓰지 않습니다. 판정은
-            위의 비율 임계값으로만 이뤄집니다. 정면·좌우·아래를 차례로 보면서 각도가 어떻게 움직이는지
-            확인한 뒤 각도 기준으로 전환할 예정입니다.
+            고개 돌림·숙임 판정은 MediaPipe 6DoF 행렬에서 계산한 각도를 씁니다. 아래를 볼수록 pitch가
+            커지고, 기본 임계값은 편하게 앉아 움직이는 범위(yaw ±25°, pitch +20° 안팎) 바깥에
+            맞춰져 있습니다. 비율 값은 각도를 얻지 못한 프레임의 예비 계산에만 쓰입니다.
           </p>
 
           <p className="mediapipe-test__note">

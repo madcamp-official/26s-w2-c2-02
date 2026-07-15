@@ -251,7 +251,7 @@ describe('extractFrameSignals', () => {
     expect(signals).toMatchObject({ timestamp: 1_234, facePresent: false, eyeAspectRatio: 0 });
   });
 
-  it('flags a downward pitch as head down', () => {
+  it('still detects head down from landmarks alone when no matrix arrives', () => {
     const face = syntheticFace({ noseY: 0.9 });
     const signals = extractFrameSignals(face, defaultRuleSettings, 0, null);
 
@@ -276,11 +276,76 @@ describe('extractFrameSignals', () => {
 
     expect(signals.headPose).toEqual({ headYaw: 0, headPitch: 0, headRoll: 0 });
   });
+
+  it('judges head angle from the matrix rather than the landmark ratio', () => {
+    // The landmarks say the nose is far below the eyes, which the ratio fallback
+    // would read as head down. The pose says the head is level, and it wins.
+    const signals = extractFrameSignals(
+      syntheticFace({ noseY: 0.9 }),
+      defaultRuleSettings,
+      0,
+      null,
+      identityMatrix()
+    );
+
+    expect(signals.headDown).toBe(false);
+  });
+
+  it('leaves normal study movement alone', () => {
+    const comfortable = extractFrameSignals(
+      syntheticFace({ noseY: 0.5 }),
+      defaultRuleSettings,
+      0,
+      null,
+      pitchMatrix(20)
+    );
+
+    expect(comfortable.headDown).toBe(false);
+  });
+
+  it('flags a downward pitch past the comfortable range as head down', () => {
+    const signals = extractFrameSignals(
+      syntheticFace({ noseY: 0.5 }),
+      defaultRuleSettings,
+      0,
+      null,
+      pitchMatrix(35)
+    );
+
+    expect(signals.headDown).toBe(true);
+  });
+
+  it('flags a yaw past the comfortable range as head turned in either direction', () => {
+    const face = syntheticFace({ noseY: 0.5 });
+    const left = extractFrameSignals(face, defaultRuleSettings, 0, null, yawMatrix(-40));
+    const right = extractFrameSignals(face, defaultRuleSettings, 0, null, yawMatrix(40));
+    const comfortable = extractFrameSignals(face, defaultRuleSettings, 0, null, yawMatrix(25));
+
+    expect(left.headTurned).toBe(true);
+    expect(right.headTurned).toBe(true);
+    expect(comfortable.headTurned).toBe(false);
+  });
 });
 
 /** A head facing the camera, in MediaPipe's column-major 4x4 layout. */
 function identityMatrix(): number[] {
   return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+}
+
+/** Head pitched down by `degrees` (positive is looking down). */
+function pitchMatrix(degrees: number): number[] {
+  const angle = (degrees * Math.PI) / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return [1, 0, 0, 0, 0, cos, sin, 0, 0, -sin, cos, 0, 0, 0, 0, 1];
+}
+
+/** Head turned by `degrees` of yaw. */
+function yawMatrix(degrees: number): number[] {
+  const angle = (degrees * Math.PI) / 180;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  return [cos, 0, -sin, 0, 0, 1, 0, 0, sin, 0, cos, 0, 0, 0, 0, 1];
 }
 
 /**

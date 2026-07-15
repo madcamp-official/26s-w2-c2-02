@@ -25,8 +25,10 @@ export type RuleSettings = {
   headTurnedSeconds: number;
   headDownSeconds: number;
   eyeAspectRatioThreshold: number;
-  headTurnRatioThreshold: number;
-  headDownRatioThreshold: number;
+  /** Degrees of yaw away from centre before the head counts as turned. */
+  headTurnDegreesThreshold: number;
+  /** Degrees of downward pitch before the head counts as down. */
+  headDownDegreesThreshold: number;
   faceMissingPenalty: number;
   eyesClosedPenalty: number;
   headTurnedPenalty: number;
@@ -72,8 +74,12 @@ export const defaultRuleSettings: RuleSettings = {
   headTurnedSeconds: 10,
   headDownSeconds: 10,
   eyeAspectRatioThreshold: 0.19,
-  headTurnRatioThreshold: 0.18,
-  headDownRatioThreshold: 0.36,
+  // Sitting and studying comfortably spans roughly +-25 degrees of yaw and up to
+  // +20 of pitch, so both thresholds sit outside that band: inside it, ordinary
+  // reading and shifting in a chair would read as distraction. A real turn away
+  // from the desk goes well past these.
+  headTurnDegreesThreshold: 30,
+  headDownDegreesThreshold: 25,
   faceMissingPenalty: 70,
   eyesClosedPenalty: 45,
   headTurnedPenalty: 30,
@@ -134,8 +140,11 @@ export function extractFrameSignals(
   const faceCenterX = bounds.left + faceWidth / 2;
   const headYawRatio = (nose.x - faceCenterX) / faceWidth;
   const headPitchRatio = (nose.y - eyeCenterY) / faceHeight;
-  const motionBoost =
-    previousNose === null ? 0 : distance(nose, previousNose) > 0.018 ? 0.01 : 0;
+  const headPose = headPoseFromMatrix(matrix);
+  const frame = { headYawRatio, headPitchRatio, headPose };
+  // Widen the turn threshold slightly while the head is in motion, so a quick
+  // glance that passes through a wide angle is not counted as turning away.
+  const motionBoost = previousNose === null ? 0 : distance(nose, previousNose) > 0.018 ? 1 : 0;
 
   return {
     timestamp,
@@ -143,10 +152,11 @@ export function extractFrameSignals(
     eyeAspectRatio,
     headYawRatio,
     headPitchRatio,
-    headPose: headPoseFromMatrix(matrix),
+    headPose,
     eyesClosed: eyeAspectRatio < settings.eyeAspectRatioThreshold,
-    headTurned: Math.abs(headYawRatio) > settings.headTurnRatioThreshold + motionBoost,
-    headDown: headPitchRatio > settings.headDownRatioThreshold
+    headTurned:
+      Math.abs(frameYawDegrees(frame)) > settings.headTurnDegreesThreshold + motionBoost,
+    headDown: framePitchDegrees(frame) > settings.headDownDegreesThreshold
   };
 }
 
@@ -351,15 +361,18 @@ export function getLatestDuration(
   return round((latest.timestamp - start) / 1000, 1);
 }
 
+type HeadAngleSource = Pick<FrameSignals, 'headYawRatio' | 'headPitchRatio' | 'headPose'>;
+
 /**
- * The `FeatureWindowV1` schema promises degrees, so prefer the real pose and only
- * fall back to scaling the landmark ratio when no matrix was available.
+ * The real 6DoF pose is the source of truth for head angle: unlike the landmark
+ * ratios it does not drift when the face sits off-centre or close to the camera.
+ * The scaled ratio is only a fallback for frames MediaPipe gave no matrix for.
  */
-function frameYawDegrees(frame: FrameSignals) {
+function frameYawDegrees(frame: HeadAngleSource) {
   return frame.headPose?.headYaw ?? frame.headYawRatio * 90;
 }
 
-function framePitchDegrees(frame: FrameSignals) {
+function framePitchDegrees(frame: HeadAngleSource) {
   return frame.headPose?.headPitch ?? frame.headPitchRatio * 90;
 }
 
