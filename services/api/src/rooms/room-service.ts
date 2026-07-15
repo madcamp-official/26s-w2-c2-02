@@ -1,6 +1,7 @@
 import type {
   BluffBet,
   BluffResult,
+  ChatMessage,
   CreateRoomInput,
   ExpressionSignals,
   FocusRankingEntry,
@@ -33,6 +34,8 @@ import type { VideoProvider } from '../video/daily-video-provider';
 type RoomUpdatedListener = (snapshot: RoomSnapshot) => void;
 type RoomiMessageListener = (message: RoomiMessage) => void;
 type AddRoomiMessageInput = Omit<RoomiMessage, 'id' | 'createdAt'>;
+type ChatMessageListener = (message: ChatMessage) => void;
+type AddChatMessageInput = Pick<ChatMessage, 'roomId' | 'participantId' | 'text'>;
 type GameUpdatedListener = (snapshot: RoomSnapshot, game: GameSession) => void;
 type MissionAssignedListener = (roomId: string, mission: HiddenMission) => void;
 
@@ -66,6 +69,8 @@ export class RoomService {
   private readonly dailyRooms = new Map<string, { name: string; roomUrl: string }>();
   private readonly roomUpdatedListeners = new Set<RoomUpdatedListener>();
   private readonly roomiMessageListeners = new Set<RoomiMessageListener>();
+  private readonly chatMessageListeners = new Set<ChatMessageListener>();
+  private readonly chatMessages = new Map<string, ChatMessage[]>();
   private readonly gameUpdatedListeners = new Set<GameUpdatedListener>();
   private readonly missionAssignedListeners = new Set<MissionAssignedListener>();
   // Keyed by roomId, then participantId. Every ParticipantStatus transition funnels through
@@ -837,6 +842,7 @@ export class RoomService {
 
     if (snapshot.participants.length === 0) {
       this.deleteDailyRoom(snapshot.room.id);
+      this.chatMessages.delete(snapshot.room.id);
     }
 
     if (leavingParticipant?.role === 'host' && snapshot.participants.length > 0) {
@@ -914,11 +920,58 @@ export class RoomService {
     return message;
   }
 
+  addChatMessage(input: AddChatMessageInput): ChatMessage {
+    const snapshot = this.store.findByRoomId(input.roomId);
+
+    if (!snapshot) {
+      throw new Error('Room not found');
+    }
+
+    const participant = snapshot.participants.find(
+      (candidate) => candidate.id === input.participantId
+    );
+
+    if (!participant) {
+      throw new Error('Participant not found');
+    }
+
+    const text = input.text.trim().slice(0, 300);
+
+    if (!text) {
+      throw new Error('Chat message is empty');
+    }
+
+    const message: ChatMessage = {
+      id: crypto.randomUUID(),
+      roomId: input.roomId,
+      participantId: input.participantId,
+      nickname: participant.nickname,
+      text,
+      createdAt: new Date().toISOString()
+    };
+    const recentMessages = [...(this.chatMessages.get(input.roomId) ?? []), message].slice(-30);
+    this.chatMessages.set(input.roomId, recentMessages);
+    this.chatMessageListeners.forEach((listener) => listener(message));
+    return message;
+  }
+
+  recentChatMessages(roomId: string, limit = 10): ChatMessage[] {
+    return (this.chatMessages.get(roomId) ?? []).slice(-limit);
+  }
+
   onRoomiMessage(listener: RoomiMessageListener): () => void {
     this.roomiMessageListeners.add(listener);
 
     return () => {
       this.roomiMessageListeners.delete(listener);
+    };
+  }
+
+  onChatMessage(listener: ChatMessageListener): () => void {
+    this.chatMessageListeners.add(listener);
+
+    return () => {
+      this.chatMessageListeners.delete(listener);
     };
   }
 

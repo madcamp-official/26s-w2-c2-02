@@ -500,6 +500,78 @@
   word-break: keep-all;
 }
 
+.study-chat {
+  display: grid;
+  gap: 12px;
+}
+
+.study-chat .study-card__title {
+  margin-bottom: 0;
+}
+
+.study-chat__messages {
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.study-chat__message {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+}
+
+.study-chat__message--me {
+  background: var(--purple-050);
+  border-color: rgba(138, 125, 240, 0.2);
+}
+
+.study-chat__message span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.study-chat__message p {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.study-chat__form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  gap: 8px;
+}
+
+.study-chat__form input {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.btn--icon {
+  width: 38px;
+  min-height: 38px;
+  padding: 0;
+  justify-content: center;
+}
+
 .study-focus {
   display: grid;
   gap: 10px;

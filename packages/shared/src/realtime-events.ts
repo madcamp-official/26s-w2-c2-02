@@ -1,5 +1,7 @@
 import type {
   RoomiMessage,
+  ChatMessage,
+  ChatSendInput,
   RoomSnapshot,
   RoomSubscriptionInput,
   GoalSubmitInput,
@@ -29,7 +31,8 @@ export const realtimeEvents = {
     placeBluffBet: 'bluff:bet',
     advanceRelay: 'relay:advance',
     revealGame: 'game:reveal',
-    nextRoundReady: 'game:next-round-ready'
+    nextRoundReady: 'game:next-round-ready',
+    sendChatMessage: 'chat:send'
   },
   server: {
     roomSnapshot: 'room:snapshot',
@@ -39,6 +42,7 @@ export const realtimeEvents = {
     missionAssign: 'mission:assign',
     missionResult: 'mission:result',
     gameReveal: 'game:reveal',
+    chatMessage: 'chat:message',
     error: 'error'
   }
 } as const;
@@ -60,6 +64,7 @@ export type ClientToServerEvents = {
   [realtimeEvents.client.advanceRelay]: (input: RelayAdvanceInput) => void;
   [realtimeEvents.client.revealGame]: (input: GameRevealInput) => void;
   [realtimeEvents.client.nextRoundReady]: (input: GameNextRoundReadyInput) => void;
+  [realtimeEvents.client.sendChatMessage]: (input: ChatSendInput) => void;
 };
 
 export type ServerToClientEvents = {
@@ -70,5 +75,6 @@ export type ServerToClientEvents = {
   [realtimeEvents.server.missionAssign]: (mission: HiddenMission) => void;
   [realtimeEvents.server.missionResult]: (result: MissionResult) => void;
   [realtimeEvents.server.gameReveal]: (game: GameSession) => void;
+  [realtimeEvents.server.chatMessage]: (message: ChatMessage) => void;
   [realtimeEvents.server.error]: (message: string) => void;
 };

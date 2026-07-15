@@ -2,6 +2,7 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import {
   realtimeEvents,
+  type ChatMessage,
   type GameSession,
   type HiddenMission,
   type MissionResult,
@@ -293,6 +294,24 @@ describe('realtime gateway', () => {
     expect(privateHostMission.playerId).toBe(host.id);
     expect(privateMemberMission.playerId).toBe(member.id);
 
+    const nearSuccessResult: MissionResult = {
+      playerId: host.id,
+      missionId: privateHostMission.id,
+      count: privateHostMission.target - 1,
+      success: false
+    };
+    const nearSuccessBroadcast = new Promise<MissionResult>((resolve) =>
+      memberClient.once(realtimeEvents.server.missionResult, resolve)
+    );
+    hostClient.emit(realtimeEvents.client.reportExpression, {
+      roomId: created.room.id,
+      participantId: host.id,
+      gameId: game.id,
+      roundId: game.round.id,
+      missionResult: nearSuccessResult
+    });
+    await expect(nearSuccessBroadcast).resolves.toEqual(nearSuccessResult);
+
     const missionResult: MissionResult = {
       playerId: host.id,
       missionId: privateHostMission.id,
@@ -326,9 +345,40 @@ describe('realtime gateway', () => {
     await expect(roomiMessages).resolves.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ kind: 'game_intro' }),
-        expect.objectContaining({ kind: 'round_prompt' }),
+        expect.objectContaining({
+          kind: 'round_prompt',
+          text: '누군가 거의 미션을 끝낸 것 같은데...?'
+        }),
         expect.objectContaining({ kind: 'game_reveal' })
       ])
+    );
+  });
+
+  it('broadcasts room chat and lets Roomi react with bounded chat context', async () => {
+    const created = roomService.createRoom({ nickname: 'host' });
+    const host = created.participants[0]!;
+    const hostClient = await connectClient();
+    await subscribe(hostClient, created.room.id, host.id);
+    const game = roomService.startGame(created.room.id, host.id, 'hidden_mission');
+
+    const chatBroadcast = new Promise<ChatMessage>((resolve) =>
+      hostClient.once(realtimeEvents.server.chatMessage, resolve)
+    );
+    const roomiMessage = new Promise<RoomiMessage>((resolve) =>
+      hostClient.once(realtimeEvents.server.roomiMessage, resolve)
+    );
+
+    hostClient.emit(realtimeEvents.client.sendChatMessage, {
+      roomId: created.room.id,
+      participantId: host.id,
+      text: '요즘 제일 애매하게 웃겼던 일 있어?'
+    });
+
+    const chat = await chatBroadcast;
+    expect(chat.nickname).toBe('host');
+    expect(chat.text).toBe('요즘 제일 애매하게 웃겼던 일 있어?');
+    await expect(roomiMessage).resolves.toEqual(
+      expect.objectContaining({ roomId: game.roomId, kind: 'round_prompt' })
     );
   });
 });

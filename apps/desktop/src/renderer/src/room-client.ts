@@ -1,6 +1,8 @@
 import { io, type Socket } from 'socket.io-client';
 import type {
   ClientToServerEvents,
+  ChatMessage,
+  ChatSendInput,
   CreateRoomInput,
   GoalRefineInput,
   GoalRefinement,
@@ -179,6 +181,13 @@ export function markNextRoundReady(
   socket?.emit(realtimeEvents.client.nextRoundReady, input);
 }
 
+export function sendChatMessage(
+  socket: Socket<ServerToClientEvents, ClientToServerEvents> | null,
+  input: ChatSendInput
+) {
+  socket?.emit(realtimeEvents.client.sendChatMessage, input);
+}
+
 export function createRoomSocket() {
   return io(apiBaseUrl, {
     autoConnect: false,
@@ -195,6 +204,7 @@ export function subscribeToRoom(
   onMissionAssign: (mission: HiddenMission) => void,
   onMissionResult: (result: MissionResult) => void,
   onGameReveal: (game: GameSession) => void,
+  onChatMessage: (message: ChatMessage) => void,
   onError: (message: string) => void
 ) {
   socket.connect();
@@ -210,6 +220,7 @@ export function subscribeToRoom(
   socket.on(realtimeEvents.server.missionAssign, onMissionAssign);
   socket.on(realtimeEvents.server.missionResult, onMissionResult);
   socket.on(realtimeEvents.server.gameReveal, onGameReveal);
+  socket.on(realtimeEvents.server.chatMessage, onChatMessage);
   socket.on(realtimeEvents.server.error, onError);
 
   return () => {
@@ -220,6 +231,7 @@ export function subscribeToRoom(
     socket.off(realtimeEvents.server.missionAssign, onMissionAssign);
     socket.off(realtimeEvents.server.missionResult, onMissionResult);
     socket.off(realtimeEvents.server.gameReveal, onGameReveal);
+    socket.off(realtimeEvents.server.chatMessage, onChatMessage);
     socket.off(realtimeEvents.server.error, onError);
     socket.disconnect();
   };

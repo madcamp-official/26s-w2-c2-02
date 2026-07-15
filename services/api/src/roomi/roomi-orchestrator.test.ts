@@ -328,6 +328,19 @@ describe('RoomiOrchestrator face party games', () => {
     expect([intro, reveal, summary].join(' ')).not.toMatch(/감정을 탐지|거짓말을 탐지/);
   });
 
+  it('starts hidden mission rounds with a conversation topic', async () => {
+    const orchestrator = new RoomiOrchestrator();
+
+    const intro = await orchestrator.generateGameIntroMessage({
+      game: 'hidden_mission',
+      roundNumber: 1,
+      playerCount: 3
+    });
+
+    expect(intro).toContain('대화 주제');
+    expect(intro).toContain('비밀 미션');
+  });
+
   it('generates live game reaction fallbacks for player actions', async () => {
     const orchestrator = new RoomiOrchestrator();
 
@@ -380,5 +393,31 @@ describe('RoomiOrchestrator face party games', () => {
     expect(prompts[0]).toContain('작은 미소가 스친 순간');
     expect(prompts[0]).toContain('반드시 보이는 신호에 들어온 행동만');
     expect(prompts[0]).not.toContain('눈썹을 치켜뜬 것 같은데');
+  });
+
+  it('builds chat reaction prompts from recent chat only', async () => {
+    const prompts: string[] = [];
+    const orchestrator = new RoomiOrchestrator({
+      generateText: async (prompt) => {
+        prompts.push(prompt);
+        return '그 얘기 재밌다. 주제는 이어가고 미션은 계속 숨겨보자.';
+      }
+    });
+
+    const reaction = await orchestrator.generateChatReactionMessage({
+      game: 'hidden_mission',
+      latestNickname: '채훈',
+      latestText: '오늘 제일 애매했던 일부터 말해볼까?',
+      recentMessages: [
+        { nickname: '민지', text: '나는 편의점에서 계산 실수한 거.' },
+        { nickname: '채훈', text: '오늘 제일 애매했던 일부터 말해볼까?' }
+      ],
+      tone: 'playful'
+    });
+
+    expect(reaction).toContain('주제');
+    expect(prompts[0]).toContain('최근 채팅');
+    expect(prompts[0]).toContain('채훈: 오늘 제일 애매했던 일부터 말해볼까?');
+    expect(prompts[0]).toContain('전체 대화 로그를 요약하지 말고');
   });
 });

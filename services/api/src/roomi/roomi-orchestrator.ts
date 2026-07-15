@@ -100,6 +100,15 @@ export type FacePartyGameReactionInput = FacePartyGameMessageInput & {
   points?: number;
 };
 
+export type FacePartyChatReactionInput = {
+  game: FacePartyGameKind;
+  latestNickname: string;
+  latestText: string;
+  recentMessages: Array<{ nickname: string; text: string }>;
+  playStyles?: string[];
+  tone?: FacePartyGameTone;
+};
+
 export class RoomiOrchestrator {
   constructor(private readonly generator?: TextGenerator) {}
 
@@ -278,6 +287,14 @@ export class RoomiOrchestrator {
     );
   }
 
+  async generateChatReactionMessage(input: FacePartyChatReactionInput): Promise<string> {
+    return this.generateFacePartyText(
+      'game_reaction',
+      this.buildFacePartyChatReactionPrompt(input),
+      this.templateChatReactionMessage(input)
+    );
+  }
+
   async generateGameRevealMessage(input: FacePartyGameMessageInput): Promise<string> {
     return this.generateFacePartyText(
       'game_reveal',
@@ -375,6 +392,10 @@ export class RoomiOrchestrator {
     const name = this.faceGameName(input.game);
     const round = input.roundNumber ? ` ${input.roundNumber}라운드.` : '';
     const styles = this.formatPlayStyles(input.playStyles);
+    if (input.game === 'hidden_mission') {
+      const topic = this.hiddenMissionConversationTopic(input.roundNumber);
+      return `${name}${round} 대화 주제는 "${topic}"이야. 이 얘기를 자연스럽게 이어가면서 각자 비밀 미션은 티 안 나게 섞어보자.${styles}`;
+    }
     return `${name}${round} 가볍게 시작해보자. 타이밍, 제스처, 시선 방향, 표정 움직임처럼 눈에 보이는 단서만 사용할게.${styles}`;
   }
 
@@ -417,6 +438,13 @@ export class RoomiOrchestrator {
   private templateHiddenMissionSignalNudge(signals?: string[]): string {
     const clue = signals?.[0] ?? '보이는 표정 신호';
     return `방금 누군가 ${clue} 살짝 보인 것 같은데...? 못 본 척 자연스럽게 이어가자.`;
+  }
+
+  private templateChatReactionMessage(input: FacePartyChatReactionInput): string {
+    if (input.game === 'hidden_mission') {
+      return `${input.latestNickname} 말 좋다. 그 주제로 조금만 더 이어가면서, 미션은 계속 자연스럽게 숨겨보자.`;
+    }
+    return `${input.latestNickname} 말에 맞춰서 흐름을 이어가보자. 보이는 리액션도 같이 살펴볼게.`;
   }
 
   private templateGameSummaryMessage(input: FacePartyGameMessageInput): string {
@@ -480,8 +508,11 @@ export class RoomiOrchestrator {
       `참가자 플레이 스타일: ${(input.playStyles ?? []).join(', ') || '제공 없음'}`,
       `톤: ${input.tone ?? '친근함'}`,
       '규칙: 반드시 한국어로만 출력. 보이는 신호와 참가자가 직접 정한 플레이 스타일만 언급하고 감정, 거짓말, 의도, 호감, 건강, 정체성 특성을 탐지했다고 말하지 마.',
+      stage === 'intro' && input.game === 'hidden_mission'
+        ? '숨은 표정 미션 intro에서는 대화 주제 하나를 반드시 제시하고, 참가자들이 그 주제로 대화하면서 비밀 미션을 자연스럽게 섞도록 안내해.'
+        : '',
       '짧은 한두 문장만 출력해.'
-    ].join('\n');
+    ].filter(Boolean).join('\n');
   }
 
   private buildFacePartyReactionPrompt(input: FacePartyGameReactionInput): string {
@@ -503,6 +534,37 @@ export class RoomiOrchestrator {
         : '',
       '짧은 한 문장만 출력해.'
     ].filter(Boolean).join('\n');
+  }
+
+  private buildFacePartyChatReactionPrompt(input: FacePartyChatReactionInput): string {
+    return [
+      '표정 파티 게임 진행자 루미가 채팅 흐름에 짧게 반응해줘.',
+      `게임: ${this.faceGameName(input.game)}`,
+      `최근 채팅:\n${input.recentMessages
+        .map((message) => `${message.nickname}: ${message.text}`)
+        .join('\n')}`,
+      `새 채팅 작성자: ${input.latestNickname}`,
+      `새 채팅: ${input.latestText}`,
+      `참가자 플레이 스타일: ${(input.playStyles ?? []).join(', ') || '제공 없음'}`,
+      `톤: ${input.tone ?? '장난스럽고 가벼움'}`,
+      '규칙: 반드시 한국어로만 출력. 전체 대화 로그를 요약하지 말고 최근 채팅 흐름에만 반응해. 참가자 이름과 직접 쓴 말만 사용하고 감정, 거짓말, 의도, 호감, 건강, 정체성 특성을 추론하지 마.',
+      input.game === 'hidden_mission'
+        ? '숨은 표정 미션에서는 대화가 끊기지 않게 주제를 살짝 이어주고, 미션을 직접 공개하거나 카운트를 언급하지 마.'
+        : '',
+      '짧은 한 문장만 출력해.'
+    ].filter(Boolean).join('\n');
+  }
+
+  private hiddenMissionConversationTopic(roundNumber?: number): string {
+    const topics = [
+      '요즘 애매하게 웃겼던 일',
+      '친구가 보면 바로 놀릴 만한 작은 습관',
+      '최근에 괜히 기억에 남은 장면',
+      '처음엔 별거 아닌데 말하다 보니 길어지는 이야기',
+      '하루만 바꿔보고 싶은 사소한 규칙'
+    ];
+    const index = roundNumber ? (roundNumber - 1) % topics.length : 0;
+    return topics[Math.max(0, index)]!;
   }
 
   private parsePokerBluffOutput(rawOutput: string): PokerBluffPrompt | null {

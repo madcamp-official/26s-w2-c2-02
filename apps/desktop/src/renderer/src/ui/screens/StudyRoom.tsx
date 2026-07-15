@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import {
   Coffee,
   Eye,
@@ -9,10 +9,12 @@ import {
   MicOff,
   MoreHorizontal,
   Play,
+  Send,
   Video,
   VideoOff
 } from 'lucide-react';
 import {
+  type ChatMessage,
   type ExpressionSignals,
   type GameKind,
   type GameSession,
@@ -76,9 +78,11 @@ interface StudyRoomProps extends ScreenProps {
   onSubmitBluffSignals?: (signals: ExpressionSignals) => void;
   onAdvanceRelay?: (toId: string, similarity: number) => void;
   onReadyNextRound?: () => void;
+  onSendChatMessage?: (text: string) => void;
   participants: Participant[];
   goals: Goal[];
   roomiMessages: RoomiMessage[];
+  chatMessages: ChatMessage[];
   room: Room;
   currentSession?: StudySession;
   currentGame?: GameSession;
@@ -273,9 +277,11 @@ export function StudyRoom({
   onSubmitBluffSignals,
   onAdvanceRelay,
   onReadyNextRound,
+  onSendChatMessage,
   participants,
   goals,
   roomiMessages,
+  chatMessages,
   room,
   currentSession,
   currentGame,
@@ -290,6 +296,7 @@ export function StudyRoom({
   const [bluffTargetId, setBluffTargetId] = useState('');
   const [relayTargetId, setRelayTargetId] = useState('');
   const [relaySimilarity, setRelaySimilarity] = useState(0.75);
+  const [chatDraft, setChatDraft] = useState('');
   const [resultsOpen, setResultsOpen] = useState(false);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [missionState, setMissionState] = useState<MissionCounterState>({
@@ -484,6 +491,7 @@ export function StudyRoom({
       : `${currentGame.round.index}/${currentGame.totalRounds ?? 1}라운드`
     : `${room.settings.roundCount ?? 1}라운드 예정`;
   const tileCols = Math.min(2, Math.max(1, Math.ceil(Math.sqrt(displayParticipants.length))));
+  const visibleChatMessages = chatMessages.slice(-8);
 
   const toggleAudio = () => {
     callObject?.setLocalAudio(!audioOn);
@@ -512,6 +520,14 @@ export function StudyRoom({
     }
 
     setDistractionWrong(true);
+  };
+
+  const submitChat = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const text = chatDraft.trim();
+    if (!text) return;
+    onSendChatMessage?.(text);
+    setChatDraft('');
   };
 
   return (
@@ -651,6 +667,43 @@ export function StudyRoom({
                       : gameWaitingMessage(configuredGameKind))}
               </p>
             </div>
+          </section>
+
+          <section className="study-card study-chat" aria-label="채팅">
+            <h2 className="study-card__title">채팅</h2>
+            <div className="study-chat__messages">
+              {visibleChatMessages.map((message) => (
+                <div
+                  className={`study-chat__message${
+                    message.participantId === currentParticipantId ? ' study-chat__message--me' : ''
+                  }`}
+                  key={message.id}
+                >
+                  <span>{message.nickname}</span>
+                  <p>{message.text}</p>
+                </div>
+              ))}
+              {visibleChatMessages.length === 0 && (
+                <p className="study-focus__meta">아직 채팅이 없어요.</p>
+              )}
+            </div>
+            <form className="study-chat__form" onSubmit={submitChat}>
+              <input
+                aria-label="채팅 입력"
+                value={chatDraft}
+                maxLength={300}
+                onChange={(event) => setChatDraft(event.currentTarget.value)}
+                placeholder="대화 이어가기"
+              />
+              <button
+                type="submit"
+                className="btn btn--primary btn--icon"
+                aria-label="채팅 보내기"
+                disabled={!chatDraft.trim()}
+              >
+                <Send size={16} />
+              </button>
+            </form>
           </section>
 
           {isStudyMode ? (

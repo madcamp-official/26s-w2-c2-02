@@ -4,12 +4,12 @@ import {
   normalizeInviteCode,
   type BluffBet,
   type BluffTell,
+  type ChatMessage,
   type ExpressionSignals,
   type GameKind,
   type GameSession,
   type Goal,
   type HiddenMission,
-  type HiddenMissionVerify,
   type MissionResult,
   type Participant,
   type ParticipantStatus,
@@ -49,6 +49,7 @@ import {
   reportExpression,
   revealGame,
   RoomApiError,
+  sendChatMessage,
   setGoalAchieved,
   startBreak,
   startGame,
@@ -66,6 +67,7 @@ type RoomDraft = {
   participants: Participant[];
   goals: Goal[];
   roomiMessages: RoomiMessage[];
+  chatMessages: ChatMessage[];
   currentSession?: StudySession;
   currentGame?: GameSession;
   privateMission?: HiddenMission;
@@ -144,7 +146,8 @@ function createRoomDraft(nickname: string, settings: RoomSettings): RoomDraft {
       })
     ],
     goals: [],
-    roomiMessages: []
+    roomiMessages: [],
+    chatMessages: []
   };
 }
 
@@ -180,7 +183,8 @@ function joinRoomDraft(nickname: string, inviteCode: string): RoomDraft {
       })
     ],
     goals: [],
-    roomiMessages: []
+    roomiMessages: [],
+    chatMessages: []
   };
 }
 
@@ -192,6 +196,7 @@ function roomSessionToDraft(session: RoomSession): RoomDraft {
     participants: session.snapshot.participants,
     goals: session.snapshot.goals,
     roomiMessages: session.snapshot.roomiMessages,
+    chatMessages: [],
     currentSession: session.snapshot.currentSession,
     currentGame: session.snapshot.currentGame,
     privateMission: session.snapshot.currentGame?.missions?.find(
@@ -360,6 +365,13 @@ export function App() {
                 currentGame: game,
                 privateMission: resolvePrivateMission(current, game)
               }
+            : current
+        );
+      },
+      (message) => {
+        setRoomDraft((current) =>
+          current && current.room.id === message.roomId
+            ? { ...current, chatMessages: [...current.chatMessages, message].slice(-30) }
             : current
         );
       },
@@ -551,9 +563,7 @@ export function App() {
       return appendLocalRoomiMessage(
         next,
         'game_intro',
-        `${gameLabel(kind)} 시작! 눈에 보이는 표정과 움직임만 보고 가볍게 반응해보자.${
-          playStyles.length > 0 ? ` 오늘의 플레이 스타일도 살려볼게: ${playStyles.join(', ')}.` : ''
-        }`
+        localGameIntroMessage(kind, game.round.index, playStyles)
       );
     });
   };
@@ -824,10 +834,51 @@ export function App() {
           ]
         }
       };
+      if (mission && !result.success && mission.target - result.count === 1) {
+        return appendLocalRoomiMessage(
+          next,
+          'round_prompt',
+          '누군가 거의 미션을 끝낸 것 같은데...?'
+        );
+      }
+      return next;
+    });
+  };
+
+  const submitCurrentChatMessage = (text: string) => {
+    if (!roomDraft) return;
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    if (roomDraft.realtime === 'server') {
+      sendChatMessage(socketRef.current, {
+        roomId: roomDraft.room.id,
+        participantId: roomDraft.currentParticipantId,
+        text: trimmed
+      });
+      return;
+    }
+
+    setRoomDraft((current) => {
+      if (!current) return current;
+      const participant = current.participants.find(
+        (item) => item.id === current.currentParticipantId
+      );
+      const chatMessage = createLocalChatMessage(
+        current.room.id,
+        current.currentParticipantId,
+        (participant?.nickname ?? nickname) || '참가자',
+        trimmed
+      );
+      const next = {
+        ...current,
+        chatMessages: [...current.chatMessages, chatMessage].slice(-30)
+      };
+      if (!current.currentGame) return next;
       return appendLocalRoomiMessage(
         next,
         'round_prompt',
-        hiddenMissionSignalNudge(mission?.verify)
+        `${chatMessage.nickname} 말 좋다. 그 흐름으로 조금만 더 이어가보자.`
       );
     });
   };
@@ -1172,6 +1223,7 @@ export function App() {
             participants={activeRoom.participants}
             goals={activeRoom.goals}
             roomiMessages={activeRoom.roomiMessages}
+            chatMessages={activeRoom.chatMessages}
             room={activeRoom.room}
             currentSession={activeRoom.currentSession}
             currentGame={activeRoom.currentGame}
@@ -1185,6 +1237,7 @@ export function App() {
             onSubmitBluffSignals={submitCurrentBluffSignals}
             onAdvanceRelay={advanceCurrentRelay}
             onReadyNextRound={readyForNextRound}
+            onSendChatMessage={submitCurrentChatMessage}
             go={go}
           />
         )}
@@ -1319,6 +1372,22 @@ function createLocalRoomiMessage(
   };
 }
 
+function createLocalChatMessage(
+  roomId: string,
+  participantId: string,
+  nickname: string,
+  text: string
+): ChatMessage {
+  return {
+    id: `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    roomId,
+    participantId,
+    nickname,
+    text,
+    createdAt: now()
+  };
+}
+
 function appendLocalRoomiMessage(
   draft: RoomDraft,
   kind: RoomiMessage['kind'],
@@ -1344,26 +1413,31 @@ function bluffTellLabel(tell: BluffTell): string {
   return '보이는 신호';
 }
 
-function hiddenMissionSignalNudge(verify: HiddenMissionVerify | undefined): string {
-  const clue =
-    verify === 'wink_count'
-      ? '윙크처럼 보이는 깜빡임'
-      : verify === 'smile_count'
-        ? '작은 미소가 스친 순간'
-        : verify === 'jaw_open_count'
-          ? '입이 살짝 열린 순간'
-          : verify === 'brow_count'
-            ? '눈썹을 치켜뜬 움직임'
-            : verify === 'nod_count'
-              ? '고개를 작게 끄덕인 움직임'
-              : '보이는 표정 신호';
-  return `방금 누군가 ${clue} 살짝 보인 것 같은데...? 못 본 척 자연스럽게 이어가자.`;
-}
-
 function gameLabel(kind: GameKind) {
   if (kind === 'hidden_mission') return '숨은 표정 미션';
   if (kind === 'poker_bluff') return '포커페이스 블러프';
   return '카피캣 릴레이';
+}
+
+function localGameIntroMessage(kind: GameKind, roundNumber: number, playStyles: string[]) {
+  const styles =
+    playStyles.length > 0 ? ` 오늘의 플레이 스타일도 살려볼게: ${playStyles.join(', ')}.` : '';
+  if (kind === 'hidden_mission') {
+    const topic = hiddenMissionConversationTopic(roundNumber);
+    return `숨은 표정 미션 ${roundNumber}라운드. 대화 주제는 "${topic}"이야. 이 얘기를 자연스럽게 이어가면서 각자 비밀 미션은 티 안 나게 섞어보자.${styles}`;
+  }
+  return `${gameLabel(kind)} 시작! 눈에 보이는 표정과 움직임만 보고 가볍게 반응해보자.${styles}`;
+}
+
+function hiddenMissionConversationTopic(roundNumber: number) {
+  const topics = [
+    '요즘 애매하게 웃겼던 일',
+    '친구가 보면 바로 놀릴 만한 작은 습관',
+    '최근에 괜히 기억에 남은 장면',
+    '처음엔 별거 아닌데 말하다 보니 길어지는 이야기',
+    '하루만 바꿔보고 싶은 사소한 규칙'
+  ];
+  return topics[(Math.max(1, roundNumber) - 1) % topics.length]!;
 }
 
 function localPlayStyleFallback(kind: GameKind, rawStyle: string) {

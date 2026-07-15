@@ -2,7 +2,6 @@ import type { Server as HttpServer } from 'node:http';
 import {
   realtimeEvents,
   type GameSession,
-  type HiddenMissionVerify,
   type MissionResult,
   type ParticipantStatus,
   type RoomSnapshot,
@@ -66,6 +65,10 @@ export function registerRealtimeGateway(
     }
 
     io.to(message.roomId).emit(realtimeEvents.server.roomiMessage, message);
+  });
+
+  roomService.onChatMessage((message) => {
+    io.to(message.roomId).emit(realtimeEvents.server.chatMessage, message);
   });
 
   roomService.onGameUpdated((snapshot, game) => {
@@ -279,6 +282,15 @@ export function registerRealtimeGateway(
       }
     });
 
+    socket.on(realtimeEvents.client.sendChatMessage, (input) => {
+      try {
+        const message = roomService.addChatMessage(input);
+        void sendChatReaction(input.roomId, message.id).catch(logGameMessageFailure);
+      } catch (error) {
+        socket.emit(realtimeEvents.server.error, errorMessage(error));
+      }
+    });
+
     socket.on(realtimeEvents.client.leaveRoom, (input) => {
       try {
         roomService.leaveRoom(input.roomId, input.participantId);
@@ -369,6 +381,7 @@ export function registerRealtimeGateway(
     const snapshot = roomService.getByRoomId(roomId);
     const text = await roomiOrchestrator.generateGameIntroMessage({
       game: toFacePartyGameKind(game.kind),
+      roundNumber: game.round.index,
       playerCount: snapshot?.participants.length,
       playStyles: playStyles(snapshot),
       tone: 'playful'
@@ -381,10 +394,32 @@ export function registerRealtimeGateway(
     const mission = snapshot?.currentGame?.missions?.find(
       (item) => item.id === result.missionId && item.playerId === result.playerId
     );
-    const text = await roomiOrchestrator.generateGameReactionMessage({
-      game: 'hidden_mission',
-      event: result.success ? 'mission_success' : result.count > 0 ? 'mission_progress' : 'mission_fail',
-      visibleSignals: [hiddenMissionSignalHint(mission?.verify)],
+    if (!mission || result.success || mission.target - result.count !== 1) return;
+    roomService.addRoomiMessage({
+      roomId,
+      kind: 'round_prompt',
+      text: '누군가 거의 미션을 끝낸 것 같은데...?'
+    });
+  }
+
+  async function sendChatReaction(roomId: string, messageId: string) {
+    const snapshot = roomService.getByRoomId(roomId);
+    const currentGame = snapshot?.currentGame;
+    if (!snapshot || !currentGame) return;
+
+    const recentMessages = roomService.recentChatMessages(roomId, 8);
+    const latest = recentMessages.find((message) => message.id === messageId);
+    if (!latest) return;
+
+    const text = await roomiOrchestrator.generateChatReactionMessage({
+      game: toFacePartyGameKind(currentGame.kind),
+      latestNickname: latest.nickname,
+      latestText: latest.text,
+      recentMessages: recentMessages.map((message) => ({
+        nickname: message.nickname,
+        text: message.text
+      })),
+      playStyles: playStyles(snapshot),
       tone: 'playful'
     });
     roomService.addRoomiMessage({ roomId, kind: 'round_prompt', text });
@@ -499,15 +534,6 @@ function visibleTellLabel(tell: NonNullable<GameSession['bluffResult']>['tell'])
   if (tell === 'smile') return '미소';
   if (tell === 'jaw') return '입 벌림';
   if (tell === 'brow') return '눈썹 움직임';
-  return '보이는 표정 신호';
-}
-
-function hiddenMissionSignalHint(verify: HiddenMissionVerify | undefined): string {
-  if (verify === 'wink_count') return '윙크처럼 보이는 깜빡임';
-  if (verify === 'smile_count') return '작은 미소가 스친 순간';
-  if (verify === 'jaw_open_count') return '입이 살짝 열린 순간';
-  if (verify === 'brow_count') return '눈썹을 치켜뜬 움직임';
-  if (verify === 'nod_count') return '고개를 작게 끄덕인 움직임';
   return '보이는 표정 신호';
 }
 

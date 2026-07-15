@@ -90,6 +90,15 @@ export type RoomiMessage = {
   createdAt: ISODateString;
 };
 
+export type ChatMessage = {
+  id: string;
+  roomId: string;
+  participantId: string;
+  nickname: string;
+  text: string;
+  createdAt: ISODateString;
+};
+
 export type ExpressionSignals = {
   timestamp: number;
   smile: number;
@@ -345,4 +354,10 @@ export type GameNextRoundReadyInput = {
   roomId: string;
   participantId: string;
   gameId: string;
+};
+
+export type ChatSendInput = {
+  roomId: string;
+  participantId: string;
+  text: string;
 };

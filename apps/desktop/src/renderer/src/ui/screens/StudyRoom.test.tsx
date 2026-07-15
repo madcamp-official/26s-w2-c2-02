@@ -370,6 +370,7 @@ describe('StudyRoom hidden mission progress', () => {
       participants: [participant],
       goals: [],
       roomiMessages: [],
+      chatMessages: [],
       room,
       currentGame,
       privateMission,
@@ -514,6 +515,7 @@ describe('StudyRoom hidden mission progress', () => {
       participants: [participant],
       goals: [],
       roomiMessages: [],
+      chatMessages: [],
       room,
       currentGame,
       privateMission,
@@ -684,6 +686,7 @@ function baseStudyRoomProps(participant: Participant) {
     participants: [participant],
     goals: [],
     roomiMessages: [],
+    chatMessages: [],
     room: createRoom(),
     go: vi.fn()
   };
