@@ -163,7 +163,7 @@ export function classifyFocus(windowFrames: FrameSignals[], settings: RuleSettin
   const activeSignals: FocusSignalName[] = [];
   let penalty = 0;
 
-  if (durations.face_missing >= settings.faceMissingSeconds) {
+  if (!latest.facePresent && durations.face_missing >= settings.faceMissingSeconds) {
     activeSignals.push('face_missing');
     penalty += settings.faceMissingPenalty;
   }

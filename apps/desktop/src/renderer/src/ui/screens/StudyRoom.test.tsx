@@ -11,6 +11,7 @@ import {
   DailyParticipantMedia,
   focusLabelToParticipantStatus,
   formatSessionTime,
+  participantStatusLabel,
   participantsInStudyRoom,
   reconcilePendingCameraState,
   setDailyCameraEnabled,
@@ -23,7 +24,21 @@ const focusDetectionMock = vi.hoisted(() => ({
   snapshot: {
     status: 'running',
     error: null,
-    focusSnapshot: { label: 'focused' },
+    focusSnapshot: {
+      label: 'focused',
+      score: 100,
+      activeSignals: [],
+      durations: { face_missing: 0, eyes_closed: 0, head_turned: 0, head_down: 0 },
+      current: {
+        facePresent: true,
+        eyeAspectRatio: 0.3,
+        headYawRatio: 0,
+        headPitchRatio: 0,
+        eyesClosed: false,
+        headTurned: false,
+        headDown: false
+      }
+    },
     detectionSnapshot: { faces: 1, landmarks: 468, fps: 30, lastUpdatedAt: '10:00:00' },
     mlPrediction: null,
     mlStatus: 'idle',
@@ -39,6 +54,21 @@ vi.mock('../../use-focus-detection', () => ({
 beforeEach(() => {
   vi.restoreAllMocks();
   focusDetectionMock.snapshot.expressionSignals = null;
+  focusDetectionMock.snapshot.focusSnapshot = {
+    label: 'focused',
+    score: 100,
+    activeSignals: [],
+    durations: { face_missing: 0, eyes_closed: 0, head_turned: 0, head_down: 0 },
+    current: {
+      facePresent: true,
+      eyeAspectRatio: 0.3,
+      headYawRatio: 0,
+      headPitchRatio: 0,
+      eyesClosed: false,
+      headTurned: false,
+      headDown: false
+    }
+  };
 });
 
 describe('StudyRoom session clock', () => {
@@ -98,6 +128,48 @@ describe('StudyRoom focus detection status mapping', () => {
     expect(focusLabelToParticipantStatus('away')).toBe('away');
     expect(focusLabelToParticipantStatus('sleepy')).toBe('paused');
     expect(focusLabelToParticipantStatus('paused')).toBe('paused');
+  });
+
+  it('shows detailed MediaPipe-derived labels for the local participant', () => {
+    const participant = createParticipant('participant-host', 'Host');
+    const current = {
+      facePresent: true,
+      eyeAspectRatio: 0.3,
+      headYawRatio: 0,
+      headPitchRatio: 0,
+      eyesClosed: false,
+      headTurned: false,
+      headDown: false
+    };
+
+    expect(
+      participantStatusLabel(participant, {
+        label: 'away',
+        activeSignals: ['face_missing'],
+        current: { ...current, facePresent: false }
+      })
+    ).toBe('얼굴 없음');
+    expect(
+      participantStatusLabel(participant, {
+        label: 'sleepy',
+        activeSignals: ['eyes_closed'],
+        current
+      })
+    ).toBe('눈 감김');
+    expect(
+      participantStatusLabel(participant, {
+        label: 'distracted',
+        activeSignals: ['head_down'],
+        current
+      })
+    ).toBe('고개 숙임');
+    expect(
+      participantStatusLabel(participant, {
+        label: 'uncertain',
+        activeSignals: ['head_turned'],
+        current
+      })
+    ).toBe('시선 이탈');
   });
 });
 

@@ -89,6 +89,26 @@ describe('classifyFocus', () => {
     expect(snapshot.activeSignals).toEqual([]);
     expect(snapshot.label).toBe('focused');
   });
+
+  it('can report away immediately when face missing delay is disabled', () => {
+    const snapshot = classifyFocus(
+      frameRun(0, { facePresent: false }),
+      { ...defaultRuleSettings, faceMissingSeconds: 0 }
+    );
+
+    expect(snapshot.label).toBe('away');
+    expect(snapshot.activeSignals).toContain('face_missing');
+  });
+
+  it('does not report away with zero face delay while the latest frame has a face', () => {
+    const snapshot = classifyFocus(
+      frameRun(0),
+      { ...defaultRuleSettings, faceMissingSeconds: 0 }
+    );
+
+    expect(snapshot.label).toBe('focused');
+    expect(snapshot.activeSignals).not.toContain('face_missing');
+  });
 });
 
 describe('getLatestDuration', () => {

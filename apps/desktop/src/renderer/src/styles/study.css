@@ -144,6 +144,14 @@
   background: #f0b445;
 }
 
+.tile__dot--distracted {
+  background: #ef7f4f;
+}
+
+.tile__dot--paused {
+  background: #8a7df0;
+}
+
 /* Right panel */
 .study__panel {
   width: min(340px, 32vw);

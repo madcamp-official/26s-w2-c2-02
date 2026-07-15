@@ -30,7 +30,11 @@ import { InviteCodeCard } from '../components/InviteCodeCard';
 import { RoomiMascot } from '../components/RoomiMascot';
 import type { ScreenProps } from './types';
 import { useDailyRoom } from '../../use-daily-room';
-import { type FocusLabel } from '../../focus-pipeline';
+import {
+  defaultRuleSettings,
+  type FocusLabel,
+  type FocusSnapshot
+} from '../../focus-pipeline';
 import { useFocusDetection } from '../../use-focus-detection';
 import {
   missionResultFromCounter,
@@ -74,10 +78,10 @@ interface StudyRoomProps extends ScreenProps {
 const statusLabel: Record<ParticipantStatus, string> = {
   online: '대기',
   focused: '참여 중',
-  distracted: '반응 중',
+  distracted: '주의 이탈',
   away: '자리 비움',
   break: '휴식',
-  paused: '일시정지'
+  paused: '눈 감김'
 };
 
 const dailyStatusLabel: Record<string, string> = {
@@ -87,6 +91,11 @@ const dailyStatusLabel: Record<string, string> = {
   left: '연결 종료',
   error: '오류',
   local: '로컬'
+};
+
+const studyRoomRuleSettings = {
+  ...defaultRuleSettings,
+  faceMissingSeconds: 0
 };
 
 export function participantsInStudyRoom(participants: Participant[]) {
@@ -109,6 +118,42 @@ export function focusLabelToParticipantStatus(label: FocusLabel): ParticipantSta
   if (label === 'away') return 'away';
   if (label === 'sleepy' || label === 'paused') return 'paused';
   return 'distracted';
+}
+
+export function participantStatusLabel(
+  participant: Pick<Participant, 'status'>,
+  focusSnapshot?: Partial<FocusSnapshot>
+) {
+  if (focusSnapshot) {
+    const activeSignals = new Set(focusSnapshot.activeSignals ?? []);
+    if (focusSnapshot.current?.facePresent === false || activeSignals.has('face_missing')) {
+      return '얼굴 없음';
+    }
+    if (activeSignals.has('eyes_closed') || focusSnapshot.label === 'sleepy') {
+      return '눈 감김';
+    }
+    if (activeSignals.has('head_down')) {
+      return '고개 숙임';
+    }
+    if (activeSignals.has('head_turned')) {
+      return '시선 이탈';
+    }
+    if (focusSnapshot.label === 'uncertain') {
+      return '집중 흔들림';
+    }
+    if (focusSnapshot.label === 'distracted') {
+      return '주의 이탈';
+    }
+  }
+
+  return statusLabel[participant.status];
+}
+
+function tileDotClass(status: ParticipantStatus) {
+  if (status === 'away') return 'tile__dot--away';
+  if (status === 'distracted') return 'tile__dot--distracted';
+  if (status === 'paused') return 'tile__dot--paused';
+  return '';
 }
 
 export function reconcilePendingCameraState(reported: boolean, requested: boolean) {
@@ -239,7 +284,8 @@ export function StudyRoom({
     identity: {
       userId: currentParticipantId,
       sessionId: currentGame?.id ?? currentSession?.id ?? room.id
-    }
+    },
+    settings: studyRoomRuleSettings
   });
 
   useEffect(() => {
@@ -441,10 +487,11 @@ export function StudyRoom({
                       {isMe ? ' (나)' : ''}
                     </span>
                     <span className="tile__status">
-                      <i
-                        className={`tile__dot${participant.status === 'away' ? ' tile__dot--away' : ''}`}
-                      />
-                      {statusLabel[participant.status]}
+                      <i className={`tile__dot ${tileDotClass(participant.status)}`} />
+                      {participantStatusLabel(
+                        participant,
+                        isMe ? focusDetection.focusSnapshot : undefined
+                      )}
                     </span>
                   </footer>
                 </article>
