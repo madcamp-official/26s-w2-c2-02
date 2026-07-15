@@ -65,6 +65,9 @@ type DistractionCard = {
   answer: string;
 };
 
+const distractionCardMinDelayMs = 10_000;
+const distractionCardMaxDelayMs = 60_000;
+
 type KeyedMissionCounterState = MissionCounterState & {
   missionKey: string;
 };
@@ -384,8 +387,7 @@ export function StudyRoom({
   useEffect(() => {
     const shouldShowDistraction =
       currentGame?.kind === 'hidden_mission' &&
-      currentGame.status === 'in_round' &&
-      participants.length > 1;
+      currentGame.status === 'in_round';
 
     if (!shouldShowDistraction || !currentGame) {
       setDistractionCard(null);
@@ -395,12 +397,23 @@ export function StudyRoom({
       return;
     }
 
-    const card = createDistractionCard(currentGame.round.id, currentGame.round.index);
-    setDistractionCard(card);
     setDistractionSolvedId(null);
-    setDistractionVisible(true);
+    setDistractionVisible(false);
     setDistractionWrong(false);
-  }, [currentGame?.id, currentGame?.kind, currentGame?.round.id, currentGame?.round.index, currentGame?.status, participants.length]);
+
+    const delayMs =
+      distractionCardMinDelayMs +
+      Math.floor(Math.random() * (distractionCardMaxDelayMs - distractionCardMinDelayMs + 1));
+    const timerId = window.setTimeout(() => {
+      const card = createDistractionCard(currentGame.round.id, currentGame.round.index);
+      setDistractionCard(card);
+      setDistractionSolvedId(null);
+      setDistractionVisible(true);
+      setDistractionWrong(false);
+    }, delayMs);
+
+    return () => window.clearTimeout(timerId);
+  }, [currentGame?.id, currentGame?.kind, currentGame?.round.id, currentGame?.round.index, currentGame?.status]);
 
   const distractionLocksMission = Boolean(
     distractionCard &&

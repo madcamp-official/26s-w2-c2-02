@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   ExpressionSignals,
   GameSession,
@@ -69,6 +69,10 @@ beforeEach(() => {
       headDown: false
     }
   };
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('StudyRoom session clock', () => {
@@ -410,8 +414,9 @@ describe('StudyRoom hidden mission progress', () => {
   });
 
   it('locks hidden mission progress until the distraction card is solved', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
     const host = createParticipant('participant-host', 'Host');
-    const member = { ...createParticipant('participant-member', 'Member'), role: 'member' as const };
     const room = createRoom();
     const privateMission: HiddenMission = {
       id: 'mission-1',
@@ -421,7 +426,7 @@ describe('StudyRoom hidden mission progress', () => {
       target: 1
     };
     const currentGame: GameSession = {
-      ...createGame(room, [host, member], 'hidden_mission'),
+      ...createGame(room, [host], 'hidden_mission'),
       missions: [privateMission]
     };
     const onSubmitMissionResult = vi.fn();
@@ -430,22 +435,34 @@ describe('StudyRoom hidden mission progress', () => {
       <StudyRoom
         {...baseStudyRoomProps(host)}
         currentGame={currentGame}
-        participants={[host, member]}
+        participants={[host]}
         privateMission={privateMission}
         room={room}
         onSubmitMissionResult={onSubmitMissionResult}
       />
     );
 
+    expect(screen.queryByLabelText('루미 방해 카드')).not.toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(9_999);
+    });
+    expect(screen.queryByLabelText('루미 방해 카드')).not.toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+
     expect(screen.getByLabelText('루미 방해 카드')).toBeInTheDocument();
     expect(screen.getByText('방해 카드를 풀어야 미션이 다시 진행돼요.')).toBeInTheDocument();
+    vi.useRealTimers();
 
     focusDetectionMock.snapshot.expressionSignals = expressionSignal({ timestamp: 1_000, smile: 0.8 });
     rerender(
       <StudyRoom
         {...baseStudyRoomProps(host)}
         currentGame={currentGame}
-        participants={[host, member]}
+        participants={[host]}
         privateMission={privateMission}
         room={room}
         onSubmitMissionResult={onSubmitMissionResult}
