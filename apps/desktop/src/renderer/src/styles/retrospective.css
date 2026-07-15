@@ -11,6 +11,10 @@
   width: min(880px, 100%);
 }
 
+.retro__doc--game {
+  width: min(980px, 100%);
+}
+
 /* Header row (72:52) */
 .retro__head {
   display: flex;
@@ -55,6 +59,10 @@
   grid-template-columns: repeat(2, 1fr);
   gap: 16px;
   margin-top: 18px;
+}
+
+.retro__stats--game {
+  grid-template-columns: repeat(3, 1fr);
 }
 
 .retro-stat {
@@ -128,6 +136,59 @@
   color: var(--text-muted);
 }
 
+.retro-rounds {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.retro-round {
+  padding: 14px 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  background: var(--row-bg);
+}
+
+.retro-round__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--heading);
+  font-size: 14px;
+}
+
+.retro-round__head span {
+  color: var(--purple-700);
+  font-weight: 800;
+}
+
+.retro-round__missions {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  list-style: none;
+}
+
+.retro-round__missions li {
+  display: grid;
+  grid-template-columns: minmax(88px, auto) auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.retro-round__missions b {
+  color: var(--purple-700);
+}
+
+.retro-round__missions small {
+  min-width: 0;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
 /* Focus ranking */
 .retro-ranking {
   margin-top: 10px;
@@ -177,7 +238,13 @@
 }
 
 @media (max-width: 720px) {
-  .retro__stats {
+  .retro__stats,
+  .retro__stats--game {
+    grid-template-columns: 1fr;
+  }
+
+  .retro-round__head,
+  .retro-round__missions li {
     grid-template-columns: 1fr;
   }
 

@@ -713,7 +713,7 @@ export function App() {
 
   const leaveCurrentSession = () => {
     setCurrentSessionPresence('online');
-    go('waiting');
+    go('retrospective');
   };
 
   const startCurrentBreak = async () => {
@@ -1318,6 +1318,7 @@ export function App() {
         {screen === 'retrospective' && (
           <Retrospective
             session={activeRoom.currentSession}
+            currentGame={activeRoom.currentGame}
             goals={activeRoom.goals}
             participants={activeRoom.participants}
             currentParticipantId={activeRoom.currentParticipantId}

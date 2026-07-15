@@ -307,18 +307,11 @@ describe('App screen router', () => {
       participantId: 'participant-minji',
       status: 'online'
     });
-    expect(await screen.findByRole('heading', { level: 1, name: '이미 공부 중이에요' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: '오늘 세션, 잘 마쳤어요!' })).toBeInTheDocument();
     expect(socketMock.emit).not.toHaveBeenCalledWith('room:leave', {
       roomId: 'room-server',
       participantId: 'participant-minji'
     });
-
-    fireEvent.click(screen.getByRole('button', { name: '방 나가기' }));
-    expect(socketMock.emit).toHaveBeenCalledWith('room:leave', {
-      roomId: 'room-server',
-      participantId: 'participant-minji'
-    });
-    expect(screen.getByText(/민지님/)).toBeInTheDocument();
   });
 
   it('routes an ended room to the retrospective instead of the waiting room', async () => {
