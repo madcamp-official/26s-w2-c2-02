@@ -90,7 +90,7 @@ Client events are defined in `packages/shared/src/realtime-events.ts`.
 | `goal:submit` | client to server | Legacy prompt/mission text update. Mirrors `POST /rooms/:roomId/goals` and broadcasts `room:updated`. |
 | `participant:update-status` | client to server | Publish player presence and local face-analysis state. Compatibility statuses include `online`, `focused`, `distracted`, `away`, `break`, and `paused`. |
 | `game:start` | client to server | Host starts a face party game (`hidden_mission`, `poker_bluff`, or `copycat_relay`). The server creates `currentGame`, assigns any private missions, and broadcasts `game:round-begin`. |
-| `expression:report` | client to server | Submit local expression-derived game results. Hidden mission rounds send a `missionResult`; expression bluff rounds send a `bluffResult`. |
+| `expression:report` | client to server | Submit local expression-derived game results. Hidden mission rounds send a `missionResult`; poker bluff rounds send `signals` so the server can calculate `bluffResult`. |
 | `bluff:bet` | client to server | Submit a player's guess for an expression bluff target. |
 | `relay:advance` | client to server | Submit one relay mirror step with prompt, player expression signals, and similarity score. |
 | `game:reveal` | client to server | Host reveals the current game and asks the server to finalize scores. |
