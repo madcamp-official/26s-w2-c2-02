@@ -929,11 +929,11 @@ describe('StudyRoom hidden mission progress', () => {
     expect(screen.queryByLabelText('루미 방해 카드')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /방해 카드 보기/ }));
     fireEvent.click(screen.getByRole('button', { name: '2' }));
-    expect(screen.getByRole('heading', { name: '순간 기억 2/3' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '빠른 선택 2/3' })).toBeInTheDocument();
     act(() => {
       vi.advanceTimersByTime(1_000);
     });
-    fireEvent.click(screen.getByRole('button', { name: '2' }));
+    fireEvent.click(screen.getByRole('button', { name: '24' }));
     expect(screen.getByRole('heading', { name: '순간 기억 3/3' })).toBeInTheDocument();
     act(() => {
       vi.advanceTimersByTime(1_000);

@@ -65,8 +65,9 @@ from face party game rooms. `study` enables study goals and break controls;
 `defaultGameKind` is selected during room creation and shown again in the waiting
 room; the active game room starts that configured game instead of choosing a
 mode from the live controls. The API starts rounds, stores hidden missions and
-scores, sends private mission assignments only to the matching participant, and
-broadcasts public game snapshots without hidden mission text until reveal. Game
+scores, sends each player's assigned mission to that participant for the private
+mission card, and includes the round's assigned mission prompts in game
+snapshots so accusation choices can contain the real answer. Game
 rooms use `settings.roundCount`; between rounds the API tracks
 `nextRoundReadyParticipantIds`, starts the next round when everyone is ready,
 and falls back to an automatic start after the 5-minute countdown. The renderer

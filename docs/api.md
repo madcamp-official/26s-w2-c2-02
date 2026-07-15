@@ -76,11 +76,12 @@ and rolls back the participant instead of returning a local-only video session.
   creation. The renderer exposes hidden mission progress, bluff bet/tell-check
   controls, and relay target/similarity controls through the shared Socket.IO
   events below.
-- Hidden mission rounds assign each participant one private mission from a
-  shuffled mission pool. Mission text is not included in public game snapshots
-  until the host reveals the game. When a participant returns from the lobby to
-  an active hidden-mission round, the server replaces that participant's private
-  mission.
+- Hidden mission rounds assign each participant one mission from a shuffled
+  mission pool. The active game snapshot includes the round's assigned mission
+  prompts so clients can build accusation choices that always contain the real
+  answer; the StudyRoom UI still shows only the local participant's private
+  mission card. When a participant returns from the lobby to an active
+  hidden-mission round, the server replaces that participant's mission.
 - Hidden mission success stops the current round without ending the video room.
   If more rounds remain, `currentGame.status` becomes `between_round`, the top
   room timer shows the next-round countdown, and participants can send
@@ -137,8 +138,8 @@ Client events are defined in `packages/shared/src/realtime-events.ts`.
 | `chat:send` | client to server | Send a room chat message (`roomId`, `participantId`, `text`). The server stores a short recent history and may ask Roomi for a game-context reaction. |
 | `room:snapshot` | server to client | Send the current room snapshot to a newly subscribed client. |
 | `room:updated` | server to client | Broadcast the latest room snapshot. |
-| `game:round-begin` | server to client | Broadcast the public game state for the new round or between-round state. Hidden missions are removed from public snapshots. |
-| `mission:assign` | server to client | Send one hidden mission only to the assigned participant. |
+| `game:round-begin` | server to client | Broadcast the game state for the new round or between-round state. Hidden mission rounds include assigned mission prompts so accusation choices can include the real answer. |
+| `mission:assign` | server to client | Send the assigned hidden mission directly to its participant for the private mission card. |
 | `mission:result` | server to client | Broadcast a submitted mission result without raw camera frames. |
 | `game:reveal` | server to client | Broadcast the revealed game state, including final scores and missions that are now safe to show. |
 | `chat:message` | server to client | Broadcast a chat message to subscribed room participants. New subscribers receive recent chat messages in the room snapshot. |

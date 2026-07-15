@@ -1377,12 +1377,7 @@ export class RoomService {
   private withVisibleMessages(snapshot: RoomSnapshot, participantId?: string): RoomSnapshot {
     const currentGame = snapshot.currentGame
       ? {
-          ...snapshot.currentGame,
-          missions: snapshot.currentGame.missions?.filter(
-            (mission) =>
-              snapshot.currentGame?.status === 'reveal' ||
-              (participantId !== undefined && mission.playerId === participantId)
-          )
+          ...snapshot.currentGame
         }
       : snapshot.currentGame;
 

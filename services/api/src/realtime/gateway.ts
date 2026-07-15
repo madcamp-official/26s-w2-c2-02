@@ -541,7 +541,7 @@ function participantChannel(roomId: string, participantId: string) {
 }
 
 function publicGame(game: GameSession): GameSession {
-  return game.status === 'reveal' ? game : { ...game, missions: [] };
+  return game;
 }
 
 function toFacePartyGameKind(kind: GameSession['kind']): FacePartyGameKind {

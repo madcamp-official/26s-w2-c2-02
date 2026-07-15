@@ -915,6 +915,11 @@ export function StudyRoom({
         return;
       }
 
+      if (currentGame) {
+        setDistractionCard(
+          createDistractionCard(currentGame.round.id, currentGame.round.index, distractionCard)
+        );
+      }
       setDistractionStepIndex((current) => current + 1);
       setDistractionIntroVisible(true);
       return;
@@ -1806,13 +1811,28 @@ function focusReportKey(report: FocusSessionReport) {
   ].join(':');
 }
 
-function createDistractionCard(roundId: string, roundIndex: number): DistractionCard {
+function createDistractionCard(
+  roundId: string,
+  roundIndex: number,
+  previousCard?: DistractionCard
+): DistractionCard {
   const kind = randomItem(distractionCardKinds);
-  const card = createDistractionCardByKind(kind);
+  let card = createDistractionCardByKind(kind);
+  if (previousCard && distractionCardSignature(card) === distractionCardSignature(previousCard)) {
+    const nextKind =
+      distractionCardKinds[
+        (distractionCardKinds.indexOf(previousCard.kind) + 1) % distractionCardKinds.length
+      ]!;
+    card = createDistractionCardByKind(nextKind);
+  }
   return {
-    id: `${roundId}:${roundIndex}:${kind}:${Date.now()}`,
+    id: `${roundId}:${roundIndex}:${card.kind}:${Date.now()}`,
     ...card
   };
+}
+
+function distractionCardSignature(card: Omit<DistractionCard, 'id'>) {
+  return `${card.kind}:${card.prompt}:${card.answer}:${card.choices.join('|')}`;
 }
 
 export function createDistractionCardByKind(kind: DistractionCardKind): Omit<DistractionCard, 'id'> {

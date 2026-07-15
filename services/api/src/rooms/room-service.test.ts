@@ -547,6 +547,9 @@ describe('RoomService face party games', () => {
       { participantId: host.id, points: 0 },
       { participantId: member.id, points: 0 }
     ]);
+    expect(service.snapshotForParticipant(created.room.id, host.id).currentGame?.missions).toEqual(
+      game.missions
+    );
     expect(assigned.sort()).toEqual([host.id, member.id].sort());
   });
 
