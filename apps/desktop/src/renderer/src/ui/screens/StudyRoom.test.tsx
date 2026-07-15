@@ -487,6 +487,66 @@ describe('StudyRoom hidden mission progress', () => {
     );
   });
 
+  it('opens a mission guess when the actor is accused within the reaction window', async () => {
+    vi.useFakeTimers();
+    const host = createParticipant('participant-host', 'Host');
+    const member = { ...createParticipant('participant-member', 'Member'), role: 'member' as const };
+    const room = createRoom();
+    const hostMission: HiddenMission = {
+      id: 'mission-host',
+      playerId: host.id,
+      prompt: 'Smile once',
+      verify: 'smile_count',
+      target: 1
+    };
+    const memberMission: HiddenMission = {
+      id: 'mission-member',
+      playerId: member.id,
+      prompt: 'Wink once',
+      verify: 'wink_count',
+      target: 1
+    };
+    const currentGame: GameSession = {
+      ...createGame(room, [host, member], 'hidden_mission'),
+      missions: [hostMission, memberMission]
+    };
+    const onWinByMissionGuess = vi.fn();
+
+    const { rerender } = render(
+      <StudyRoom
+        {...baseStudyRoomProps(host)}
+        currentGame={currentGame}
+        participants={[host, member]}
+        room={room}
+        privateMission={hostMission}
+        onWinByMissionGuess={onWinByMissionGuess}
+      />
+    );
+
+    const nextGame = {
+      ...currentGame,
+      missionResults: [
+        { playerId: member.id, missionId: memberMission.id, count: 1, success: false }
+      ]
+    };
+    rerender(
+      <StudyRoom
+        {...baseStudyRoomProps(host)}
+        currentGame={nextGame}
+        participants={[host, member]}
+        room={room}
+        privateMission={hostMission}
+        onWinByMissionGuess={onWinByMissionGuess}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Member' }));
+    expect(screen.getByRole('dialog', { name: '미션 맞추기' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: memberMission.prompt }));
+
+    expect(onWinByMissionGuess).toHaveBeenCalledWith(host.id, member.id, memberMission.id);
+  });
+
   it('resets the secret mission count when the round changes even if the mission id is reused', async () => {
     const participant = createParticipant('participant-host', 'Host');
     const room = createRoom();

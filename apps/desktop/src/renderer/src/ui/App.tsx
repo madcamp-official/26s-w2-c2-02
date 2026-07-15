@@ -876,6 +876,37 @@ export function App() {
     });
   };
 
+  const winCurrentRoundByMissionGuess = (winnerId: string, targetId: string, missionId: string) => {
+    if (!roomDraft?.currentGame || roomDraft.currentGame.kind !== 'hidden_mission') return;
+    if (roomDraft.realtime === 'server') return;
+
+    setRoomDraft((current) => {
+      if (!current?.currentGame || current.currentGame.kind !== 'hidden_mission') return current;
+      const result: MissionResult = {
+        playerId: targetId,
+        missionId,
+        count: 1,
+        success: true
+      };
+      return appendLocalRoomiMessage(
+        {
+          ...current,
+          currentGame: finishLocalGameRoundWithWinner({
+            ...current.currentGame,
+            missionResults: [
+              ...(current.currentGame.missionResults ?? []).filter(
+                (item) => item.playerId !== targetId
+              ),
+              result
+            ]
+          }, winnerId)
+        },
+        'game_reveal',
+        `${participantNickname(current.participants, winnerId)}가 ${participantNickname(current.participants, targetId)}의 미션을 맞춰 라운드를 가져갔어.`
+      );
+    });
+  };
+
   const submitCurrentChatMessage = (text: string) => {
     if (!roomDraft) return;
     const trimmed = text.trim();
@@ -1265,6 +1296,7 @@ export function App() {
             onStartBreak={startCurrentBreak}
             onStartGame={startCurrentGame}
             onSubmitMissionResult={submitCurrentMissionResult}
+            onWinByMissionGuess={winCurrentRoundByMissionGuess}
             onSubmitBluffBet={submitCurrentBluffBet}
             onSubmitBluffSignals={submitCurrentBluffSignals}
             onAdvanceRelay={advanceCurrentRelay}
@@ -1343,6 +1375,51 @@ function finishLocalGameRound(game: GameSession, forceReveal = false): GameSessi
   ];
 
   if (forceReveal || game.round.index >= game.totalRounds) {
+    return {
+      ...game,
+      status: 'reveal',
+      round: { ...game.round, status: 'reveal', revealAt: timestamp },
+      scores,
+      completedRounds,
+      nextRoundReadyParticipantIds: [],
+      nextRoundStartsAt: undefined,
+      updatedAt: timestamp
+    };
+  }
+
+  const nextRoundStartsAt = new Date(Date.now() + 5 * 60_000).toISOString();
+  return {
+    ...game,
+    status: 'between_round',
+    round: { ...game.round, status: 'between_round', revealAt: timestamp, nextStartsAt: nextRoundStartsAt },
+    scores,
+    completedRounds,
+    nextRoundReadyParticipantIds: [],
+    nextRoundStartsAt,
+    updatedAt: timestamp
+  };
+}
+
+function finishLocalGameRoundWithWinner(game: GameSession, winnerId: string): GameSession {
+  const timestamp = now();
+  const scores = game.scores.map((score) => ({
+    ...score,
+    points: score.points + (score.participantId === winnerId ? 10 : 0)
+  }));
+  const completedRounds = [
+    ...(game.completedRounds ?? []),
+    {
+      roundIndex: game.round.index,
+      status: game.round.index >= game.totalRounds ? 'revealed' as const : 'completed' as const,
+      endedAt: timestamp,
+      scores,
+      missionResults: game.missionResults,
+      bluffResult: game.bluffResult,
+      relayLinks: game.relayLinks
+    }
+  ];
+
+  if (game.round.index >= game.totalRounds) {
     return {
       ...game,
       status: 'reveal',

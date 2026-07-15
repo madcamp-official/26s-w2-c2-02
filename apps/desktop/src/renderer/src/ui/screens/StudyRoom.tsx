@@ -66,10 +66,19 @@ type DistractionCard = {
 };
 
 const distractionCardMinDelayMs = 10_000;
-const distractionCardMaxDelayMs = 60_000;
+const distractionCardMaxDelayMs = 30_000;
+const accusationWindowMs = 1_500;
+const accusationCooldownMs = 10_000;
 
 type KeyedMissionCounterState = MissionCounterState & {
   missionKey: string;
+};
+
+type MissionAccusationPrompt = {
+  targetId: string;
+  missionId: string;
+  choices: string[];
+  answer: string;
 };
 
 interface StudyRoomProps extends ScreenProps {
@@ -82,6 +91,7 @@ interface StudyRoomProps extends ScreenProps {
   onStartBreak: () => void | Promise<void>;
   onStartGame?: (kind: GameKind) => void;
   onSubmitMissionResult?: (result: MissionResult) => void;
+  onWinByMissionGuess?: (winnerId: string, targetId: string, missionId: string) => void;
   onSubmitBluffBet?: (targetId: string, predictsCrack: boolean) => void;
   onSubmitBluffSignals?: (signals: ExpressionSignals) => void;
   onAdvanceRelay?: (toId: string, similarity: number) => void;
@@ -282,6 +292,7 @@ export function StudyRoom({
   onStartBreak,
   onStartGame,
   onSubmitMissionResult,
+  onWinByMissionGuess,
   onSubmitBluffBet,
   onSubmitBluffSignals,
   onAdvanceRelay,
@@ -318,6 +329,11 @@ export function StudyRoom({
   const [distractionSolvedId, setDistractionSolvedId] = useState<string | null>(null);
   const [distractionVisible, setDistractionVisible] = useState(true);
   const [distractionWrong, setDistractionWrong] = useState(false);
+  const [distractionCycle, setDistractionCycle] = useState(0);
+  const [activeMissionActorId, setActiveMissionActorId] = useState<string | null>(null);
+  const [accusationPrompt, setAccusationPrompt] = useState<MissionAccusationPrompt | null>(null);
+  const [accusationCooldownUntil, setAccusationCooldownUntil] = useState(0);
+  const previousMissionCountsRef = useRef<Map<string, number>>(new Map());
   const reportedMissionRef = useRef<{ missionId: string; count: number; success: boolean } | null>(null);
   const { callObject, localMedia, participantsByRoomiId, restart } =
     useDailyRoom(videoJoin);
@@ -385,6 +401,18 @@ export function StudyRoom({
   }, [missionKey]);
 
   useEffect(() => {
+    setDistractionCycle(0);
+    setDistractionCard(null);
+    setDistractionSolvedId(null);
+    setDistractionVisible(false);
+    setDistractionWrong(false);
+    previousMissionCountsRef.current = new Map();
+    setActiveMissionActorId(null);
+    setAccusationPrompt(null);
+    setAccusationCooldownUntil(0);
+  }, [currentGame?.round.id]);
+
+  useEffect(() => {
     const shouldShowDistraction =
       currentGame?.kind === 'hidden_mission' &&
       currentGame.status === 'in_round';
@@ -396,6 +424,8 @@ export function StudyRoom({
       setDistractionWrong(false);
       return;
     }
+
+    if (distractionCard && distractionSolvedId !== distractionCard.id) return;
 
     setDistractionSolvedId(null);
     setDistractionVisible(false);
@@ -413,7 +443,42 @@ export function StudyRoom({
     }, delayMs);
 
     return () => window.clearTimeout(timerId);
-  }, [currentGame?.id, currentGame?.kind, currentGame?.round.id, currentGame?.round.index, currentGame?.status]);
+  }, [
+    currentGame?.id,
+    currentGame?.kind,
+    currentGame?.round.id,
+    currentGame?.round.index,
+    currentGame?.status,
+    distractionCard,
+    distractionCycle,
+    distractionSolvedId
+  ]);
+
+  useEffect(() => {
+    if (currentGame?.kind !== 'hidden_mission' || currentGame.status !== 'in_round') {
+      previousMissionCountsRef.current = new Map();
+      setActiveMissionActorId(null);
+      setAccusationPrompt(null);
+      return;
+    }
+
+    let latestActorId: string | null = null;
+    const nextCounts = new Map(previousMissionCountsRef.current);
+    for (const result of currentGame.missionResults ?? []) {
+      const previousCount = previousMissionCountsRef.current.get(result.playerId) ?? 0;
+      if (result.count > previousCount) latestActorId = result.playerId;
+      nextCounts.set(result.playerId, result.count);
+    }
+    previousMissionCountsRef.current = nextCounts;
+    if (!latestActorId) return;
+
+    setActiveMissionActorId(latestActorId);
+    const timerId = window.setTimeout(() => {
+      setActiveMissionActorId((current) => (current === latestActorId ? null : current));
+    }, accusationWindowMs);
+
+    return () => window.clearTimeout(timerId);
+  }, [currentGame?.kind, currentGame?.missionResults, currentGame?.round.id, currentGame?.status]);
 
   const distractionLocksMission = Boolean(
     distractionCard &&
@@ -543,12 +608,45 @@ export function StudyRoom({
     if (!distractionCard) return;
     if (choice === distractionCard.answer) {
       setDistractionSolvedId(distractionCard.id);
+      setDistractionCard(null);
       setDistractionVisible(false);
       setDistractionWrong(false);
+      setDistractionCycle((current) => current + 1);
       return;
     }
 
     setDistractionWrong(true);
+  };
+
+  const accuseMissionActor = (targetId: string) => {
+    if (!currentGame || Date.now() < accusationCooldownUntil) return;
+    if (targetId !== activeMissionActorId) return;
+    const mission = currentGame.missions?.find((item) => item.playerId === targetId);
+    if (!mission) return;
+    setAccusationPrompt({
+      targetId,
+      missionId: mission.id,
+      answer: mission.prompt,
+      choices: missionGuessChoices(mission, currentGame.missions ?? [])
+    });
+    setActiveMissionActorId(null);
+  };
+
+  const answerMissionAccusation = (choice: string) => {
+    if (!accusationPrompt) return;
+    if (choice === accusationPrompt.answer) {
+      onWinByMissionGuess?.(
+        currentParticipantId,
+        accusationPrompt.targetId,
+        accusationPrompt.missionId
+      );
+      setAccusationPrompt(null);
+      return;
+    }
+
+    setAccusationPrompt(null);
+    setActiveMissionActorId(null);
+    setAccusationCooldownUntil(Date.now() + accusationCooldownMs);
   };
 
   const submitChat = (event: FormEvent<HTMLFormElement>) => {
@@ -708,6 +806,38 @@ export function StudyRoom({
               </p>
             </div>
           </section>
+
+          {currentGame?.kind === 'hidden_mission' && currentGame.status === 'in_round' && (
+            <section className="study-card study-accuse" aria-label="미션 수행자 지목">
+              <div className="study-card__head">
+                <h2 className="study-card__title">지목</h2>
+                {timestamp < accusationCooldownUntil && (
+                  <span className="study-accuse__cooldown">
+                    {Math.ceil((accusationCooldownUntil - timestamp) / 1_000)}초
+                  </span>
+                )}
+              </div>
+              <div className="study-accuse__grid">
+                {participants.slice(0, 4).map((participant) => {
+                  const disabled =
+                    timestamp < accusationCooldownUntil ||
+                    participant.id !== activeMissionActorId ||
+                    Boolean(accusationPrompt);
+                  return (
+                    <button
+                      type="button"
+                      className="study-accuse__button"
+                      disabled={disabled}
+                      key={participant.id}
+                      onClick={() => accuseMissionActor(participant.id)}
+                    >
+                      {participant.nickname}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           <section className="study-card study-chat" aria-label="채팅">
             <h2 className="study-card__title">채팅</h2>
@@ -1065,6 +1195,27 @@ export function StudyRoom({
           </div>
         </div>
       )}
+      {accusationPrompt && (
+        <div className="session-end-modal" role="dialog" aria-label="미션 맞추기">
+          <div className="session-end-modal__panel mission-guess-modal">
+            <h2 className="session-end-modal__title">
+              {participantName(participants, accusationPrompt.targetId)}의 미션은?
+            </h2>
+            <div className="mission-guess-modal__choices">
+              {accusationPrompt.choices.map((choice) => (
+                <button
+                  type="button"
+                  className="btn btn--soft"
+                  key={choice}
+                  onClick={() => answerMissionAccusation(choice)}
+                >
+                  {choice}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       {resultsOpen && (
         <div className="session-end-modal" role="dialog" aria-label="게임 결과 상세">
           <div className="session-end-modal__panel game-results-modal">
@@ -1217,9 +1368,28 @@ function emptyExpressionSignals(): ExpressionSignals {
 function createDistractionCard(roundId: string, roundIndex: number): DistractionCard {
   const template = distractionCards[(Math.max(1, roundIndex) - 1) % distractionCards.length]!;
   return {
-    id: `${roundId}:${template.kind}`,
+    id: `${roundId}:${template.kind}:${Date.now()}`,
     ...template
   };
+}
+
+function missionGuessChoices(answer: HiddenMission, missions: HiddenMission[]) {
+  const fallbackPrompts = [
+    '상대가 볼 때마다 자연스럽게 미소 짓기',
+    '대화 중 한 번 윙크하기',
+    '고개를 끄덕이며 동의하는 척하기',
+    '눈썹을 올리며 놀란 표정 짓기',
+    '입을 살짝 벌리고 생각하는 척하기'
+  ];
+  const prompts = [
+    answer.prompt,
+    ...missions
+      .filter((mission) => mission.id !== answer.id)
+      .map((mission) => mission.prompt),
+    ...fallbackPrompts
+  ];
+  const uniquePrompts = Array.from(new Set(prompts)).slice(0, 4);
+  return uniquePrompts.sort((left, right) => left.localeCompare(right));
 }
 
 function getAudioTracks(stream: MediaStream | null): MediaStreamTrack[] {

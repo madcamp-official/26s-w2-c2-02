@@ -370,6 +370,45 @@
   text-decoration: underline;
 }
 
+.study-accuse__cooldown {
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  background: #fff1d6;
+  color: #9a5b00;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.study-accuse__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.study-accuse__button {
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-sm);
+  background: var(--purple-050);
+  color: var(--purple-700);
+  font-size: 13px;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.study-accuse__button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.study-accuse__button:not(:disabled):hover {
+  border-color: var(--purple-300);
+  background: var(--purple-100);
+}
+
 .goal {
   display: flex;
   align-items: flex-start;
@@ -694,6 +733,22 @@
   width: min(560px, 100%);
   max-height: min(720px, calc(100vh - 96px));
   overflow-y: auto;
+}
+
+.mission-guess-modal {
+  width: min(520px, 100%);
+}
+
+.mission-guess-modal__choices {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.mission-guess-modal__choices .btn {
+  justify-content: center;
+  min-height: 44px;
+  white-space: normal;
 }
 
 .game-results__section {
