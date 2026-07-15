@@ -292,7 +292,15 @@ describe('StudyRoom focus detection status mapping', () => {
         activeSignals: [],
         current: { ...current, eyesClosed: true }
       })
-    ).toBe('참여 중');
+    ).toBe('공부 중');
+  });
+
+  it('calls an engaged participant playing rather than studying in a game room', () => {
+    const participant = createParticipant('participant-host', 'Host');
+    participant.status = 'focused';
+
+    expect(participantStatusLabel(participant, undefined, 'study')).toBe('공부 중');
+    expect(participantStatusLabel(participant, undefined, 'hidden_mission')).toBe('게임 중');
   });
 });
 

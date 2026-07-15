@@ -217,24 +217,6 @@
   gap: 12px;
 }
 
-.person__avatar {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--r-pill);
-  background: #cfc9f7;
-  color: #5b4fc7;
-  font-size: 13px;
-  font-weight: 800;
-  flex: none;
-}
-
-.person__avatar--empty {
-  background: transparent;
-  border: 1.5px dashed var(--border-purple);
-}
-
 .person__body {
   flex: 1;
   min-width: 0;

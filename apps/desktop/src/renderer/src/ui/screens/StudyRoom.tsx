@@ -112,12 +112,21 @@ interface StudyRoomProps extends ScreenProps {
 
 const statusLabel: Record<ParticipantStatus, string> = {
   online: '대기',
-  focused: '참여 중',
+  focused: '공부 중',
   distracted: '주의 이탈',
   away: '자리 비움',
   break: '휴식',
   paused: '눈 감김'
 };
+
+/**
+ * The face games run through this same screen, where `공부 중` would be a lie.
+ * Mirrors how the waiting room already splits the two.
+ */
+function presenceLabel(status: ParticipantStatus, activityKind: RoomActivityKind) {
+  if (status === 'focused' && activityKind !== 'study') return '게임 중';
+  return statusLabel[status];
+}
 
 /**
  * Hiding your face is itself a move in the face games, so a game room flips to
@@ -253,7 +262,8 @@ export function focusLabelToParticipantStatus(label: FocusLabel): ParticipantSta
  */
 export function participantStatusLabel(
   participant: Pick<Participant, 'status'>,
-  focusSnapshot?: Partial<FocusSnapshot>
+  focusSnapshot?: Partial<FocusSnapshot>,
+  activityKind: RoomActivityKind = 'study'
 ) {
   const current = focusSnapshot?.current;
 
@@ -280,7 +290,7 @@ export function participantStatusLabel(
     }
   }
 
-  return statusLabel[participant.status];
+  return presenceLabel(participant.status, activityKind);
 }
 
 /**
@@ -843,7 +853,8 @@ export function StudyRoom({
                         <i className={`tile__dot ${tileDotClass(participant.status)}`} />
                         {participantStatusLabel(
                           participant,
-                          isMe ? focusDetection.focusSnapshot : undefined
+                          isMe ? focusDetection.focusSnapshot : undefined,
+                          room.settings.activityKind
                         )}
                         <span className="tile__verdict">
                           {focusVerdictLabel(participant.status)}
