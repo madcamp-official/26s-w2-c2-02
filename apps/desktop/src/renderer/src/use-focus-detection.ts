@@ -22,6 +22,11 @@ import {
   type RuleSettings
 } from './focus-pipeline';
 import {
+  accumulateFocusStats,
+  emptyFocusSessionStats,
+  type FocusSessionStats
+} from './focus-stats';
+import {
   expressionSignalsFromBlendshapes,
   type BlendshapeCategory
 } from './expression-pipeline';
@@ -93,6 +98,7 @@ export function useFocusDetection({
   const frameRef = useRef<number | null>(null);
   const lastFrameAtRef = useRef<number | null>(null);
   const signalWindowRef = useRef<FrameSignals[]>([]);
+  const sessionStatsRef = useRef<FocusSessionStats>(emptyFocusSessionStats);
   const previousNoseRef = useRef<LandmarkPoint | null>(null);
   const mlWindowStartRef = useRef<number | null>(null);
   const mlPredictionRequestRef = useRef(0);
@@ -108,6 +114,7 @@ export function useFocusDetection({
   const [status, setStatus] = useState<FocusDetectionStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [focusSnapshot, setFocusSnapshot] = useState<FocusSnapshot>(emptyFocusSnapshot);
+  const [sessionStats, setSessionStats] = useState<FocusSessionStats>(emptyFocusSessionStats);
   const [detectionSnapshot, setDetectionSnapshot] =
     useState<DetectionSnapshot>(emptyDetectionSnapshot);
   const [mlPrediction, setMlPrediction] = useState<MlPredictionSnapshot | null>(null);
@@ -239,6 +246,8 @@ export function useFocusDetection({
     });
     const ruleSnapshot = classifyFocus(signalWindowRef.current, currentSettings);
     setFocusSnapshot(ruleSnapshot);
+    sessionStatsRef.current = accumulateFocusStats(sessionStatsRef.current, ruleSnapshot, now);
+    setSessionStats(sessionStatsRef.current);
     setExpressionSignals(
       expressionSignalsFromBlendshapes(blendshapeCategories, matrix, Date.now())
     );
@@ -306,6 +315,7 @@ export function useFocusDetection({
       videoRef.current = null;
       lastFrameAtRef.current = null;
       signalWindowRef.current = [];
+      sessionStatsRef.current = emptyFocusSessionStats;
       previousNoseRef.current = null;
       mlWindowStartRef.current = null;
       // Invalidate in-flight predictions so a late response cannot revive state.
@@ -314,6 +324,7 @@ export function useFocusDetection({
       setStatus('idle');
       setError(null);
       setFocusSnapshot(emptyFocusSnapshot);
+      setSessionStats(emptyFocusSessionStats);
       setDetectionSnapshot(emptyDetectionSnapshot);
       setMlPrediction(null);
       setMlStatus('idle');
@@ -335,6 +346,7 @@ export function useFocusDetection({
     status,
     error,
     focusSnapshot,
+    sessionStats,
     detectionSnapshot,
     mlPrediction,
     mlStatus,

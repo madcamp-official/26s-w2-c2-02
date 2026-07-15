@@ -42,7 +42,7 @@ const focusLabelText: Record<FocusLabel, string> = {
 
 const focusLabelDescription: Record<FocusLabel, string> = {
   focused: '얼굴이 안정적으로 잡히고 이상 신호가 기준치보다 낮아요.',
-  distracted: '고개 방향이나 숙임 신호가 설정 기준 이상 지속됐어요.',
+  distracted: '고개 방향, 숙임, 시선 이탈 신호가 설정 기준 이상 지속됐어요.',
   away: '얼굴이 일정 시간 이상 감지되지 않았어요.',
   sleepy: '눈 감김 신호가 설정 기준 이상 지속됐어요.',
   uncertain: '신호가 약하거나 짧아서 아직 확정하지 않았어요.',
@@ -77,7 +77,8 @@ const settingGroups: Array<{
       { key: 'faceMissingSeconds', label: '얼굴 없음', min: 1, max: 20, step: 1, unit: '초' },
       { key: 'eyesClosedSeconds', label: '눈 감김', min: 1, max: 10, step: 1, unit: '초' },
       { key: 'headTurnedSeconds', label: '고개 돌림', min: 1, max: 30, step: 1, unit: '초' },
-      { key: 'headDownSeconds', label: '고개 숙임', min: 1, max: 30, step: 1, unit: '초' }
+      { key: 'headDownSeconds', label: '고개 숙임', min: 1, max: 30, step: 1, unit: '초' },
+      { key: 'gazeDivergedSeconds', label: '시선 이탈', min: 1, max: 30, step: 1, unit: '초' }
     ]
   },
   {
@@ -123,6 +124,14 @@ const settingGroups: Array<{
         max: 4,
         step: 0.1,
         unit: '초'
+      },
+      {
+        key: 'gazeDivergenceDegreesThreshold',
+        label: '시선 이탈 각도',
+        min: 15,
+        max: 60,
+        step: 1,
+        unit: '°'
       }
     ]
   },
@@ -134,7 +143,9 @@ const settingGroups: Array<{
       { key: 'faceMissingPenalty', label: '얼굴 없음 감점', min: 0, max: 100, step: 1, unit: '점' },
       { key: 'eyesClosedPenalty', label: '눈 감김 감점', min: 0, max: 100, step: 1, unit: '점' },
       { key: 'headTurnedPenalty', label: '고개 돌림 감점', min: 0, max: 100, step: 1, unit: '점' },
-      { key: 'headDownPenalty', label: '고개 숙임 감점', min: 0, max: 100, step: 1, unit: '점' }
+      { key: 'headDownPenalty', label: '고개 숙임 감점', min: 0, max: 100, step: 1, unit: '점' },
+      { key: 'yawningPenalty', label: '하품 감점', min: 0, max: 100, step: 1, unit: '점' },
+      { key: 'gazeDivergedPenalty', label: '시선 이탈 감점', min: 0, max: 100, step: 1, unit: '점' }
     ]
   }
 ];
@@ -575,6 +586,7 @@ export function MediaPipeTest({ go }: ScreenProps) {
             <FeatureMeter label="고개 돌림" value={focusSnapshot.durations.head_turned} unit="초" />
             <FeatureMeter label="고개 숙임" value={focusSnapshot.durations.head_down} unit="초" />
             <FeatureMeter label="하품" value={focusSnapshot.durations.yawning} unit="초" />
+            <FeatureMeter label="시선 이탈" value={focusSnapshot.durations.gaze_diverged} unit="초" />
             <FeatureMeter
               label="EAR"
               value={round(focusSnapshot.current.eyeAspectRatio, 2)}
@@ -587,6 +599,13 @@ export function MediaPipeTest({ go }: ScreenProps) {
             />
             <FeatureMeter label="깜빡임" value={focusSnapshot.blinksPerMinute} unit="회/분" />
             <FeatureMeter label="하품 횟수" value={focusSnapshot.yawnCount} unit="회" />
+            {/* Reads 0 on a mesh without iris landmarks, which is also what the
+                랜드마크 count above would show as 468 instead of 478. */}
+            <FeatureMeter
+              label="시선 각도"
+              value={round(focusSnapshot.current.gazeDivergence ?? 0, 1)}
+              unit="°"
+            />
             <FeatureMeter
               label="yaw 비율"
               value={round(focusSnapshot.current.headYawRatio, 2)}

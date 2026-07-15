@@ -18,11 +18,13 @@ const focusedFrame: Omit<FrameSignals, 'timestamp'> = {
   headYawRatio: 0,
   headPitchRatio: 0,
   headPose: null,
+  gazeDivergence: 0,
   mouthAspectRatio: 0.1,
   eyesClosed: false,
   headTurned: false,
   headDown: false,
-  mouthOpen: false
+  mouthOpen: false,
+  gazeDiverged: false
 };
 
 /** Frames spanning `seconds`, sampled every 100ms, ending at t = seconds * 1000. */

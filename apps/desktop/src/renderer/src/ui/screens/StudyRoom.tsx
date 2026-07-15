@@ -39,6 +39,7 @@ import {
   type FocusLabel,
   type FocusSnapshot
 } from '../../focus-pipeline';
+import { focusIndices, type FocusIndices } from '../../focus-stats';
 import { useFocusDetection } from '../../use-focus-detection';
 import {
   missionResultFromCounter,
@@ -228,6 +229,86 @@ export function FocusScoreTrend({ history, score }: { history: number[]; score?:
   );
 }
 
+/**
+ * The fatigue and distraction readings for the local participant.
+ *
+ * Mine only, deliberately: the ranking beside it names everyone, but telling the
+ * room how often someone yawned is exactly the leak the room contract forbids.
+ * Nothing here feeds the score either — these weights are reasoned, not measured,
+ * so they inform and suggest while the ranking stays on the duration rules.
+ */
+export function FocusDetailPanel({ indices }: { indices: FocusIndices }) {
+  if (!indices.ready) {
+    return (
+      <p className="focus-detail__pending">
+        1분 정도 지나면 내 피로도와 산만함을 보여줄게요.
+      </p>
+    );
+  }
+
+  return (
+    <div className="focus-detail">
+      <FocusGauge
+        label="피로도"
+        value={indices.fatigue}
+        note={indices.restSuggested ? '눈이 자주 감겨요. 잠깐 쉬어가는 게 좋겠어요.' : undefined}
+        rows={[
+          ['하품 빈도', `${indices.yawnsPerHour}회/시간`],
+          ['눈 깜빡임', `${indices.blinksPerMinute}회/분`],
+          ['눈 감김 시간', `${Math.round(indices.eyesClosedRatio * 100)}%`]
+        ]}
+      />
+      <FocusGauge
+        label="산만함"
+        value={indices.distraction}
+        rows={[
+          ['시선 이탈', `${indices.gazeDiversionsPerHour}회/시간`],
+          ['고개 돌림', `${indices.headTurnsPerHour}회/시간`],
+          ['자리 비움', `${indices.awaysPerHour}회/시간`]
+        ]}
+      />
+      <p className="focus-detail__foot">
+        {indices.observedMinutes}분 관찰 기준 · 내게만 보이고 점수에는 반영되지 않아요.
+      </p>
+    </div>
+  );
+}
+
+function FocusGauge({
+  label,
+  value,
+  note,
+  rows
+}: {
+  label: string;
+  value: number;
+  note?: string;
+  rows: [string, string][];
+}) {
+  return (
+    <section className="focus-gauge">
+      <div className="focus-gauge__head">
+        <span className="focus-gauge__label">{label}</span>
+        <strong className="focus-gauge__value">{value}</strong>
+      </div>
+      {/* Length carries the reading, so it survives both a colourblind viewer and
+          the fact that the design file has no danger colour to escalate into. */}
+      <div className="focus-gauge__track">
+        <div className="focus-gauge__fill" style={{ width: `${value}%` }} />
+      </div>
+      <dl className="focus-gauge__rows">
+        {rows.map(([name, reading]) => (
+          <div className="focus-gauge__row" key={name}>
+            <dt>{name}</dt>
+            <dd>{reading}</dd>
+          </div>
+        ))}
+      </dl>
+      {note && <p className="focus-gauge__note">{note}</p>}
+    </section>
+  );
+}
+
 export function participantsInStudyRoom(participants: Participant[]) {
   return participants.filter((participant) => participant.status !== 'online');
 }
@@ -284,6 +365,11 @@ export function participantStatusLabel(
     }
     if (current.headTurned) {
       return '고개 돌림';
+    }
+    // Eyes rove while reading, so this one only shows once the rule has decided the
+    // gaze actually settled somewhere off-axis, not on the frame that got there.
+    if (activeSignals.has('gaze_diverged')) {
+      return '시선 이탈';
     }
     if (current.mouthOpen) {
       return '입 벌림';
@@ -463,6 +549,11 @@ export function StudyRoom({
     (entry) => entry.participantId === currentParticipantId
   )?.score;
   const [scoreHistory, setScoreHistory] = useState<number[]>([]);
+  const [focusDetailOpen, setFocusDetailOpen] = useState(false);
+  const myFocusIndices = useMemo(
+    () => focusIndices(focusDetection.sessionStats),
+    [focusDetection.sessionStats]
+  );
 
   // Keyed on the score value rather than the ranking array: the array is a fresh
   // reference on every render, which would loop through this setState.
@@ -1033,6 +1124,15 @@ export function StudyRoom({
                 <section className="study-card" aria-label="실시간 집중 순위">
                   <h2 className="study-card__title">실시간 집중 순위</h2>
                   <FocusScoreTrend history={scoreHistory} score={myFocusScore} />
+                  <button
+                    aria-expanded={focusDetailOpen}
+                    className="focus-detail__toggle"
+                    onClick={() => setFocusDetailOpen((open) => !open)}
+                    type="button"
+                  >
+                    {focusDetailOpen ? '자세히 접기' : '자세히 보기'}
+                  </button>
+                  {focusDetailOpen && <FocusDetailPanel indices={myFocusIndices} />}
                   <ol className="retro-ranking">
                     {focusRanking.map((entry, index) => {
                       const isSelf = entry.participantId === currentParticipantId;

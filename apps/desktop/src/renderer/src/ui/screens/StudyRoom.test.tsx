@@ -7,8 +7,11 @@ import type {
   Participant,
   Room
 } from '@roomi/shared';
+import type { FocusSnapshot } from '../../focus-pipeline';
+import { focusIndices } from '../../focus-stats';
 import {
   DailyParticipantMedia,
+  FocusDetailPanel,
   focusLabelToParticipantStatus,
   focusScoreTrendPoints,
   focusVerdictLabel,
@@ -42,7 +45,23 @@ const focusDetectionMock = vi.hoisted(() => ({
         headDown: false
       }
     },
-    detectionSnapshot: { faces: 1, landmarks: 468, fps: 30, lastUpdatedAt: '10:00:00' },
+    // An unstarted session: every rate reads zero and the detail panel stays on
+    // its "not enough observed yet" copy.
+    sessionStats: {
+      startedAt: 0,
+      updatedAt: 0,
+      faceFrames: 0,
+      eyesClosedFrames: 0,
+      blinks: 0,
+      yawns: 0,
+      headTurns: 0,
+      headDowns: 0,
+      aways: 0,
+      gazeDiversions: 0,
+      previousSignals: [],
+      previousEyesClosed: false
+    },
+    detectionSnapshot: { faces: 1, landmarks: 478, fps: 30, lastUpdatedAt: '10:00:00' },
     mlPrediction: null,
     mlStatus: 'idle',
     mlError: null,
@@ -53,6 +72,30 @@ const focusDetectionMock = vi.hoisted(() => ({
 vi.mock('../../use-focus-detection', () => ({
   useFocusDetection: () => focusDetectionMock.snapshot
 }));
+
+/**
+ * A frame of someone facing the screen with nothing firing. Kept in one place so
+ * a new signal on FrameSignals fails typecheck here once, not at every call site.
+ */
+function attentiveFrame(
+  overrides: Partial<FocusSnapshot['current']> = {}
+): FocusSnapshot['current'] {
+  return {
+    facePresent: true,
+    eyeAspectRatio: 0.3,
+    headYawRatio: 0,
+    headPitchRatio: 0,
+    headPose: null,
+    gazeDivergence: 0,
+    mouthAspectRatio: 0.1,
+    eyesClosed: false,
+    headTurned: false,
+    headDown: false,
+    mouthOpen: false,
+    gazeDiverged: false,
+    ...overrides
+  };
+}
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -182,18 +225,7 @@ describe('StudyRoom focus detection status mapping', () => {
 
   it('reacts to head signals on the current frame, without waiting for a sustained run', () => {
     const participant = createParticipant('participant-host', 'Host');
-    const current = {
-      facePresent: true,
-      eyeAspectRatio: 0.3,
-      headYawRatio: 0,
-      headPitchRatio: 0,
-      headPose: null,
-      mouthAspectRatio: 0.1,
-      eyesClosed: false,
-      headTurned: false,
-      headDown: false,
-      mouthOpen: false
-    };
+    const current = attentiveFrame();
 
     // activeSignals is empty: the 10s run has not elapsed, but the head is down
     // right now and the label should already say so.
@@ -215,18 +247,7 @@ describe('StudyRoom focus detection status mapping', () => {
 
   it('waits for the sustained signal before calling an open mouth a yawn', () => {
     const participant = createParticipant('participant-host', 'Host');
-    const current = {
-      facePresent: true,
-      eyeAspectRatio: 0.3,
-      headYawRatio: 0,
-      headPitchRatio: 0,
-      headPose: null,
-      mouthAspectRatio: 0.7,
-      eyesClosed: false,
-      headTurned: false,
-      headDown: false,
-      mouthOpen: true
-    };
+    const current = attentiveFrame({ mouthAspectRatio: 0.7, mouthOpen: true });
 
     // A mouth open for one frame is talking, so it must not read as a yawn.
     expect(
@@ -257,18 +278,7 @@ describe('StudyRoom focus detection status mapping', () => {
 
   it('shows detailed MediaPipe-derived labels for the local participant', () => {
     const participant = createParticipant('participant-host', 'Host');
-    const current = {
-      facePresent: true,
-      eyeAspectRatio: 0.3,
-      headYawRatio: 0,
-      headPitchRatio: 0,
-      headPose: null,
-      mouthAspectRatio: 0.1,
-      eyesClosed: false,
-      headTurned: false,
-      headDown: false,
-      mouthOpen: false
-    };
+    const current = attentiveFrame();
 
     expect(
       participantStatusLabel(participant, {
@@ -301,6 +311,95 @@ describe('StudyRoom focus detection status mapping', () => {
 
     expect(participantStatusLabel(participant, undefined, 'study')).toBe('공부 중');
     expect(participantStatusLabel(participant, undefined, 'hidden_mission')).toBe('게임 중');
+  });
+
+  it('waits for the sustained signal before calling off-centre eyes a diversion', () => {
+    const participant = createParticipant('participant-host', 'Host');
+    const current = attentiveFrame({ gazeDivergence: 42, gazeDiverged: true });
+
+    // Eyes sweep past wide angles constantly while reading, so a single frame of
+    // divergence must not show up as looking away.
+    expect(
+      participantStatusLabel(participant, { label: 'focused', activeSignals: [], current })
+    ).toBe('공부 중');
+    expect(
+      participantStatusLabel(participant, {
+        label: 'distracted',
+        activeSignals: ['gaze_diverged'],
+        current
+      })
+    ).toBe('시선 이탈');
+  });
+
+  it('lets a turned head outrank diverged eyes, since the head is the plainer read', () => {
+    const participant = createParticipant('participant-host', 'Host');
+
+    expect(
+      participantStatusLabel(participant, {
+        label: 'distracted',
+        activeSignals: ['gaze_diverged'],
+        current: attentiveFrame({ headTurned: true, gazeDiverged: true })
+      })
+    ).toBe('고개 돌림');
+  });
+});
+
+describe('FocusDetailPanel', () => {
+  // Two observed minutes. startedAt must be non-zero: zero is the "session has not
+  // begun" sentinel, and every rate would be withheld.
+  const readyStats = {
+    startedAt: 1_000,
+    updatedAt: 121_000,
+    faceFrames: 100,
+    eyesClosedFrames: 10,
+    blinks: 30,
+    yawns: 1,
+    headTurns: 2,
+    headDowns: 0,
+    aways: 1,
+    gazeDiversions: 3,
+    previousSignals: [],
+    previousEyesClosed: false
+  };
+
+  it('holds back every rate until the session is long enough to have one', () => {
+    render(<FocusDetailPanel indices={focusIndices({ ...readyStats, updatedAt: 10_000 })} />);
+
+    expect(screen.getByText(/1분 정도 지나면/)).toBeInTheDocument();
+    expect(screen.queryByText('피로도')).not.toBeInTheDocument();
+  });
+
+  it('shows the fatigue and distraction readings the panel is for', () => {
+    render(<FocusDetailPanel indices={focusIndices(readyStats)} />);
+
+    expect(screen.getByText('피로도')).toBeInTheDocument();
+    expect(screen.getByText('산만함')).toBeInTheDocument();
+    expect(screen.getByText('하품 빈도')).toBeInTheDocument();
+    expect(screen.getByText('눈 깜빡임')).toBeInTheDocument();
+    expect(screen.getByText('눈 감김 시간')).toBeInTheDocument();
+    expect(screen.getByText('10%')).toBeInTheDocument();
+    expect(screen.getByText('시선 이탈')).toBeInTheDocument();
+    expect(screen.getByText('고개 돌림')).toBeInTheDocument();
+    expect(screen.getByText('자리 비움')).toBeInTheDocument();
+  });
+
+  it('says the readings are private and do not move the score', () => {
+    // The ranking beside this panel names everyone, so the panel has to say out
+    // loud that these numbers are neither shared nor scored.
+    render(<FocusDetailPanel indices={focusIndices(readyStats)} />);
+
+    expect(screen.getByText(/내게만 보이고 점수에는 반영되지 않아요/)).toBeInTheDocument();
+  });
+
+  it('suggests a break only once fatigue is actually high', () => {
+    const rested = focusIndices(readyStats);
+    expect(rested.restSuggested).toBe(false);
+    render(<FocusDetailPanel indices={rested} />);
+    expect(screen.queryByText(/쉬어가는 게 좋겠어요/)).not.toBeInTheDocument();
+
+    const drowsy = focusIndices({ ...readyStats, eyesClosedFrames: 30 });
+    render(<FocusDetailPanel indices={drowsy} />);
+    expect(screen.getByText(/쉬어가는 게 좋겠어요/)).toBeInTheDocument();
   });
 });
 

@@ -1230,3 +1230,100 @@
   font-size: 11px;
   white-space: nowrap;
 }
+
+/* Focus detail — fatigue and distraction readings for the local participant only. */
+.focus-detail__toggle {
+  width: 100%;
+  margin: 8px 0 0;
+  padding: 6px 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--purple-050);
+  color: var(--purple-700);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.focus-detail__toggle:hover {
+  background: var(--purple-100);
+}
+
+.focus-detail {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.focus-detail__pending,
+.focus-detail__foot {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+.focus-gauge__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.focus-gauge__label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.focus-gauge__value {
+  font-size: 18px;
+  color: var(--ink);
+}
+
+.focus-gauge__track {
+  height: 6px;
+  margin-top: 6px;
+  border-radius: var(--r-pill);
+  background: var(--purple-100);
+  overflow: hidden;
+}
+
+.focus-gauge__fill {
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--purple-600);
+}
+
+.focus-gauge__rows {
+  margin: 8px 0 0;
+}
+
+.focus-gauge__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.focus-gauge__row dt {
+  color: var(--text-muted);
+}
+
+.focus-gauge__row dd {
+  margin: 0;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.focus-gauge__note {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  background: var(--purple-050);
+  color: var(--purple-700);
+  font-size: 11px;
+  line-height: 1.5;
+}
