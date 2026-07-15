@@ -2,15 +2,19 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import {
   Coffee,
   LogOut,
+  MessageCircle,
   Mic,
   MicOff,
   MoreHorizontal,
+  Send,
   Video,
-  VideoOff
+  VideoOff,
+  X
 } from 'lucide-react';
 import { RoomiMascot, type RoomiMood } from '../components/RoomiMascot';
 import { InviteCodeCard } from '../components/InviteCodeCard';
 import {
+  type ChatMessage,
   type Goal,
   type Participant,
   type ParticipantStatus,
@@ -41,6 +45,8 @@ interface StudyRoomProps extends ScreenProps {
   participants: Participant[];
   goals: Goal[];
   roomiMessages: RoomiMessage[];
+  chatMessages: ChatMessage[];
+  onSendChatMessage: (text: string) => void;
   room: Room;
   currentSession?: StudySession;
   videoJoin?: VideoJoinInfo;
@@ -165,6 +171,8 @@ export function StudyRoom({
   participants,
   goals,
   roomiMessages,
+  chatMessages,
+  onSendChatMessage,
   room,
   currentSession,
   videoJoin
@@ -185,10 +193,13 @@ export function StudyRoom({
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [isHostMenuOpen, setIsHostMenuOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const [isEndConfirmOpen, setIsEndConfirmOpen] = useState(false);
   const [dismissedFocusMessageId, setDismissedFocusMessageId] = useState<string>();
   const [timestamp, setTimestamp] = useState(() => Date.now());
   const [localAnalysisTrack, setLocalAnalysisTrack] = useState<MediaStreamTrack | null>(null);
+  const [chatInput, setChatInput] = useState('');
+  const chatListRef = useRef<HTMLDivElement>(null);
   const lastReportedFocusStatusRef = useRef<ParticipantStatus | null>(null);
   const currentParticipant =
     studyParticipants.find((participant) => participant.id === currentParticipantId) ??
@@ -315,6 +326,30 @@ export function StudyRoom({
     }
   }, [isCameraOn]);
 
+  useEffect(() => {
+    const list = chatListRef.current;
+    if (list) {
+      list.scrollTop = list.scrollHeight;
+    }
+  }, [chatMessages, isChatOpen]);
+
+  const previousChatCountRef = useRef(chatMessages.length);
+  useEffect(() => {
+    if (chatMessages.length > previousChatCountRef.current) {
+      setIsChatOpen(true);
+    }
+    previousChatCountRef.current = chatMessages.length;
+  }, [chatMessages]);
+
+  const submitChatMessage = () => {
+    const text = chatInput.trim();
+    if (!text) return;
+
+    onSendChatMessage(text);
+    setChatInput('');
+    setIsChatOpen(true);
+  };
+
   const toggleAudio = () => {
     const next = !isMicOn;
     if (callObject) {
@@ -440,6 +475,57 @@ export function StudyRoom({
         </section>
 
         <aside className="study__panel">
+          {isChatOpen && (
+            <section className="chat-panel study-chat" aria-label="채팅">
+              <div className="chat-panel__head">
+                <span className="study-card__title">채팅</span>
+                <button
+                  type="button"
+                  className="chat-panel__close"
+                  aria-label="채팅 닫기"
+                  onClick={() => setIsChatOpen(false)}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="study-chat__list" ref={chatListRef}>
+                {chatMessages.length === 0 && (
+                  <p className="study-chat__empty">아직 메시지가 없어요.</p>
+                )}
+                {chatMessages.map((message) => {
+                  const isMe = message.participantId === currentParticipantId;
+                  return (
+                    <div
+                      className={`study-chat__message${isMe ? ' study-chat__message--me' : ''}`}
+                      key={message.id}
+                    >
+                      <span className="study-chat__author">{message.nickname}</span>
+                      <p className="study-chat__text">{message.text}</p>
+                    </div>
+                  );
+                })}
+              </div>
+              <form
+                className="study-chat__form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  submitChatMessage();
+                }}
+              >
+                <input
+                  className="field study-chat__input"
+                  placeholder="메시지를 입력하세요"
+                  value={chatInput}
+                  onChange={(event) => setChatInput(event.target.value)}
+                  aria-label="채팅 메시지 입력"
+                />
+                <button type="submit" className="ctrl study-chat__send" aria-label="메시지 보내기">
+                  <Send size={16} />
+                </button>
+              </form>
+            </section>
+          )}
+
           <InviteCodeCard inviteCode={room.inviteCode} />
           <section className="study-card study-lumi" aria-label="루미의 실시간 안내">
             <div className="study-lumi__head">
@@ -567,6 +653,16 @@ export function StudyRoom({
           onClick={() => void onStartBreak()}
         >
           <Coffee size={20} />
+        </button>
+
+        <button
+          type="button"
+          className={`ctrl${isChatOpen ? ' ctrl--active' : ''}`}
+          aria-expanded={isChatOpen}
+          aria-label={isChatOpen ? '채팅 닫기' : '채팅 열기'}
+          onClick={() => setIsChatOpen((isOpen) => !isOpen)}
+        >
+          <MessageCircle size={20} />
         </button>
 
         {isHost && (

@@ -1,4 +1,5 @@
 import type {
+  ChatMessage,
   CreateRoomInput,
   FocusRankingEntry,
   Goal,
@@ -24,6 +25,8 @@ import type { VideoProvider } from '../video/daily-video-provider';
 type RoomUpdatedListener = (snapshot: RoomSnapshot) => void;
 type RoomiMessageListener = (message: RoomiMessage) => void;
 type AddRoomiMessageInput = Omit<RoomiMessage, 'id' | 'createdAt'>;
+type AddChatMessageInput = { roomId: string; participantId: string; text: string };
+const CHAT_MESSAGE_MAX_LENGTH = 500;
 
 type FocusTrackerEntry = {
   focusedSeconds: number;
@@ -89,7 +92,8 @@ export class RoomService {
       room,
       participants: [host],
       goals: [],
-      roomiMessages: []
+      roomiMessages: [],
+      chatMessages: []
     };
 
     this.store.saveRoom(snapshot);
@@ -586,6 +590,41 @@ export class RoomService {
     return () => {
       this.roomiMessageListeners.delete(listener);
     };
+  }
+
+  addChatMessage(input: AddChatMessageInput): ChatMessage {
+    const snapshot = this.store.findByRoomId(input.roomId);
+
+    if (!snapshot) {
+      throw new Error('Room not found');
+    }
+
+    const participant = snapshot.participants.find(
+      (candidate) => candidate.id === input.participantId
+    );
+
+    if (!participant) {
+      throw new Error('Participant not found');
+    }
+
+    const text = input.text.trim().slice(0, CHAT_MESSAGE_MAX_LENGTH);
+
+    if (!text) {
+      throw new Error('Chat message text is required');
+    }
+
+    const message: ChatMessage = {
+      id: crypto.randomUUID(),
+      roomId: snapshot.room.id,
+      participantId: participant.id,
+      nickname: participant.nickname,
+      text,
+      createdAt: new Date().toISOString()
+    };
+
+    snapshot.chatMessages = [...snapshot.chatMessages, message].slice(-100);
+    this.store.update(snapshot);
+    return message;
   }
 
   private touchFocusTracker(

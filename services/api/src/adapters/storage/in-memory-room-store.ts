@@ -1,4 +1,4 @@
-import type { Goal, RoomiMessage, Participant, Room, RoomSnapshot } from '@roomi/shared';
+import type { ChatMessage, Goal, RoomiMessage, Participant, Room, RoomSnapshot } from '@roomi/shared';
 import type { RoomStore } from '../../rooms/room-store';
 
 type StoredRoom = {
@@ -6,6 +6,7 @@ type StoredRoom = {
   participants: Participant[];
   goals: Goal[];
   roomiMessages: RoomiMessage[];
+  chatMessages: ChatMessage[];
 };
 
 export class InMemoryRoomStore implements RoomStore {

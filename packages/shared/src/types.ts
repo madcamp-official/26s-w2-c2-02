@@ -62,6 +62,15 @@ export type Goal = {
   createdAt: ISODateString;
 };
 
+export type ChatMessage = {
+  id: string;
+  roomId: string;
+  participantId: string;
+  nickname: string;
+  text: string;
+  createdAt: ISODateString;
+};
+
 export type RoomiMessage = {
   id: string;
   roomId: string;
@@ -100,6 +109,7 @@ export type RoomSnapshot = {
   participants: Participant[];
   goals: Goal[];
   roomiMessages: RoomiMessage[];
+  chatMessages: ChatMessage[];
   currentSession?: StudySession;
 };
 
@@ -139,6 +149,12 @@ export type UpdateParticipantStatusInput = {
   roomId: string;
   participantId: string;
   status: ParticipantStatus;
+};
+
+export type ChatSendInput = {
+  roomId: string;
+  participantId: string;
+  text: string;
 };
 
 export type ParticipantReadyInput = {
