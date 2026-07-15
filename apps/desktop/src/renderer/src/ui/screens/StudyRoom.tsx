@@ -241,36 +241,58 @@ export function focusLabelToParticipantStatus(label: FocusLabel): ParticipantSta
   return 'distracted';
 }
 
+/**
+ * What the camera sees right now, for the local participant's own tile only.
+ * Other people's tiles fall through to their presence status: the room is told
+ * whether someone is focused, never the specific reason they are not.
+ *
+ * Head and face read straight off the current frame so the label tracks what the
+ * viewer is doing as they do it. Eyes and mouth deliberately wait for the
+ * sustained signal instead: every blink would flash `눈 감김`, and a mouth open
+ * for one frame is talking, not a yawn.
+ */
 export function participantStatusLabel(
   participant: Pick<Participant, 'status'>,
   focusSnapshot?: Partial<FocusSnapshot>
 ) {
-  if (focusSnapshot) {
+  const current = focusSnapshot?.current;
+
+  if (focusSnapshot && current) {
     const activeSignals = new Set(focusSnapshot.activeSignals ?? []);
-    if (focusSnapshot.current?.facePresent === false || activeSignals.has('face_missing')) {
+
+    if (!current.facePresent) {
       return '얼굴 없음';
     }
     if (activeSignals.has('eyes_closed') || focusSnapshot.label === 'sleepy') {
       return '눈 감김';
     }
-    if (activeSignals.has('head_down')) {
-      return '고개 숙임';
-    }
-    if (activeSignals.has('head_turned')) {
-      return '시선 이탈';
-    }
     if (activeSignals.has('yawning')) {
       return '하품';
     }
-    if (focusSnapshot.label === 'uncertain') {
-      return '집중 흔들림';
+    if (current.headDown) {
+      return '고개 숙임';
     }
-    if (focusSnapshot.label === 'distracted') {
-      return '주의 이탈';
+    if (current.headTurned) {
+      return '고개 돌림';
+    }
+    if (current.mouthOpen) {
+      return '입 벌림';
     }
   }
 
   return statusLabel[participant.status];
+}
+
+/**
+ * The focus verdict, shown next to the detail label so the two are never
+ * confused: the detail says what is happening, this says whether it counts as
+ * focus. Derived from presence so a tile reads the same for everyone.
+ */
+export function focusVerdictLabel(status: ParticipantStatus) {
+  if (status === 'focused') return '집중중';
+  if (status === 'break') return '휴식';
+  if (status === 'online') return '대기';
+  return '집중 안 함';
 }
 
 function tileDotClass(status: ParticipantStatus) {
@@ -823,6 +845,9 @@ export function StudyRoom({
                           participant,
                           isMe ? focusDetection.focusSnapshot : undefined
                         )}
+                        <span className="tile__verdict">
+                          {focusVerdictLabel(participant.status)}
+                        </span>
                       </span>
                     </footer>
                   </article>

@@ -11,6 +11,7 @@ import {
   DailyParticipantMedia,
   focusLabelToParticipantStatus,
   focusScoreTrendPoints,
+  focusVerdictLabel,
   formatSessionTime,
   participantStatusLabel,
   participantsInStudyRoom,
@@ -179,6 +180,81 @@ describe('StudyRoom focus detection status mapping', () => {
     expect(focusLabelToParticipantStatus('paused')).toBe('paused');
   });
 
+  it('reacts to head signals on the current frame, without waiting for a sustained run', () => {
+    const participant = createParticipant('participant-host', 'Host');
+    const current = {
+      facePresent: true,
+      eyeAspectRatio: 0.3,
+      headYawRatio: 0,
+      headPitchRatio: 0,
+      headPose: null,
+      mouthAspectRatio: 0.1,
+      eyesClosed: false,
+      headTurned: false,
+      headDown: false,
+      mouthOpen: false
+    };
+
+    // activeSignals is empty: the 10s run has not elapsed, but the head is down
+    // right now and the label should already say so.
+    expect(
+      participantStatusLabel(participant, {
+        label: 'focused',
+        activeSignals: [],
+        current: { ...current, headDown: true }
+      })
+    ).toBe('고개 숙임');
+    expect(
+      participantStatusLabel(participant, {
+        label: 'focused',
+        activeSignals: [],
+        current: { ...current, headTurned: true }
+      })
+    ).toBe('고개 돌림');
+  });
+
+  it('waits for the sustained signal before calling an open mouth a yawn', () => {
+    const participant = createParticipant('participant-host', 'Host');
+    const current = {
+      facePresent: true,
+      eyeAspectRatio: 0.3,
+      headYawRatio: 0,
+      headPitchRatio: 0,
+      headPose: null,
+      mouthAspectRatio: 0.7,
+      eyesClosed: false,
+      headTurned: false,
+      headDown: false,
+      mouthOpen: true
+    };
+
+    // A mouth open for one frame is talking, so it must not read as a yawn.
+    expect(
+      participantStatusLabel(participant, { label: 'focused', activeSignals: [], current })
+    ).toBe('입 벌림');
+    expect(
+      participantStatusLabel(participant, { label: 'focused', activeSignals: ['yawning'], current })
+    ).toBe('하품');
+  });
+
+  it('never reveals why someone else is not focused', () => {
+    // No snapshot is passed for other participants, so their tile can only ever
+    // show presence — the room is not told about their head, eyes or mouth.
+    const distracted = createParticipant('participant-other', 'Other');
+    distracted.status = 'distracted';
+
+    expect(participantStatusLabel(distracted)).toBe('주의 이탈');
+  });
+
+  it('separates the focus verdict from the detail label', () => {
+    expect(focusVerdictLabel('focused')).toBe('집중중');
+    expect(focusVerdictLabel('distracted')).toBe('집중 안 함');
+    expect(focusVerdictLabel('away')).toBe('집중 안 함');
+    expect(focusVerdictLabel('paused')).toBe('집중 안 함');
+    expect(focusVerdictLabel('break')).toBe('휴식');
+    expect(focusVerdictLabel('online')).toBe('대기');
+  });
+
   it('shows detailed MediaPipe-derived labels for the local participant', () => {
     const participant = createParticipant('participant-host', 'Host');
     const current = {
@@ -208,20 +284,15 @@ describe('StudyRoom focus detection status mapping', () => {
         current
       })
     ).toBe('눈 감김');
+    // A blink closes the eyes for a fraction of a second, so this one stays on the
+    // sustained signal rather than the frame.
     expect(
       participantStatusLabel(participant, {
-        label: 'distracted',
-        activeSignals: ['head_down'],
-        current
+        label: 'focused',
+        activeSignals: [],
+        current: { ...current, eyesClosed: true }
       })
-    ).toBe('고개 숙임');
-    expect(
-      participantStatusLabel(participant, {
-        label: 'uncertain',
-        activeSignals: ['head_turned'],
-        current
-      })
-    ).toBe('시선 이탈');
+    ).toBe('참여 중');
   });
 });
 
