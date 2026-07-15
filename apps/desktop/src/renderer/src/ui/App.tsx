@@ -75,6 +75,7 @@ const now = () => new Date().toISOString();
 const LOCAL_ROOMI_MESSAGE_LIMIT = 20;
 
 const defaultRoomSettings: RoomSettings = {
+  defaultGameKind: 'hidden_mission',
   sessionMinutes: 50,
   breakMode: 'room',
   breakMinutes: 10,
@@ -466,7 +467,9 @@ export function App() {
       source: 'template' as const
     }));
 
-  const startCurrentGame = (kind: GameKind = 'hidden_mission') => {
+  const startCurrentGame = (
+    kind: GameKind = roomDraft?.room.settings.defaultGameKind ?? 'hidden_mission'
+  ) => {
     if (!roomDraft) return;
 
     if (roomDraft.realtime === 'server') {

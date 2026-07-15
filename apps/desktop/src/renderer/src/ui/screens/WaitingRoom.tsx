@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { RoomiMascot } from '../components/RoomiMascot';
 import { InviteCodeCard } from '../components/InviteCodeCard';
 import {
+  type GameKind,
   type Goal,
   type GoalRefinement,
   type Participant,
@@ -21,6 +22,12 @@ interface WaitingRoomProps extends ScreenProps {
   onJoinSession: () => void | Promise<void>;
   onLeaveRoom: () => void;
 }
+
+const gameLabel: Record<GameKind, string> = {
+  hidden_mission: '숨은 표정 미션',
+  poker_bluff: '포커페이스 블러프',
+  copycat_relay: '카피캣 릴레이'
+};
 
 /** Waiting Room · 대기실 (Figma 70:41). Renders two modes by room.status. */
 export function WaitingRoom({
@@ -213,6 +220,12 @@ export function WaitingRoom({
               ? '진행 중인 세션이에요.'
               : `${readyCount}명이 준비를 마쳤어요.`}
           </p>
+
+          <div className="waiting-game">
+            <span className="waiting-game__label">선택한 게임</span>
+            <strong>{gameLabel[room.settings.defaultGameKind]}</strong>
+            <span>{room.settings.sessionMinutes}분 라운드</span>
+          </div>
 
           <div className="people">
             {people.map((p) => (

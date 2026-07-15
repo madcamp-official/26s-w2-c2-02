@@ -57,7 +57,8 @@ and rolls back the participant instead of returning a local-only video session.
   host start controls, `studying` is the active game round, `break` is an
   intermission, and `ended` opens the results/recap flow.
 - In the active room, the host can start `hidden_mission`, `poker_bluff`, or
-  `copycat_relay`. The renderer exposes hidden mission progress, bluff
+  `copycat_relay` according to `room.settings.defaultGameKind`, which is chosen
+  during room creation. The renderer exposes hidden mission progress, bluff
   bet/tell-check controls, and relay target/similarity controls through the
   shared Socket.IO events below.
 - Hidden mission rounds assign each participant one private mission from a
@@ -100,7 +101,7 @@ Client events are defined in `packages/shared/src/realtime-events.ts`.
 | `participant:ready` | client to server | Set the lobby readiness flag and broadcast `room:updated`. |
 | `goal:submit` | client to server | Legacy prompt/mission text update. Mirrors `POST /rooms/:roomId/goals` and broadcasts `room:updated`. |
 | `participant:update-status` | client to server | Publish player presence and local face-analysis state. Compatibility statuses include `online`, `focused`, `distracted`, `away`, `break`, and `paused`. |
-| `game:start` | client to server | Host starts a face party game (`hidden_mission`, `poker_bluff`, or `copycat_relay`). The server creates `currentGame`, assigns any private missions, and broadcasts `game:round-begin`. |
+| `game:start` | client to server | Host starts a face party game (`hidden_mission`, `poker_bluff`, or `copycat_relay`). The desktop app normally sends the room's `defaultGameKind`. The server creates `currentGame`, assigns any private missions, and broadcasts `game:round-begin`. |
 | `expression:report` | client to server | Submit local expression-derived game results. Hidden mission rounds send a `missionResult`; poker bluff rounds send `signals` so the server can calculate `bluffResult`. |
 | `bluff:bet` | client to server | Submit a player's guess for an expression bluff target. |
 | `relay:advance` | client to server | Submit one relay mirror step with prompt, player expression signals, and similarity score. |

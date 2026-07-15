@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
-import { type RoomSettings } from '@roomi/shared';
+import { ArrowLeft, EyeOff, Repeat2, Smile } from 'lucide-react';
+import { type GameKind, type RoomSettings } from '@roomi/shared';
 import type { ScreenProps } from './types';
 
 /**
@@ -15,15 +15,48 @@ interface CreateRoomProps extends ScreenProps {
   onCreateRoom: (settings: RoomSettings) => void;
 }
 
+const gameOptions: Array<{
+  kind: GameKind;
+  title: string;
+  desc: string;
+  rules: string[];
+  Icon: typeof EyeOff;
+}> = [
+  {
+    kind: 'hidden_mission',
+    title: '숨은 표정 미션',
+    desc: '각자 받은 비밀 표정 미션을 들키지 않고 수행해요.',
+    rules: ['개인 미션은 본인에게만 공개', '표정 카운트 성공 시 10점', '공개 전까지 미션 내용 숨김'],
+    Icon: EyeOff
+  },
+  {
+    kind: 'poker_bluff',
+    title: '포커페이스 블러프',
+    desc: '누가 표정 신호를 드러낼지 베팅하고 판정해요.',
+    rules: ['상대가 무너질지 먼저 예측', '맞힌 베팅은 4점', '끝까지 버티면 대상자 8점'],
+    Icon: Smile
+  },
+  {
+    kind: 'copycat_relay',
+    title: '카피캣 릴레이',
+    desc: '다음 플레이어가 표정을 얼마나 비슷하게 따라 하는지 겨뤄요.',
+    rules: ['대상을 골라 릴레이 전달', '유사도에 따라 최대 10점', '표정 프롬프트를 이어서 진행'],
+    Icon: Repeat2
+  }
+];
+
 export function CreateRoom({ error, isCreating = false, onCreateRoom, go }: CreateRoomProps) {
+  const [gameKind, setGameKind] = useState<GameKind>('hidden_mission');
   const [minutes, setMinutes] = useState(50);
   const [breakMode, setBreakMode] = useState<'room' | 'individual'>('room');
   const [breakMinutes, setBreakMinutes] = useState(10);
   const [scorePublic, setScorePublic] = useState(true);
   const [allowHide, setAllowHide] = useState(true);
+  const selectedGame = gameOptions.find((option) => option.kind === gameKind) ?? gameOptions[0]!;
 
   const createRoom = () => {
     onCreateRoom({
+      defaultGameKind: gameKind,
       sessionMinutes: minutes,
       breakMode,
       breakMinutes,
@@ -54,7 +87,43 @@ export function CreateRoom({ error, isCreating = false, onCreateRoom, go }: Crea
             </button>
           </div>
           <h1 className="create__title">방을 만들어볼까요?</h1>
-          <p className="create__subtitle">함께 집중할 세션 규칙을 정해주세요.</p>
+          <p className="create__subtitle">게임 방식과 라운드 규칙을 먼저 정해주세요.</p>
+
+          <div className="create__section">
+            <div className="create__section-label">게임 방식</div>
+            <div className="create__game-grid">
+              {gameOptions.map(({ kind, title, desc, Icon }) => (
+                <button
+                  key={kind}
+                  type="button"
+                  className={`create-opt create-game${gameKind === kind ? ' create-opt--active' : ''}`}
+                  onClick={() => setGameKind(kind)}
+                >
+                  <span className="create-game__icon">
+                    <Icon size={18} />
+                  </span>
+                  <span>
+                    <span className="create-opt__title">{title}</span>
+                    <span className="create-opt__desc">{desc}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="create__section">
+            <div className="create__section-label">진행 규칙</div>
+            <div className="create-rule">
+              <div>
+                <div className="create-rule__title">{selectedGame.title}</div>
+                <ul className="create-rule__list">
+                  {selectedGame.rules.map((rule) => (
+                    <li key={rule}>{rule}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
 
           <div className="create__section">
             <div className="create__section-label">세션 시간</div>

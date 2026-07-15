@@ -182,20 +182,19 @@ describe('DailyParticipantMedia', () => {
 });
 
 describe('StudyRoom hidden mission progress', () => {
-  it('lets the host choose another game mode before starting a round', () => {
+  it('starts the room-configured game mode', () => {
     const participant = createParticipant('participant-host', 'Host');
     const onStartGame = vi.fn();
+    const room = createRoom('poker_bluff');
 
     render(
       <StudyRoom
         {...baseStudyRoomProps(participant)}
+        room={room}
         onStartGame={onStartGame}
       />
     );
 
-    fireEvent.change(screen.getByLabelText('Game mode'), {
-      target: { value: 'poker_bluff' }
-    });
     fireEvent.click(screen.getByRole('button', { name: 'Start Poker-face bluff' }));
 
     expect(onStartGame).toHaveBeenCalledWith('poker_bluff');
@@ -339,12 +338,13 @@ function baseStudyRoomProps(participant: Participant) {
   };
 }
 
-function createRoom(): Room {
+function createRoom(defaultGameKind: Room['settings']['defaultGameKind'] = 'hidden_mission'): Room {
   return {
     id: 'room-1',
     inviteCode: 'ABC123',
     hostUserId: 'user-host',
     settings: {
+      defaultGameKind,
       sessionMinutes: 10,
       breakMinutes: 5,
       maxParticipants: 4,

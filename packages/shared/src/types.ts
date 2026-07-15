@@ -21,6 +21,7 @@ export type User = {
 };
 
 export type RoomSettings = {
+  defaultGameKind: GameKind;
   sessionMinutes: number;
   breakMode: 'room' | 'individual';
   breakMinutes: number;

@@ -1,6 +1,7 @@
 import type { RoomSettings } from '@roomi/shared';
 
 export const defaultRoomSettings: RoomSettings = {
+  defaultGameKind: 'hidden_mission',
   sessionMinutes: 50,
   breakMode: 'room',
   breakMinutes: 10,

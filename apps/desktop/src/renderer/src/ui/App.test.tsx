@@ -361,6 +361,7 @@ function defaultTestRoomSettings() {
     authMode: 'nickname_code',
     breakMode: 'room',
     breakMinutes: 10,
+    defaultGameKind: 'hidden_mission',
     defaultScoreVisibility: 'public',
     detectionPauseAllowed: true,
     maxParticipants: 4,

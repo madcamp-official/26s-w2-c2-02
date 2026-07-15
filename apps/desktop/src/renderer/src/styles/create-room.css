@@ -7,7 +7,7 @@
 }
 
 .create__card {
-  width: min(640px, 100%);
+  width: min(780px, 100%);
   padding: 36px 40px 32px;
   background: var(--card);
   border-radius: var(--r-card);
@@ -82,6 +82,13 @@
   margin-top: 12px;
 }
 
+.create__game-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
 .create-opt {
   padding: 16px;
   border: 1px solid var(--border);
@@ -117,10 +124,53 @@
 }
 
 .create-opt__desc {
+  display: block;
   margin-top: 6px;
   font-size: 12px;
   color: var(--text-muted);
   line-height: 1.5;
+}
+
+.create-game {
+  display: flex;
+  gap: 12px;
+  min-height: 132px;
+}
+
+.create-game__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-md);
+  color: var(--purple-700);
+  background: var(--purple-050);
+}
+
+.create-rule {
+  margin-top: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--row-bg);
+}
+
+.create-rule__title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--heading);
+}
+
+.create-rule__list {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 
 .toggle-row {
@@ -198,12 +248,16 @@
   background: var(--purple-050);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 760px) {
   .create__card {
     padding: 28px 22px;
   }
 
   .create__duo {
+    grid-template-columns: 1fr;
+  }
+
+  .create__game-grid {
     grid-template-columns: 1fr;
   }
 

@@ -202,7 +202,6 @@ export function StudyRoom({
   const [cameraOn, setCameraOn] = useState(true);
   const [hostMenuOpen, setHostMenuOpen] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
-  const [selectedGameKind, setSelectedGameKind] = useState<GameKind>('hidden_mission');
   const [bluffTargetId, setBluffTargetId] = useState('');
   const [relayTargetId, setRelayTargetId] = useState('');
   const [relaySimilarity, setRelaySimilarity] = useState(0.75);
@@ -325,6 +324,7 @@ export function StudyRoom({
     bluffTargetId || selectableParticipants[0]?.id || currentParticipantId;
   const activeRelayTargetId =
     relayTargetId || selectableParticipants[0]?.id || currentParticipantId;
+  const configuredGameKind = room.settings.defaultGameKind;
   const myBluffBet = currentGame?.bluffBets?.find(
     (bet) => bet.participantId === currentParticipantId
   );
@@ -430,23 +430,18 @@ export function StudyRoom({
                   <span className="goal__who">
                     <Play size={16} />
                   </span>
-                  <select
-                    className="goal__text"
-                    aria-label="Game mode"
-                    value={selectedGameKind}
-                    onChange={(event) => setSelectedGameKind(event.currentTarget.value as GameKind)}
-                  >
-                    <option value="hidden_mission">Hidden mission</option>
-                    <option value="poker_bluff">Poker-face bluff</option>
-                    <option value="copycat_relay">Copycat relay</option>
-                  </select>
+                  <p className="goal__text">
+                    {gameKindLabel(configuredGameKind)}
+                    <br />
+                    <span className="study-focus__meta">Configured when this room was created.</span>
+                  </p>
                 </div>
                 <button
                   type="button"
                   className="btn btn--primary btn--block"
-                  onClick={() => onStartGame?.(selectedGameKind)}
+                  onClick={() => onStartGame?.(configuredGameKind)}
                 >
-                  <Play size={16} /> Start {gameKindLabel(selectedGameKind)}
+                  <Play size={16} /> Start {gameKindLabel(configuredGameKind)}
                 </button>
               </>
             )}

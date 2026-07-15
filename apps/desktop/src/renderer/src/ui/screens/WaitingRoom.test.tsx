@@ -9,6 +9,7 @@ function room(status: RoomStatus = 'waiting'): Room {
     inviteCode: 'ABCDEF',
     hostUserId: 'user-host',
     settings: {
+      defaultGameKind: 'hidden_mission',
       sessionMinutes: 50,
       breakMode: 'room',
       breakMinutes: 10,
@@ -73,6 +74,7 @@ describe('WaitingRoom', () => {
     render(<WaitingRoom {...baseProps()} />);
 
     expect(screen.getByText('2명이 준비를 마쳤어요.')).toBeInTheDocument();
+    expect(screen.getByText('숨은 표정 미션')).toBeInTheDocument();
     expect(screen.queryByText('현재 현황')).not.toBeInTheDocument();
     expect(screen.queryByText('2 / 4명 준비완료')).not.toBeInTheDocument();
   });

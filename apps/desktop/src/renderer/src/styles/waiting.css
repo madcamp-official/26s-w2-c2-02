@@ -158,6 +158,34 @@
   color: var(--text-muted);
 }
 
+.waiting-game {
+  display: grid;
+  gap: 4px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--row-bg);
+}
+
+.waiting-game__label {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--purple-700);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.waiting-game strong {
+  font-size: 14px;
+  color: var(--heading);
+}
+
+.waiting-game span:last-child {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .people {
   margin-top: 18px;
   display: flex;

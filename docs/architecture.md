@@ -57,11 +57,13 @@ clock from those timestamps, so late joiners and reconnecting players see the
 same remaining time without each client becoming its own timer authority.
 
 Face party games use `currentGame` on the room snapshot and Socket.IO events for
-round changes. The API starts rounds, stores hidden missions and scores, sends
-private mission assignments only to the matching participant, and broadcasts
-public game snapshots without hidden mission text until reveal. The renderer
-uses local expression signals to update mission progress, while the API remains
-the authority for multiplayer results.
+round changes. The room's `defaultGameKind` is selected during room creation and
+shown again in the waiting room; the active room starts that configured game
+instead of choosing a mode from the live controls. The API starts rounds, stores
+hidden missions and scores, sends private mission assignments only to the
+matching participant, and broadcasts public game snapshots without hidden
+mission text until reveal. The renderer uses local expression signals to update
+mission progress, while the API remains the authority for multiplayer results.
 
 Roomi's live game host lines are generated on the API side for game start,
 mission results, bluff bets/results, relay progress, and reveal. The
