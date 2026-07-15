@@ -272,16 +272,35 @@ export function registerRealtimeGateway(
       }
     });
 
+    socket.on(realtimeEvents.client.seedRelay, (input) => {
+      try {
+        const game = roomService.seedRelay(
+          input.roomId,
+          input.participantId,
+          input.gameId,
+          input.signals
+        );
+        io.to(input.roomId).emit(realtimeEvents.server.gameRoundBegin, publicGame(game));
+      } catch (error) {
+        socket.emit(realtimeEvents.server.error, errorMessage(error));
+      }
+    });
+
     socket.on(realtimeEvents.client.advanceRelay, (input) => {
       try {
-        const game = roomService.advanceRelay(input.roomId, input.link);
-        io.to(input.roomId).emit(realtimeEvents.server.gameRoundBegin, publicGame(game));
-        void sendRelayReaction(
+        const game = roomService.advanceRelay(
           input.roomId,
-          input.link.fromId,
-          input.link.toId,
-          input.link.similarity
-        ).catch(logGameMessageFailure);
+          input.participantId,
+          input.gameId,
+          input.signals
+        );
+        io.to(input.roomId).emit(realtimeEvents.server.gameRoundBegin, publicGame(game));
+        const link = game.relayLinks?.at(-1);
+        if (link) {
+          void sendRelayReaction(input.roomId, link.fromId, link.toId, link.similarity).catch(
+            logGameMessageFailure
+          );
+        }
       } catch (error) {
         socket.emit(realtimeEvents.server.error, errorMessage(error));
       }

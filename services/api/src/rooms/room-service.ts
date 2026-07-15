@@ -24,6 +24,7 @@ import type {
   VideoJoinInfo
 } from '@roomi/shared';
 import {
+  compareExpressionSignals,
   createInviteCode as createSharedInviteCode,
   normalizeInviteCode
 } from '@roomi/shared';
@@ -612,6 +613,7 @@ export class RoomService {
       missionResults: [],
       bluffBets: kind === 'poker_bluff' ? [] : undefined,
       relayLinks: kind === 'copycat_relay' ? [] : undefined,
+      relayTargetSignals: undefined,
       createdAt: now,
       updatedAt: now
     };
@@ -724,34 +726,89 @@ export class RoomService {
     return snapshot.currentGame;
   }
 
-  advanceRelay(roomId: string, link: RelayLink): GameSession {
+  // Copycat relay has no target pool: the first participant in turn order
+  // seeds the chain with a freely chosen expression, and everyone after them
+  // copies whatever the previous participant just captured.
+  seedRelay(
+    roomId: string,
+    participantId: string,
+    gameId: string,
+    signals: ExpressionSignals
+  ): GameSession {
     const snapshot = this.store.findByRoomId(roomId);
-    if (!snapshot?.currentGame) throw new Error('No active game');
-    if (snapshot.currentGame.kind !== 'copycat_relay') {
-      throw new Error('Relay links require copycat relay');
+    if (!snapshot?.currentGame || snapshot.currentGame.id !== gameId) {
+      throw new Error('No active game');
     }
 
-    const participantIds = new Set(snapshot.participants.map((participant) => participant.id));
-    if (!participantIds.has(link.fromId) || !participantIds.has(link.toId)) {
-      throw new Error('Participant not found');
+    const game = snapshot.currentGame;
+    if (game.kind !== 'copycat_relay') throw new Error('Seeding requires copycat relay');
+    if (game.status !== 'in_round') throw new Error('Round is not in progress');
+
+    const relayLinks = game.relayLinks ?? [];
+    if (relayLinks.length !== 0) throw new Error('Relay has already been seeded this round');
+    if (snapshot.participants[0]?.id !== participantId) {
+      throw new Error('Only the first participant seeds the relay');
     }
 
-    const normalizedLink = {
-      ...link,
-      similarity: Math.max(0, Math.min(1, link.similarity))
+    snapshot.currentGame = {
+      ...game,
+      relayLinks: [{ fromId: participantId, toId: participantId, similarity: 1 }],
+      relayTargetSignals: signals,
+      updatedAt: new Date().toISOString()
     };
-    const scores = snapshot.currentGame.scores.map((score) =>
-      score.participantId === link.toId
-        ? { ...score, points: score.points + Math.round(normalizedLink.similarity * 10) }
+    this.store.update(snapshot);
+    this.emitGameUpdated(snapshot, snapshot.currentGame);
+    return snapshot.currentGame;
+  }
+
+  advanceRelay(
+    roomId: string,
+    participantId: string,
+    gameId: string,
+    signals: ExpressionSignals
+  ): GameSession {
+    const snapshot = this.store.findByRoomId(roomId);
+    if (!snapshot?.currentGame || snapshot.currentGame.id !== gameId) {
+      throw new Error('No active game');
+    }
+
+    const game = snapshot.currentGame;
+    if (game.kind !== 'copycat_relay') throw new Error('Relay links require copycat relay');
+    if (game.status !== 'in_round') throw new Error('Round is not in progress');
+
+    const relayLinks = game.relayLinks ?? [];
+    if (relayLinks.length === 0 || !game.relayTargetSignals) {
+      throw new Error('Relay has not been seeded yet');
+    }
+
+    const turnIndex = relayLinks.length;
+    const currentTurnParticipant = snapshot.participants[turnIndex];
+    if (!currentTurnParticipant || currentTurnParticipant.id !== participantId) {
+      throw new Error('It is not this participant\'s turn');
+    }
+
+    const previousTurnParticipant = snapshot.participants[turnIndex - 1]!;
+    const similarity = compareExpressionSignals(game.relayTargetSignals, signals);
+    const link: RelayLink = { fromId: previousTurnParticipant.id, toId: participantId, similarity };
+
+    const scores = game.scores.map((score) =>
+      score.participantId === participantId
+        ? { ...score, points: score.points + Math.round(similarity * 10) }
         : score
     );
 
-    snapshot.currentGame = {
-      ...snapshot.currentGame,
-      relayLinks: [...(snapshot.currentGame.relayLinks ?? []), normalizedLink],
+    const nextGame: GameSession = {
+      ...game,
+      relayLinks: [...relayLinks, link],
+      relayTargetSignals: signals,
       scores,
       updatedAt: new Date().toISOString()
     };
+
+    snapshot.currentGame =
+      nextGame.relayLinks!.length >= snapshot.participants.length
+        ? this.finishGameRound(snapshot, nextGame)
+        : nextGame;
     this.store.update(snapshot);
     this.emitGameUpdated(snapshot, snapshot.currentGame);
     return snapshot.currentGame;
@@ -1192,6 +1249,7 @@ export class RoomService {
       bluffBets: game.kind === 'poker_bluff' ? [] : undefined,
       bluffResult: undefined,
       relayLinks: game.kind === 'copycat_relay' ? [] : undefined,
+      relayTargetSignals: undefined,
       nextRoundReadyParticipantIds: [],
       nextRoundStartsAt: undefined,
       updatedAt: now

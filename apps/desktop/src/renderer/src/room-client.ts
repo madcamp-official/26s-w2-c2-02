@@ -17,6 +17,7 @@ import type {
   ParticipantReadyInput,
   ExpressionReportInput,
   BluffBetInput,
+  RelaySeedInput,
   RelayAdvanceInput,
   UpdateParticipantStatusInput,
   RoomiMessage,
@@ -159,6 +160,13 @@ export function placeBluffBet(
   input: BluffBetInput
 ) {
   socket?.emit(realtimeEvents.client.placeBluffBet, input);
+}
+
+export function seedRelay(
+  socket: Socket<ServerToClientEvents, ClientToServerEvents> | null,
+  input: RelaySeedInput
+) {
+  socket?.emit(realtimeEvents.client.seedRelay, input);
 }
 
 export function advanceRelay(

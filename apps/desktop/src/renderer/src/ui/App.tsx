@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  compareExpressionSignals,
   createInviteCode,
   normalizeInviteCode,
   type BluffBet,
@@ -50,6 +51,7 @@ import {
   reportExpression,
   revealGame,
   RoomApiError,
+  seedRelay,
   sendChatMessage,
   setGoalAchieved,
   startBreak,
@@ -277,6 +279,7 @@ function createLocalGame(
     missionResults: [],
     bluffBets: kind === 'poker_bluff' ? [] : undefined,
     relayLinks: kind === 'copycat_relay' ? [] : undefined,
+    relayTargetSignals: undefined,
     createdAt: timestamp,
     updatedAt: timestamp
   };
@@ -716,6 +719,45 @@ export function App() {
     go('waiting');
   };
 
+  const returnHomeFromRetrospective = () => {
+    if (roomDraft?.realtime === 'server') {
+      leaveRoom(socketRef.current, {
+        roomId: roomDraft.room.id,
+        participantId: roomDraft.currentParticipantId
+      });
+    }
+    resetRoomRequestState();
+    setRoomDraft(null);
+    go('onboarding-nickname');
+  };
+
+  const restartSessionFromRetrospective = () => {
+    if (activeRoom.room.settings.activityKind !== 'study' && isHost) {
+      void (async () => {
+        await startCurrentSession();
+        startCurrentGame();
+      })();
+      return;
+    }
+
+    setRoomDraft((current) =>
+      current
+        ? {
+            ...current,
+            room: { ...current.room, status: 'waiting' },
+            currentSession: undefined,
+            currentGame: undefined,
+            privateMission: undefined,
+            participants: current.participants.map((participant) => ({
+              ...participant,
+              status: 'online'
+            }))
+          }
+        : current
+    );
+    go('waiting');
+  };
+
   const startCurrentBreak = async () => {
     if (!roomDraft) return;
     if (roomDraft.room.settings.activityKind !== 'study') return;
@@ -1021,46 +1063,95 @@ export function App() {
     });
   };
 
-  const advanceCurrentRelay = (toId: string, similarity: number) => {
+  const seedCurrentRelay = (signals: ExpressionSignals) => {
     if (!roomDraft?.currentGame || roomDraft.currentGame.kind !== 'copycat_relay') return;
-    const link = {
-      fromId: roomDraft.currentParticipantId,
-      toId,
-      similarity: Math.max(0, Math.min(1, similarity))
-    };
 
     if (roomDraft.realtime === 'server') {
-      advanceRelay(socketRef.current, {
+      seedRelay(socketRef.current, {
         roomId: roomDraft.room.id,
         participantId: roomDraft.currentParticipantId,
         gameId: roomDraft.currentGame.id,
-        link
+        signals
       });
       return;
     }
 
     setRoomDraft((current) => {
       if (!current?.currentGame || current.currentGame.kind !== 'copycat_relay') return current;
-      const actor = participantNickname(current.participants, link.fromId);
-      const target = participantNickname(current.participants, link.toId);
-      const similarityPercent = Math.round(link.similarity * 100);
+      if ((current.currentGame.relayLinks ?? []).length !== 0) return current;
+      if (current.participants[0]?.id !== current.currentParticipantId) return current;
+
+      const seeder = participantNickname(current.participants, current.currentParticipantId);
       const next: RoomDraft = {
         ...current,
         currentGame: {
           ...current.currentGame,
-          relayLinks: [...(current.currentGame.relayLinks ?? []), link],
-          scores: current.currentGame.scores.map((score) =>
-            score.participantId === toId
-              ? { ...score, points: score.points + Math.round(link.similarity * 10) }
-              : score
-          ),
+          relayLinks: [
+            { fromId: current.currentParticipantId, toId: current.currentParticipantId, similarity: 1 }
+          ],
+          relayTargetSignals: signals,
           updatedAt: now()
         }
+      };
+      return appendLocalRoomiMessage(next, 'round_prompt', `${seeder}가 릴레이를 시작했어.`);
+    });
+  };
+
+  const advanceCurrentRelay = (signals: ExpressionSignals) => {
+    if (!roomDraft?.currentGame || roomDraft.currentGame.kind !== 'copycat_relay') return;
+
+    if (roomDraft.realtime === 'server') {
+      advanceRelay(socketRef.current, {
+        roomId: roomDraft.room.id,
+        participantId: roomDraft.currentParticipantId,
+        gameId: roomDraft.currentGame.id,
+        signals
+      });
+      return;
+    }
+
+    setRoomDraft((current) => {
+      if (!current?.currentGame || current.currentGame.kind !== 'copycat_relay') return current;
+      const relayLinks = current.currentGame.relayLinks ?? [];
+      const targetSignals = current.currentGame.relayTargetSignals;
+      if (relayLinks.length === 0 || !targetSignals) return current;
+
+      const turnIndex = relayLinks.length;
+      const currentTurnParticipant = current.participants[turnIndex];
+      if (!currentTurnParticipant || currentTurnParticipant.id !== current.currentParticipantId) {
+        return current;
+      }
+
+      const previousTurnParticipant = current.participants[turnIndex - 1]!;
+      const similarity = compareExpressionSignals(targetSignals, signals);
+      const link = { fromId: previousTurnParticipant.id, toId: current.currentParticipantId, similarity };
+      const actor = participantNickname(current.participants, link.fromId);
+      const target = participantNickname(current.participants, link.toId);
+      const similarityPercent = Math.round(similarity * 100);
+
+      const nextGame: GameSession = {
+        ...current.currentGame,
+        relayLinks: [...relayLinks, link],
+        relayTargetSignals: signals,
+        scores: current.currentGame.scores.map((score) =>
+          score.participantId === current.currentParticipantId
+            ? { ...score, points: score.points + Math.round(similarity * 10) }
+            : score
+        ),
+        updatedAt: now()
+      };
+
+      const next: RoomDraft = {
+        ...current,
+        currentGame:
+          nextGame.relayLinks!.length >= current.participants.length
+            ? finishLocalGameRound(nextGame)
+            : nextGame
       };
       return appendLocalRoomiMessage(
         next,
         'round_prompt',
-        `${actor}가 ${target}에게 릴레이를 넘겼어. 유사도는 ${similarityPercent}%야.`
+        `${target}가 ${actor}의 표정을 따라했어. 유사도는 ${similarityPercent}%야.`
       );
     });
   };
@@ -1267,6 +1358,7 @@ export function App() {
             onSubmitMissionResult={submitCurrentMissionResult}
             onSubmitBluffBet={submitCurrentBluffBet}
             onSubmitBluffSignals={submitCurrentBluffSignals}
+            onSeedRelay={seedCurrentRelay}
             onAdvanceRelay={advanceCurrentRelay}
             onReadyNextRound={readyForNextRound}
             onSendChatMessage={submitCurrentChatMessage}
@@ -1289,6 +1381,10 @@ export function App() {
             goals={activeRoom.goals}
             participants={activeRoom.participants}
             currentParticipantId={activeRoom.currentParticipantId}
+            room={activeRoom.room}
+            currentGame={activeRoom.currentGame}
+            onGoHome={returnHomeFromRetrospective}
+            onRestartSession={restartSessionFromRetrospective}
             go={go}
           />
         )}
@@ -1387,6 +1483,7 @@ function startNextLocalRound(room: Room, participants: Participant[], game: Game
     bluffBets: game.kind === 'poker_bluff' ? [] : undefined,
     bluffResult: undefined,
     relayLinks: game.kind === 'copycat_relay' ? [] : undefined,
+    relayTargetSignals: undefined,
     nextRoundReadyParticipantIds: [],
     nextRoundStartsAt: undefined,
     updatedAt: timestamp

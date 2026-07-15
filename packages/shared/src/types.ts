@@ -198,6 +198,7 @@ export type GameSession = {
   bluffBets?: BluffBet[];
   bluffResult?: BluffResult;
   relayLinks?: RelayLink[];
+  relayTargetSignals?: ExpressionSignals;
   createdAt: ISODateString;
   updatedAt: ISODateString;
 };
@@ -351,11 +352,18 @@ export type BluffBetInput = {
   predictsCrack: boolean;
 };
 
+export type RelaySeedInput = {
+  roomId: string;
+  participantId: string;
+  gameId: string;
+  signals: ExpressionSignals;
+};
+
 export type RelayAdvanceInput = {
   roomId: string;
   participantId: string;
   gameId: string;
-  link: RelayLink;
+  signals: ExpressionSignals;
 };
 
 export type GameRevealInput = {

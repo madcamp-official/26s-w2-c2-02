@@ -81,7 +81,8 @@ interface StudyRoomProps extends ScreenProps {
   onSubmitMissionResult?: (result: MissionResult) => void;
   onSubmitBluffBet?: (targetId: string, predictsCrack: boolean) => void;
   onSubmitBluffSignals?: (signals: ExpressionSignals) => void;
-  onAdvanceRelay?: (toId: string, similarity: number) => void;
+  onSeedRelay?: (signals: ExpressionSignals) => void;
+  onAdvanceRelay?: (signals: ExpressionSignals) => void;
   onReadyNextRound?: () => void;
   onSendChatMessage?: (text: string) => void;
   participants: Participant[];
@@ -281,6 +282,7 @@ export function StudyRoom({
   onSubmitMissionResult,
   onSubmitBluffBet,
   onSubmitBluffSignals,
+  onSeedRelay,
   onAdvanceRelay,
   onReadyNextRound,
   onSendChatMessage,
@@ -301,8 +303,6 @@ export function StudyRoom({
   const [hostMenuOpen, setHostMenuOpen] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [bluffTargetId, setBluffTargetId] = useState('');
-  const [relayTargetId, setRelayTargetId] = useState('');
-  const [relaySimilarity, setRelaySimilarity] = useState(0.75);
   const [chatDraft, setChatDraft] = useState('');
   const [resultsOpen, setResultsOpen] = useState(false);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -483,8 +483,10 @@ export function StudyRoom({
   const selectableParticipants = otherParticipants.length > 0 ? otherParticipants : participants;
   const activeBluffTargetId =
     bluffTargetId || selectableParticipants[0]?.id || currentParticipantId;
-  const activeRelayTargetId =
-    relayTargetId || selectableParticipants[0]?.id || currentParticipantId;
+  const relayLinkCount = currentGame?.relayLinks?.length ?? 0;
+  const relayTurnParticipant = participants[relayLinkCount];
+  const isMyRelayTurn = relayTurnParticipant?.id === currentParticipantId;
+  const isRelaySeedTurn = relayLinkCount === 0;
   const configuredGameKind = room.settings.defaultGameKind;
   const myBluffBet = currentGame?.bluffBets?.find(
     (bet) => bet.participantId === currentParticipantId
@@ -933,44 +935,54 @@ export function StudyRoom({
               )}
               {currentGame?.kind === 'copycat_relay' && (
                 <>
-                  <div className="goal">
-                    <span className="goal__who">대상</span>
-                    <select
-                      className="goal__text"
-                      aria-label="릴레이 대상"
-                      value={activeRelayTargetId}
-                      onChange={(event) => setRelayTargetId(event.currentTarget.value)}
-                    >
-                      {selectableParticipants.map((participant) => (
-                        <option value={participant.id} key={participant.id}>
-                          {participant.nickname}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <label className="goal__achieved">
-                    유사도 {Math.round(relaySimilarity * 100)}%
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={Math.round(relaySimilarity * 100)}
-                      onChange={(event) => setRelaySimilarity(Number(event.currentTarget.value) / 100)}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="btn btn--primary btn--block"
-                    onClick={() => onAdvanceRelay?.(activeRelayTargetId, relaySimilarity)}
-                  >
-                    릴레이 넘기기
-                  </button>
-                  {(currentGame.relayLinks ?? []).map((link, index) => (
-                    <p className="study-focus__meta" key={`${link.fromId}-${link.toId}-${index}`}>
-                      {participantName(participants, link.fromId)} →{' '}
-                      {participantName(participants, link.toId)} - {Math.round(link.similarity * 100)}%
+                  {isMyRelayTurn ? (
+                    <>
+                      {isRelaySeedTurn ? (
+                        <p className="study-focus__meta">
+                          자유롭게 표정을 지어보세요. 이 표정이 릴레이의 시작이에요.
+                        </p>
+                      ) : (
+                        <>
+                          <p className="study-focus__meta">
+                            직전 표정을 최대한 따라해보세요: {formatExpressionSummary(currentGame.relayTargetSignals)}
+                          </p>
+                          <p className="study-focus__meta">
+                            내 표정: {formatExpressionSummary(focusDetection.expressionSignals ?? emptyExpressionSignals())}
+                          </p>
+                        </>
+                      )}
+                      <button
+                        type="button"
+                        className="btn btn--primary btn--block"
+                        disabled={focusDetection.status !== 'running' || !focusDetection.expressionSignals}
+                        onClick={() => {
+                          const signals = focusDetection.expressionSignals;
+                          if (!signals) return;
+                          if (isRelaySeedTurn) {
+                            onSeedRelay?.(signals);
+                          } else {
+                            onAdvanceRelay?.(signals);
+                          }
+                        }}
+                      >
+                        {isRelaySeedTurn ? '이 표정으로 시작하기' : '따라했어요! 넘기기'}
+                      </button>
+                    </>
+                  ) : (
+                    <p className="study-focus__meta">
+                      {relayTurnParticipant
+                        ? `${relayTurnParticipant.nickname} 님 차례예요`
+                        : '릴레이 순서를 기다리는 중이에요'}
                     </p>
-                  ))}
+                  )}
+                  {(currentGame.relayLinks ?? [])
+                    .filter((link) => link.fromId !== link.toId)
+                    .map((link, index) => (
+                      <p className="study-focus__meta" key={`${link.fromId}-${link.toId}-${index}`}>
+                        {participantName(participants, link.fromId)} →{' '}
+                        {participantName(participants, link.toId)} - {Math.round(link.similarity * 100)}%
+                      </p>
+                    ))}
                 </>
               )}
             </section>
@@ -1199,6 +1211,11 @@ function emptyExpressionSignals(): ExpressionSignals {
     headPitch: 0,
     headRoll: 0
   };
+}
+
+function formatExpressionSummary(signals: ExpressionSignals | undefined): string {
+  if (!signals) return '표정 신호 없음';
+  return `웃음 ${Math.round(signals.smile * 100)}% · 입벌림 ${Math.round(signals.jawOpen * 100)}% · 눈썹 ${Math.round(signals.browRaise * 100)}%`;
 }
 
 function createDistractionCard(roundId: string, roundIndex: number): DistractionCard {

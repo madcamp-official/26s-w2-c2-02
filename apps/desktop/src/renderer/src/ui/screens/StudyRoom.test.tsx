@@ -786,25 +786,69 @@ describe('StudyRoom hidden mission progress', () => {
     expect(screen.getByText('준비 대기 중')).toBeInTheDocument();
   });
 
-  it('submits copycat relay links with the selected target and similarity', () => {
+  it('lets the first participant seed the copycat relay with their own expression', () => {
     const host = createParticipant('participant-host', 'Host');
     const member = { ...createParticipant('participant-member', 'Member'), role: 'member' as const };
-    const onAdvanceRelay = vi.fn();
+    const onSeedRelay = vi.fn();
     const currentGame = createGame(createRoom(), [host, member], 'copycat_relay');
+    const seedSignals = expressionSignal({ smile: 0.6 });
+    focusDetectionMock.snapshot.expressionSignals = seedSignals;
 
     render(
       <StudyRoom
         {...baseStudyRoomProps(host)}
         currentGame={currentGame}
         participants={[host, member]}
+        onSeedRelay={onSeedRelay}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '이 표정으로 시작하기' }));
+
+    expect(onSeedRelay).toHaveBeenCalledWith(seedSignals);
+  });
+
+  it('lets the next participant in turn copy the previous captured expression', () => {
+    const host = createParticipant('participant-host', 'Host');
+    const member = { ...createParticipant('participant-member', 'Member'), role: 'member' as const };
+    const onAdvanceRelay = vi.fn();
+    const targetSignals = expressionSignal({ smile: 0.6 });
+    const currentGame = {
+      ...createGame(createRoom(), [host, member], 'copycat_relay'),
+      relayLinks: [{ fromId: host.id, toId: host.id, similarity: 1 }],
+      relayTargetSignals: targetSignals
+    };
+    const attemptSignals = expressionSignal({ smile: 0.5 });
+    focusDetectionMock.snapshot.expressionSignals = attemptSignals;
+
+    render(
+      <StudyRoom
+        {...baseStudyRoomProps(member)}
+        currentGame={currentGame}
+        participants={[host, member]}
         onAdvanceRelay={onAdvanceRelay}
       />
     );
 
-    fireEvent.change(screen.getByRole('slider'), { target: { value: '82' } });
-    fireEvent.click(screen.getByRole('button', { name: '릴레이 넘기기' }));
+    fireEvent.click(screen.getByRole('button', { name: '따라했어요! 넘기기' }));
 
-    expect(onAdvanceRelay).toHaveBeenCalledWith(member.id, 0.82);
+    expect(onAdvanceRelay).toHaveBeenCalledWith(attemptSignals);
+  });
+
+  it('shows a waiting message for participants who are not up in the relay', () => {
+    const host = createParticipant('participant-host', 'Host');
+    const member = { ...createParticipant('participant-member', 'Member'), role: 'member' as const };
+    const currentGame = createGame(createRoom(), [host, member], 'copycat_relay');
+
+    render(
+      <StudyRoom
+        {...baseStudyRoomProps(member)}
+        currentGame={currentGame}
+        participants={[host, member]}
+      />
+    );
+
+    expect(screen.getByText('Host 님 차례예요')).toBeInTheDocument();
   });
 });
 

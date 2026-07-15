@@ -1,7 +1,25 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { compareExpressionSignals, type ExpressionSignals } from '@roomi/shared';
 import type { VideoProvider } from '../video/daily-video-provider';
 import { InMemoryRoomStore } from '../adapters/storage/in-memory-room-store';
 import { hiddenMissionTemplates, RoomService } from './room-service';
+
+function expressionSignals(overrides: Partial<ExpressionSignals> = {}): ExpressionSignals {
+  return {
+    timestamp: Date.now(),
+    smile: 0,
+    jawOpen: 0,
+    winkLeft: false,
+    winkRight: false,
+    browRaise: 0,
+    cheekPuff: 0,
+    mouthPucker: 0,
+    headYaw: 0,
+    headPitch: 0,
+    headRoll: 0,
+    ...overrides
+  };
+}
 
 function createService() {
   return new RoomService(new InMemoryRoomStore());
@@ -706,6 +724,102 @@ describe('RoomService face party games', () => {
     expect(() => service.revealGame(created.room.id, member.id, game.id)).toThrow(
       'Only the host can reveal the game'
     );
+  });
+});
+
+describe('RoomService copycat relay', () => {
+  it('seeds the relay with the first participant\'s own expression', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0]!;
+    service.joinRoom({ nickname: 'member', inviteCode: created.room.inviteCode });
+    const game = service.startGame(created.room.id, host.id, 'copycat_relay');
+    const seed = expressionSignals({ smile: 0.6 });
+
+    const updated = service.seedRelay(created.room.id, host.id, game.id, seed);
+
+    expect(updated.relayLinks).toEqual([{ fromId: host.id, toId: host.id, similarity: 1 }]);
+    expect(updated.relayTargetSignals).toEqual(seed);
+    expect(updated.scores.find((score) => score.participantId === host.id)?.points).toBe(0);
+  });
+
+  it('rejects seeding from anyone but the first participant in turn order', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0]!;
+    const joined = service.joinRoom({ nickname: 'member', inviteCode: created.room.inviteCode });
+    const member = joined.participants.at(-1)!;
+    const game = service.startGame(created.room.id, host.id, 'copycat_relay');
+
+    expect(() =>
+      service.seedRelay(created.room.id, member.id, game.id, expressionSignals())
+    ).toThrow('Only the first participant seeds the relay');
+  });
+
+  it('rejects advancing before the relay has been seeded', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0]!;
+    service.joinRoom({ nickname: 'member', inviteCode: created.room.inviteCode });
+    const game = service.startGame(created.room.id, host.id, 'copycat_relay');
+
+    expect(() =>
+      service.advanceRelay(created.room.id, host.id, game.id, expressionSignals())
+    ).toThrow('Relay has not been seeded yet');
+  });
+
+  it('rejects advancing out of turn', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0]!;
+    service.joinRoom({ nickname: 'member', inviteCode: created.room.inviteCode });
+    const game = service.startGame(created.room.id, host.id, 'copycat_relay');
+    service.seedRelay(created.room.id, host.id, game.id, expressionSignals());
+
+    expect(() =>
+      service.advanceRelay(created.room.id, host.id, game.id, expressionSignals())
+    ).toThrow('turn');
+  });
+
+  it('scores the copier by measured similarity to the previous capture and advances the chain', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0]!;
+    const joined = service.joinRoom({ nickname: 'member', inviteCode: created.room.inviteCode });
+    const member = joined.participants.at(-1)!;
+    const game = service.startGame(created.room.id, host.id, 'copycat_relay');
+    const seed = expressionSignals({ smile: 0.6, browRaise: 0.2 });
+    service.seedRelay(created.room.id, host.id, game.id, seed);
+    const attempt = expressionSignals({ smile: 0.5, browRaise: 0.2 });
+
+    const updated = service.advanceRelay(created.room.id, member.id, game.id, attempt);
+
+    const expectedSimilarity = compareExpressionSignals(seed, attempt);
+    const newLink = updated.relayLinks?.at(-1);
+    expect(newLink).toEqual({ fromId: host.id, toId: member.id, similarity: expectedSimilarity });
+    expect(updated.relayTargetSignals).toEqual(attempt);
+    expect(updated.scores.find((score) => score.participantId === member.id)?.points).toBe(
+      Math.round(expectedSimilarity * 10)
+    );
+  });
+
+  it('ends the round once every participant has taken a turn', () => {
+    const service = createService();
+    const created = service.createRoom({
+      nickname: 'host',
+      settings: { activityKind: 'copycat_relay', roundCount: 2 }
+    });
+    const host = created.participants[0]!;
+    const joined = service.joinRoom({ nickname: 'member', inviteCode: created.room.inviteCode });
+    const member = joined.participants.at(-1)!;
+    const game = service.startGame(created.room.id, host.id, 'copycat_relay');
+    service.seedRelay(created.room.id, host.id, game.id, expressionSignals());
+
+    const updated = service.advanceRelay(created.room.id, member.id, game.id, expressionSignals());
+
+    expect(updated.status).toBe('between_round');
+    expect(updated.completedRounds).toHaveLength(1);
+    expect(updated.relayLinks?.length ?? 0).toBe(2);
   });
 });
 
