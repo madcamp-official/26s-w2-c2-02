@@ -890,18 +890,32 @@ export class RoomService {
 
   private createHiddenMissions(participants: Participant[]): HiddenMission[] {
     const templates: Array<Omit<HiddenMission, 'id' | 'playerId'>> = [
-      { prompt: '몰래 윙크 3번 하기', verify: 'wink_count', target: 3 },
-      { prompt: '대화 중 자연스럽게 미소 4번 짓기', verify: 'smile_count', target: 4 },
+      { prompt: '대화 사이에 몰래 윙크 2번 넣기', verify: 'wink_count', target: 2 },
+      { prompt: '누가 말할 때 자연스럽게 윙크 3번 하기', verify: 'wink_count', target: 3 },
+      { prompt: '카메라를 보며 아주 짧게 윙크 4번 하기', verify: 'wink_count', target: 4 },
+      { prompt: '들키지 않게 작게 미소 3번 짓기', verify: 'smile_count', target: 3 },
+      { prompt: '리액션할 때 자연스럽게 미소 4번 섞기', verify: 'smile_count', target: 4 },
+      { prompt: '말을 듣는 척하며 조용히 미소 5번 만들기', verify: 'smile_count', target: 5 },
       { prompt: '이번 라운드 동안 입 크게 벌리지 않기', verify: 'no_jaw_open', target: 0 },
-      { prompt: '눈썹을 5번 올리기', verify: 'brow_count', target: 5 },
-      { prompt: '볼을 2번 부풀리기', verify: 'cheek_puff_count', target: 2 }
+      { prompt: '웃겨도 입을 크게 열지 않고 버티기', verify: 'no_jaw_open', target: 0 },
+      { prompt: '놀란 척하지 말고 입 벌림을 끝까지 숨기기', verify: 'no_jaw_open', target: 0 },
+      { prompt: '눈썹을 살짝 3번 올리기', verify: 'brow_count', target: 3 },
+      { prompt: '중요한 말이 나올 때 눈썹 리액션 4번 하기', verify: 'brow_count', target: 4 },
+      { prompt: '카메라 쪽으로 눈썹을 5번 들어 올리기', verify: 'brow_count', target: 5 },
+      { prompt: '볼을 조용히 2번 부풀리기', verify: 'cheek_puff_count', target: 2 },
+      { prompt: '생각하는 척하며 볼을 3번 부풀리기', verify: 'cheek_puff_count', target: 3 },
+      { prompt: '아무도 모르게 짧은 볼 puff 4번 넣기', verify: 'cheek_puff_count', target: 4 }
     ];
 
-    return participants.map((participant, index) => ({
-      id: crypto.randomUUID(),
-      playerId: participant.id,
-      ...templates[index % templates.length]!
-    }));
+    const shuffled = [...templates].sort(() => Math.random() - 0.5);
+    return participants.map((participant, index) => {
+      const template = shuffled[index % shuffled.length]!;
+      return {
+        id: crypto.randomUUID(),
+        playerId: participant.id,
+        ...template
+      };
+    });
   }
 
   private bluffResultFromSignals(targetId: string, signals: ExpressionSignals): BluffResult {

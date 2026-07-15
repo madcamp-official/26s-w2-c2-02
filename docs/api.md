@@ -60,6 +60,13 @@ and rolls back the participant instead of returning a local-only video session.
   `copycat_relay`. The renderer exposes hidden mission progress, bluff
   bet/tell-check controls, and relay target/similarity controls through the
   shared Socket.IO events below.
+- Hidden mission rounds assign each participant one private mission from a
+  shuffled mission pool. Mission text is not included in public game snapshots
+  until the host reveals the game.
+- Roomi game host messages are emitted through `roomi:message` on game start,
+  player reactions, and reveal. The API asks the configured LLM for these lines
+  and falls back to templates when the LLM is unavailable; prompts include only
+  game actions and visible expression signals, not raw camera frames.
 - The server owns the round timer through `currentSession.startedAt`,
   `currentSession.plannedMinutes`, and optional `breakEndsAt`. Clients calculate
   remaining time from server timestamps, so late joiners see the same clock.
@@ -104,7 +111,7 @@ Client events are defined in `packages/shared/src/realtime-events.ts`.
 | `mission:assign` | server to client | Send one hidden mission only to the assigned participant. |
 | `mission:result` | server to client | Broadcast a submitted mission result without raw camera frames. |
 | `game:reveal` | server to client | Broadcast the revealed game state, including final scores and missions that are now safe to show. |
-| `roomi:message` | server to client | Send a typed Roomi operator/game message. Targeted messages use `targetParticipantId`. |
+| `roomi:message` | server to client | Send a typed Roomi operator/game message. Game messages cover start, live reactions, and reveal. Targeted messages use `targetParticipantId`. |
 | `error` | server to client | Report a recoverable realtime error. |
 
 REST joins also publish `room:updated` to subscribed clients, so a host in the

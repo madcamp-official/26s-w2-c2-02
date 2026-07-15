@@ -3,6 +3,7 @@ import {
   createInviteCode,
   normalizeInviteCode,
   type BluffBet,
+  type BluffTell,
   type ExpressionSignals,
   type GameKind,
   type GameSession,
@@ -71,6 +72,7 @@ type RoomDraft = {
 };
 
 const now = () => new Date().toISOString();
+const LOCAL_ROOMI_MESSAGE_LIMIT = 20;
 
 const defaultRoomSettings: RoomSettings = {
   sessionMinutes: 50,
@@ -198,11 +200,21 @@ function createLocalGame(room: Room, participants: Participant[], kind: GameKind
   const timestamp = now();
   const gameId = `game-${Date.now()}`;
   const templates: Array<Omit<HiddenMission, 'id' | 'playerId'>> = [
-    { prompt: 'Wink 3 times without being obvious', verify: 'wink_count', target: 3 },
-    { prompt: 'Smile naturally 4 times', verify: 'smile_count', target: 4 },
+    { prompt: 'Wink 2 times without being obvious', verify: 'wink_count', target: 2 },
+    { prompt: 'Slip in 3 tiny winks while listening', verify: 'wink_count', target: 3 },
+    { prompt: 'Wink 4 times when someone else talks', verify: 'wink_count', target: 4 },
+    { prompt: 'Smile naturally 3 times', verify: 'smile_count', target: 3 },
+    { prompt: 'React with a small smile 4 times', verify: 'smile_count', target: 4 },
+    { prompt: 'Quietly smile 5 times without calling it out', verify: 'smile_count', target: 5 },
     { prompt: 'Do not open your mouth wide this round', verify: 'no_jaw_open', target: 0 },
-    { prompt: 'Raise your brows 5 times', verify: 'brow_count', target: 5 }
+    { prompt: 'Hold back every big jaw-open reaction', verify: 'no_jaw_open', target: 0 },
+    { prompt: 'Raise your brows 3 times', verify: 'brow_count', target: 3 },
+    { prompt: 'Add 4 subtle brow raises as reactions', verify: 'brow_count', target: 4 },
+    { prompt: 'Raise your brows 5 times', verify: 'brow_count', target: 5 },
+    { prompt: 'Puff your cheeks 2 times', verify: 'cheek_puff_count', target: 2 },
+    { prompt: 'Sneak in 3 tiny cheek puffs', verify: 'cheek_puff_count', target: 3 }
   ];
+  const shuffled = [...templates].sort(() => Math.random() - 0.5);
 
   return {
     id: gameId,
@@ -226,7 +238,7 @@ function createLocalGame(room: Room, participants: Participant[], kind: GameKind
         ? participants.map((participant, index) => ({
             id: `mission-${participant.id}`,
             playerId: participant.id,
-            ...templates[index % templates.length]!
+            ...shuffled[index % shuffled.length]!
           }))
         : [],
     missionResults: [],
@@ -469,7 +481,7 @@ export function App() {
     setRoomDraft((current) => {
       if (!current) return current;
       const game = createLocalGame(current.room, current.participants, kind);
-      return {
+      const next: RoomDraft = {
         ...current,
         room: { ...current.room, status: 'studying' },
         currentGame: game,
@@ -482,6 +494,11 @@ export function App() {
           lastSeenAt: now()
         }))
       };
+      return appendLocalRoomiMessage(
+        next,
+        'game_intro',
+        `${gameLabel(kind)} is live. Watch the table and react with visible moves only.`
+      );
     });
   };
 
@@ -684,22 +701,29 @@ export function App() {
       return;
     }
 
-    setRoomDraft((current) =>
-      current?.currentGame
-        ? {
-            ...current,
-            currentGame: {
-              ...current.currentGame,
-              missionResults: [
-                ...(current.currentGame.missionResults ?? []).filter(
-                  (item) => item.playerId !== result.playerId
-                ),
-                result
-              ]
-            }
-          }
-        : current
-    );
+    setRoomDraft((current) => {
+      if (!current?.currentGame) return current;
+      const actor = participantNickname(current.participants, result.playerId);
+      const next: RoomDraft = {
+        ...current,
+        currentGame: {
+          ...current.currentGame,
+          missionResults: [
+            ...(current.currentGame.missionResults ?? []).filter(
+              (item) => item.playerId !== result.playerId
+            ),
+            result
+          ]
+        }
+      };
+      return appendLocalRoomiMessage(
+        next,
+        'round_prompt',
+        result.success
+          ? `${actor} slipped the secret mission through with ${result.count} counted moves.`
+          : `${actor}'s secret mission is on the board with ${result.count} counted moves.`
+      );
+    });
   };
 
   const submitCurrentBluffBet = (targetId: string, predictsCrack: boolean) => {
@@ -721,25 +745,31 @@ export function App() {
       return;
     }
 
-    setRoomDraft((current) =>
-      current?.currentGame?.kind === 'poker_bluff'
-        ? {
-            ...current,
-            currentGame: {
-              ...current.currentGame,
-              status: 'guessing',
-              round: { ...current.currentGame.round, status: 'guessing' },
-              bluffBets: [
-                ...(current.currentGame.bluffBets ?? []).filter(
-                  (item) => item.participantId !== bet.participantId
-                ),
-                bet
-              ],
-              updatedAt: now()
-            }
-          }
-        : current
-    );
+    setRoomDraft((current) => {
+      if (!current?.currentGame || current.currentGame.kind !== 'poker_bluff') return current;
+      const actor = participantNickname(current.participants, bet.participantId);
+      const target = participantNickname(current.participants, targetId);
+      const next: RoomDraft = {
+        ...current,
+        currentGame: {
+          ...current.currentGame,
+          status: 'guessing',
+          round: { ...current.currentGame.round, status: 'guessing' },
+          bluffBets: [
+            ...(current.currentGame.bluffBets ?? []).filter(
+              (item) => item.participantId !== bet.participantId
+            ),
+            bet
+          ],
+          updatedAt: now()
+        }
+      };
+      return appendLocalRoomiMessage(
+        next,
+        'tell_hint',
+        `${actor} placed a bluff read on ${target}. Keep it to timing, gestures, and visible expression shifts.`
+      );
+    });
   };
 
   const submitCurrentBluffSignals = (signals: ExpressionSignals) => {
@@ -760,7 +790,7 @@ export function App() {
       if (!current?.currentGame || current.currentGame.kind !== 'poker_bluff') return current;
       const cracked =
         signals.smile >= 0.58 || signals.jawOpen >= 0.45 || signals.browRaise >= 0.5;
-      const tell =
+      const tell: BluffTell =
         signals.smile >= 0.58
           ? 'smile'
           : signals.jawOpen >= 0.45
@@ -769,6 +799,7 @@ export function App() {
               ? 'brow'
               : null;
       const targetId = current.currentParticipantId;
+      const actor = participantNickname(current.participants, targetId);
       const scores = current.currentGame.scores.map((score) => {
         const matchedBet = current.currentGame?.bluffBets?.find(
           (bet) => bet.participantId === score.participantId
@@ -778,7 +809,7 @@ export function App() {
         return { ...score, points: score.points + betPoints + targetPoints };
       });
 
-      return {
+      const next: RoomDraft = {
         ...current,
         currentGame: {
           ...current.currentGame,
@@ -792,6 +823,13 @@ export function App() {
           updatedAt: now()
         }
       };
+      return appendLocalRoomiMessage(
+        next,
+        'tell_hint',
+        cracked
+          ? `${actor}'s poker face cracked on ${tell ?? 'a visible signal'}.`
+          : `${actor} held the poker face. +8 points.`
+      );
     });
   };
 
@@ -813,23 +851,30 @@ export function App() {
       return;
     }
 
-    setRoomDraft((current) =>
-      current?.currentGame?.kind === 'copycat_relay'
-        ? {
-            ...current,
-            currentGame: {
-              ...current.currentGame,
-              relayLinks: [...(current.currentGame.relayLinks ?? []), link],
-              scores: current.currentGame.scores.map((score) =>
-                score.participantId === toId
-                  ? { ...score, points: score.points + Math.round(link.similarity * 10) }
-                  : score
-              ),
-              updatedAt: now()
-            }
-          }
-        : current
-    );
+    setRoomDraft((current) => {
+      if (!current?.currentGame || current.currentGame.kind !== 'copycat_relay') return current;
+      const actor = participantNickname(current.participants, link.fromId);
+      const target = participantNickname(current.participants, link.toId);
+      const similarityPercent = Math.round(link.similarity * 100);
+      const next: RoomDraft = {
+        ...current,
+        currentGame: {
+          ...current.currentGame,
+          relayLinks: [...(current.currentGame.relayLinks ?? []), link],
+          scores: current.currentGame.scores.map((score) =>
+            score.participantId === toId
+              ? { ...score, points: score.points + Math.round(link.similarity * 10) }
+              : score
+          ),
+          updatedAt: now()
+        }
+      };
+      return appendLocalRoomiMessage(
+        next,
+        'round_prompt',
+        `${actor} passed the relay to ${target} at ${similarityPercent}% similarity.`
+      );
+    });
   };
 
   const endCurrentSession = () => {
@@ -869,7 +914,7 @@ export function App() {
             })
           }
         : current.currentGame;
-      return {
+      const next: RoomDraft = {
         ...current,
         room: { ...current.room, status: 'ended' },
         currentGame,
@@ -877,6 +922,19 @@ export function App() {
           ? { ...current.currentSession, endedAt: now(), mode: 'ended' }
           : current.currentSession
       };
+      const winner = currentGame?.scores
+        ? [...currentGame.scores].sort((left, right) => right.points - left.points)[0]
+        : undefined;
+      const winnerName = winner
+        ? participantNickname(current.participants, winner.participantId)
+        : 'The table';
+      return currentGame
+        ? appendLocalRoomiMessage(
+            next,
+            'game_reveal',
+            `${winnerName} leads the reveal. Scores are final for this round.`
+          )
+        : next;
     });
     go('retrospective');
   };
@@ -1029,6 +1087,44 @@ function snapshotToDraftPatch(snapshot: {
     currentSession: snapshot.currentSession,
     currentGame: snapshot.currentGame
   };
+}
+
+function createLocalRoomiMessage(
+  roomId: string,
+  kind: RoomiMessage['kind'],
+  text: string
+): RoomiMessage {
+  return {
+    id: `roomi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    roomId,
+    kind,
+    text,
+    createdAt: now()
+  };
+}
+
+function appendLocalRoomiMessage(
+  draft: RoomDraft,
+  kind: RoomiMessage['kind'],
+  text: string
+): RoomDraft {
+  return {
+    ...draft,
+    roomiMessages: [
+      ...draft.roomiMessages,
+      createLocalRoomiMessage(draft.room.id, kind, text)
+    ].slice(-LOCAL_ROOMI_MESSAGE_LIMIT)
+  };
+}
+
+function participantNickname(participants: Participant[], participantId: string) {
+  return participants.find((participant) => participant.id === participantId)?.nickname ?? 'Someone';
+}
+
+function gameLabel(kind: GameKind) {
+  if (kind === 'hidden_mission') return 'Hidden Mission';
+  if (kind === 'poker_bluff') return 'Poker Bluff';
+  return 'Copycat Relay';
 }
 
 function resolvePrivateMission(current: RoomDraft, game: GameSession | undefined) {

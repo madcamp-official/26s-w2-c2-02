@@ -10,6 +10,7 @@ export type RoomiPromptKind =
   | 'poker_bluff'
   | 'copycat_seed'
   | 'game_intro'
+  | 'game_reaction'
   | 'game_reveal'
   | 'game_summary';
 
@@ -80,6 +81,19 @@ export type FacePartyGameMessageInput = {
   winnerNickname?: string;
   visibleSignals?: string[];
   tone?: FacePartyGameTone;
+};
+
+export type FacePartyGameReactionInput = FacePartyGameMessageInput & {
+  event:
+    | 'mission_success'
+    | 'mission_fail'
+    | 'bluff_bet'
+    | 'bluff_cracked'
+    | 'bluff_held'
+    | 'relay_advanced';
+  actorNickname?: string;
+  targetNickname?: string;
+  points?: number;
 };
 
 export class RoomiOrchestrator {
@@ -202,6 +216,14 @@ export class RoomiOrchestrator {
     );
   }
 
+  async generateGameReactionMessage(input: FacePartyGameReactionInput): Promise<string> {
+    return this.generateFacePartyText(
+      'game_reaction',
+      this.buildFacePartyReactionPrompt(input),
+      this.templateGameReactionMessage(input)
+    );
+  }
+
   async generateGameRevealMessage(input: FacePartyGameMessageInput): Promise<string> {
     return this.generateFacePartyText(
       'game_reveal',
@@ -307,6 +329,30 @@ export class RoomiOrchestrator {
     return `${winner} The useful clues were visible signals only${signals}.`;
   }
 
+  private templateGameReactionMessage(input: FacePartyGameReactionInput): string {
+    const actor = input.actorNickname ?? 'Someone';
+    const target = input.targetNickname ? ` toward ${input.targetNickname}` : '';
+    const points = input.points ? ` +${input.points} points.` : '';
+    const signals = this.formatVisibleSignals(input.visibleSignals);
+
+    if (input.event === 'mission_success') {
+      return `${actor} slipped a secret mission through${signals}.${points}`;
+    }
+    if (input.event === 'mission_fail') {
+      return `${actor}'s hidden mission cracked open${signals}. Still useful evidence for the reveal.`;
+    }
+    if (input.event === 'bluff_bet') {
+      return `${actor} placed a bluff read${target}. Watch only visible timing, gestures, and facial movement.`;
+    }
+    if (input.event === 'bluff_cracked') {
+      return `${actor}'s poker face cracked${signals}.${points}`;
+    }
+    if (input.event === 'bluff_held') {
+      return `${actor} held the poker face${signals}.${points}`;
+    }
+    return `${actor} passed the copycat relay${target}${signals}.${points}`;
+  }
+
   private templateGameSummaryMessage(input: FacePartyGameMessageInput): string {
     const name = this.faceGameName(input.game);
     const players = input.playerCount ? `${input.playerCount} players` : 'the table';
@@ -370,6 +416,21 @@ export class RoomiOrchestrator {
     ].join('\n');
   }
 
+  private buildFacePartyReactionPrompt(input: FacePartyGameReactionInput): string {
+    return [
+      'Create a short live reaction from Roomi, the face party game host.',
+      `Game: ${this.faceGameName(input.game)}`,
+      `Event: ${input.event}`,
+      `Actor: ${input.actorNickname ?? 'unspecified'}`,
+      `Target: ${input.targetNickname ?? 'unspecified'}`,
+      `Points: ${input.points ?? 'none'}`,
+      `Visible signals: ${(input.visibleSignals ?? []).join(', ') || 'none provided'}`,
+      `Tone: ${input.tone ?? 'playful'}`,
+      'Privacy rules: mention only visible signals and game actions. Do not say the app detected emotions, lies, intent, attraction, health, or identity traits.',
+      'Output one short sentence only.'
+    ].join('\n');
+  }
+
   private parsePokerBluffOutput(rawOutput: string): PokerBluffPrompt | null {
     const questions: string[] = [];
     const tellHints: string[] = [];
@@ -412,7 +473,7 @@ export class RoomiOrchestrator {
   private async generateFacePartyText(
     kind: Extract<
       RoomiPromptKind,
-      'hidden_mission' | 'game_intro' | 'game_reveal' | 'game_summary'
+      'hidden_mission' | 'game_intro' | 'game_reaction' | 'game_reveal' | 'game_summary'
     >,
     prompt: string,
     fallback: string

@@ -63,6 +63,13 @@ public game snapshots without hidden mission text until reveal. The renderer
 uses local expression signals to update mission progress, while the API remains
 the authority for multiplayer results.
 
+Roomi's live game host lines are generated on the API side for game start,
+mission results, bluff bets/results, relay progress, and reveal. The
+orchestrator calls the configured LLM when available and uses template fallback
+messages otherwise. These prompts only receive player nicknames, game actions,
+scores, and visible expression signal labels; raw video frames and facial
+landmarks stay out of the LLM path.
+
 When the central API is unavailable, the desktop renderer can enter a local
 single-machine demo room so UI and local expression work can continue. That path
 does not replace the central server contract: cross-device joins, Daily media

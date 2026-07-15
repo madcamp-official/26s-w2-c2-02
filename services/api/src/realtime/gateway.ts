@@ -2,12 +2,13 @@ import type { Server as HttpServer } from 'node:http';
 import {
   realtimeEvents,
   type GameSession,
+  type MissionResult,
   type ClientToServerEvents,
   type ServerToClientEvents
 } from '@roomi/shared';
 import { Server } from 'socket.io';
 import { isAllowedClientOrigin } from '../env';
-import { RoomiOrchestrator } from '../roomi/roomi-orchestrator';
+import { RoomiOrchestrator, type FacePartyGameKind } from '../roomi/roomi-orchestrator';
 import type { RoomService } from '../rooms/room-service';
 
 const FOCUS_RECOVERY_DELAY_MS = 60_000;
@@ -154,7 +155,8 @@ export function registerRealtimeGateway(
 
     socket.on(realtimeEvents.client.startGame, (input) => {
       try {
-        roomService.startGame(input.roomId, input.participantId, input.kind);
+        const game = roomService.startGame(input.roomId, input.participantId, input.kind);
+        void sendGameIntro(input.roomId, game).catch(logGameMessageFailure);
       } catch (error) {
         socket.emit(realtimeEvents.server.error, errorMessage(error));
       }
@@ -166,6 +168,7 @@ export function registerRealtimeGateway(
           const game = roomService.recordMissionResult(input.roomId, input.missionResult);
           io.to(input.roomId).emit(realtimeEvents.server.missionResult, input.missionResult);
           io.to(input.roomId).emit(realtimeEvents.server.gameRoundBegin, publicGame(game));
+          void sendMissionReaction(input.roomId, input.missionResult).catch(logGameMessageFailure);
           return;
         }
 
@@ -176,6 +179,7 @@ export function registerRealtimeGateway(
             input.signals
           );
           io.to(input.roomId).emit(realtimeEvents.server.gameRoundBegin, publicGame(game));
+          void sendBluffReaction(input.roomId, input.participantId, game).catch(logGameMessageFailure);
         }
       } catch (error) {
         socket.emit(realtimeEvents.server.error, errorMessage(error));
@@ -190,6 +194,9 @@ export function registerRealtimeGateway(
           predictsCrack: input.predictsCrack
         });
         io.to(input.roomId).emit(realtimeEvents.server.gameRoundBegin, publicGame(game));
+        void sendBluffBetReaction(input.roomId, input.participantId, input.targetId).catch(
+          logGameMessageFailure
+        );
       } catch (error) {
         socket.emit(realtimeEvents.server.error, errorMessage(error));
       }
@@ -199,6 +206,12 @@ export function registerRealtimeGateway(
       try {
         const game = roomService.advanceRelay(input.roomId, input.link);
         io.to(input.roomId).emit(realtimeEvents.server.gameRoundBegin, publicGame(game));
+        void sendRelayReaction(
+          input.roomId,
+          input.link.fromId,
+          input.link.toId,
+          input.link.similarity
+        ).catch(logGameMessageFailure);
       } catch (error) {
         socket.emit(realtimeEvents.server.error, errorMessage(error));
       }
@@ -208,6 +221,7 @@ export function registerRealtimeGateway(
       try {
         const game = roomService.revealGame(input.roomId, input.participantId, input.gameId);
         io.to(input.roomId).emit(realtimeEvents.server.gameReveal, game);
+        void sendGameReveal(input.roomId, game).catch(logGameMessageFailure);
       } catch (error) {
         socket.emit(realtimeEvents.server.error, errorMessage(error));
       }
@@ -272,6 +286,98 @@ export function registerRealtimeGateway(
     });
   }
 
+  async function sendGameIntro(roomId: string, game: GameSession) {
+    const snapshot = roomService.getByRoomId(roomId);
+    const text = await roomiOrchestrator.generateGameIntroMessage({
+      game: toFacePartyGameKind(game.kind),
+      playerCount: snapshot?.participants.length,
+      tone: 'playful'
+    });
+    roomService.addRoomiMessage({ roomId, kind: 'game_intro', text });
+  }
+
+  async function sendMissionReaction(roomId: string, result: MissionResult) {
+    const snapshot = roomService.getByRoomId(roomId);
+    const actor = snapshot?.participants.find((participant) => participant.id === result.playerId);
+    const text = await roomiOrchestrator.generateGameReactionMessage({
+      game: 'hidden_mission',
+      event: result.success ? 'mission_success' : 'mission_fail',
+      actorNickname: actor?.nickname,
+      points: result.success ? 10 : undefined,
+      visibleSignals: [`mission count ${result.count}`],
+      tone: 'playful'
+    });
+    roomService.addRoomiMessage({ roomId, kind: 'round_prompt', text });
+  }
+
+  async function sendBluffBetReaction(roomId: string, participantId: string, targetId: string) {
+    const snapshot = roomService.getByRoomId(roomId);
+    const actor = snapshot?.participants.find((participant) => participant.id === participantId);
+    const target = snapshot?.participants.find((participant) => participant.id === targetId);
+    const text = await roomiOrchestrator.generateGameReactionMessage({
+      game: 'poker_bluff',
+      event: 'bluff_bet',
+      actorNickname: actor?.nickname,
+      targetNickname: target?.nickname,
+      tone: 'playful'
+    });
+    roomService.addRoomiMessage({ roomId, kind: 'tell_hint', text });
+  }
+
+  async function sendBluffReaction(roomId: string, targetId: string, game: GameSession) {
+    const snapshot = roomService.getByRoomId(roomId);
+    const target = snapshot?.participants.find((participant) => participant.id === targetId);
+    const result = game.bluffResult;
+    if (!result) return;
+
+    const text = await roomiOrchestrator.generateGameReactionMessage({
+      game: 'poker_bluff',
+      event: result.cracked ? 'bluff_cracked' : 'bluff_held',
+      actorNickname: target?.nickname,
+      points: result.cracked ? undefined : 8,
+      visibleSignals: result.tell ? [result.tell] : ['steady timing'],
+      tone: 'playful'
+    });
+    roomService.addRoomiMessage({ roomId, kind: 'tell_hint', text });
+  }
+
+  async function sendRelayReaction(
+    roomId: string,
+    fromId: string,
+    toId: string,
+    similarity: number
+  ) {
+    const snapshot = roomService.getByRoomId(roomId);
+    const actor = snapshot?.participants.find((participant) => participant.id === fromId);
+    const target = snapshot?.participants.find((participant) => participant.id === toId);
+    const text = await roomiOrchestrator.generateGameReactionMessage({
+      game: 'copycat',
+      event: 'relay_advanced',
+      actorNickname: actor?.nickname,
+      targetNickname: target?.nickname,
+      points: Math.round(Math.max(0, Math.min(1, similarity)) * 10),
+      visibleSignals: [`${Math.round(Math.max(0, Math.min(1, similarity)) * 100)}% similarity`],
+      tone: 'playful'
+    });
+    roomService.addRoomiMessage({ roomId, kind: 'round_prompt', text });
+  }
+
+  async function sendGameReveal(roomId: string, game: GameSession) {
+    const snapshot = roomService.getByRoomId(roomId);
+    const winner = [...game.scores].sort((left, right) => right.points - left.points)[0];
+    const winnerNickname = snapshot?.participants.find(
+      (participant) => participant.id === winner?.participantId
+    )?.nickname;
+    const text = await roomiOrchestrator.generateGameRevealMessage({
+      game: toFacePartyGameKind(game.kind),
+      playerCount: snapshot?.participants.length,
+      winnerNickname,
+      visibleSignals: visibleSignalsForGame(game),
+      tone: 'playful'
+    });
+    roomService.addRoomiMessage({ roomId, kind: 'game_reveal', text });
+  }
+
 }
 
 function participantChannel(roomId: string, participantId: string) {
@@ -280,6 +386,28 @@ function participantChannel(roomId: string, participantId: string) {
 
 function publicGame(game: GameSession): GameSession {
   return game.status === 'reveal' ? game : { ...game, missions: [] };
+}
+
+function toFacePartyGameKind(kind: GameSession['kind']): FacePartyGameKind {
+  if (kind === 'copycat_relay') return 'copycat';
+  return kind;
+}
+
+function visibleSignalsForGame(game: GameSession): string[] {
+  if (game.kind === 'hidden_mission') {
+    return (game.missionResults ?? []).map((result) => `mission count ${result.count}`);
+  }
+  if (game.kind === 'poker_bluff') {
+    return game.bluffResult?.tell ? [game.bluffResult.tell] : [];
+  }
+  return (game.relayLinks ?? []).map(
+    (link) => `${Math.round(link.similarity * 100)}% similarity`
+  );
+}
+
+function logGameMessageFailure(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`[RealtimeGateway] Roomi game message failed: ${message}`);
 }
 
 function errorMessage(error: unknown) {

@@ -43,6 +43,20 @@ describe('realtime gateway', () => {
     return new Promise((resolve) => client.once(event, resolve));
   }
 
+  function collectRoomiMessages(client: Socket, count: number): Promise<RoomiMessage[]> {
+    const messages: RoomiMessage[] = [];
+    return new Promise((resolve) => {
+      const handler = (message: RoomiMessage) => {
+        messages.push(message);
+        if (messages.length >= count) {
+          client.off(realtimeEvents.server.roomiMessage, handler);
+          resolve(messages);
+        }
+      };
+      client.on(realtimeEvents.server.roomiMessage, handler);
+    });
+  }
+
   beforeEach(async () => {
     roomService = new RoomService(new InMemoryRoomStore());
     httpServer = createServer();
@@ -206,6 +220,7 @@ describe('realtime gateway', () => {
     const roundBegin = new Promise<GameSession>((resolve) =>
       memberClient.once(realtimeEvents.server.gameRoundBegin, resolve)
     );
+    const roomiMessages = collectRoomiMessages(memberClient, 3);
 
     hostClient.emit(realtimeEvents.client.startGame, {
       roomId: created.room.id,
@@ -252,5 +267,12 @@ describe('realtime gateway', () => {
     const revealed = await reveal;
     expect(revealed.status).toBe('reveal');
     expect(revealed.scores.find((score) => score.participantId === host.id)?.points).toBe(10);
+    await expect(roomiMessages).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'game_intro' }),
+        expect.objectContaining({ kind: 'round_prompt' }),
+        expect.objectContaining({ kind: 'game_reveal' })
+      ])
+    );
   });
 });

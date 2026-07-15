@@ -268,4 +268,20 @@ describe('RoomiOrchestrator face party games', () => {
     expect(summary).toContain('visible signals');
     expect([intro, reveal, summary].join(' ')).not.toMatch(/detected emotion|detected lie/i);
   });
+
+  it('generates live game reaction fallbacks for player actions', async () => {
+    const orchestrator = new RoomiOrchestrator();
+
+    const reaction = await orchestrator.generateGameReactionMessage({
+      game: 'poker_bluff',
+      event: 'bluff_cracked',
+      actorNickname: 'Mina',
+      visibleSignals: ['smile'],
+      tone: 'playful'
+    });
+
+    expect(reaction).toContain('Mina');
+    expect(reaction).toContain('smile');
+    expect(reaction).not.toMatch(/detected emotion|detected lie/i);
+  });
 });

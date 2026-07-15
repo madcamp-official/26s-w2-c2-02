@@ -520,6 +520,22 @@ describe('RoomService face party games', () => {
     expect(assigned.sort()).toEqual([host.id, member.id].sort());
   });
 
+  it('assigns varied hidden mission prompts in a round', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    service.joinRoom({ nickname: 'member-1', inviteCode: created.room.inviteCode });
+    service.joinRoom({ nickname: 'member-2', inviteCode: created.room.inviteCode });
+    service.joinRoom({ nickname: 'member-3', inviteCode: created.room.inviteCode });
+    const host = created.participants[0]!;
+
+    const game = service.startGame(created.room.id, host.id, 'hidden_mission');
+    const prompts = new Set(game.missions?.map((mission) => mission.prompt));
+
+    expect(game.missions).toHaveLength(4);
+    expect(prompts.size).toBeGreaterThan(1);
+    expect(game.missions?.every((mission) => mission.prompt.length > 0)).toBe(true);
+  });
+
   it('records mission result and awards points on reveal', () => {
     const service = createService();
     const created = service.createRoom({ nickname: 'host' });
