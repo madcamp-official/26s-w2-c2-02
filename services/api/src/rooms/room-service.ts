@@ -46,12 +46,14 @@ export const hiddenMissionTemplates: ReadonlyArray<Omit<HiddenMission, 'id' | 'p
   { prompt: '들키지 않게 작게 미소 3번 짓기', verify: 'smile_count', target: 3 },
   { prompt: '리액션할 때 자연스럽게 미소 4번 섞기', verify: 'smile_count', target: 4 },
   { prompt: '말을 듣는 척하며 조용히 미소 5번 만들기', verify: 'smile_count', target: 5 },
-  { prompt: '이번 라운드 동안 입 크게 벌리지 않기', verify: 'no_jaw_open', target: 0 },
-  { prompt: '웃겨도 입을 크게 열지 않고 버티기', verify: 'no_jaw_open', target: 0 },
-  { prompt: '놀란 척하지 말고 입 벌림을 끝까지 숨기기', verify: 'no_jaw_open', target: 0 },
+  { prompt: '대답하기 직전에 입을 살짝 2번 벌리기', verify: 'jaw_open_count', target: 2 },
+  { prompt: '놀란 척 아주 짧게 입을 3번 열기', verify: 'jaw_open_count', target: 3 },
   { prompt: '눈썹을 살짝 3번 올리기', verify: 'brow_count', target: 3 },
   { prompt: '중요한 말이 나올 때 눈썹 리액션 4번 하기', verify: 'brow_count', target: 4 },
-  { prompt: '카메라 쪽으로 눈썹을 5번 들어 올리기', verify: 'brow_count', target: 5 }
+  { prompt: '카메라 쪽으로 눈썹을 5번 들어 올리기', verify: 'brow_count', target: 5 },
+  { prompt: '듣는 척하면서 고개를 2번 살짝 끄덕이기', verify: 'nod_count', target: 2 },
+  { prompt: '상대 말 끝에 맞춰 고개를 3번 작게 끄덕이기', verify: 'nod_count', target: 3 },
+  { prompt: '생각난 척 고개를 4번 짧게 끄덕이기', verify: 'nod_count', target: 4 }
 ];
 
 type FocusTrackerEntry = {

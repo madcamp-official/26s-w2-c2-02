@@ -15,6 +15,8 @@ export type ExpressionSettings = {
   browReleaseThreshold: number;
   cheekPuffThreshold: number;
   mouthPuckerThreshold: number;
+  nodPitchThreshold: number;
+  nodReleaseThreshold: number;
   missionCountCooldownMs: number;
 };
 
@@ -34,6 +36,8 @@ export const defaultExpressionSettings: ExpressionSettings = {
   browReleaseThreshold: 0.25,
   cheekPuffThreshold: 0.35,
   mouthPuckerThreshold: 0.45,
+  nodPitchThreshold: 16,
+  nodReleaseThreshold: 7,
   missionCountCooldownMs: 1_000
 };
 
@@ -72,14 +76,6 @@ export function updateHiddenMissionCounter(
   signals: ExpressionSignals,
   settings = defaultExpressionSettings
 ): MissionCounterState {
-  if (verify === 'no_jaw_open') {
-    return {
-      count: signals.jawOpen >= settings.jawOpenThreshold ? 1 : state.count,
-      previousActive: false,
-      failed: state.failed || signals.jawOpen >= settings.jawOpenThreshold
-    };
-  }
-
   const active = expressionMissionActive(state, verify, signals, settings);
 
   const cooldownPassed =
@@ -103,7 +99,12 @@ function expressionMissionActive(
 ) {
   if (verify === 'wink_count') return signals.winkLeft || signals.winkRight;
   if (verify === 'smile_count') return signals.smile >= settings.smileThreshold;
-  if (verify === 'cheek_puff_count') return signals.cheekPuff >= settings.cheekPuffThreshold;
+  if (verify === 'jaw_open_count') return signals.jawOpen >= settings.jawOpenThreshold;
+  if (verify === 'nod_count') {
+    return state.previousActive
+      ? signals.headPitch > settings.nodReleaseThreshold
+      : signals.headPitch >= settings.nodPitchThreshold;
+  }
   if (verify !== 'brow_count') return false;
 
   if (state.previousActive) {
@@ -120,16 +121,11 @@ export function missionResultFromCounter(input: {
   target: number;
   state: MissionCounterState;
 }): MissionResult {
-  const success =
-    input.verify === 'no_jaw_open'
-      ? !input.state.failed
-      : input.state.count >= input.target;
-
   return {
     playerId: input.playerId,
     missionId: input.missionId,
     count: input.state.count,
-    success
+    success: input.state.count >= input.target
   };
 }
 

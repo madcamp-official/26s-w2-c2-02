@@ -99,6 +99,45 @@ describe('expression-pipeline', () => {
     ).toBe(true);
   });
 
+  it('counts short jaw-open actions as a mission event', () => {
+    let state = { count: 0, previousActive: false };
+    const jaw = (timestamp: number, jawOpen: number) =>
+      expressionSignalsFromBlendshapes(categories({ jawOpen }), undefined, timestamp);
+
+    state = updateHiddenMissionCounter(state, 'jaw_open_count', 2, jaw(1_000, 0.48));
+    state = updateHiddenMissionCounter(state, 'jaw_open_count', 2, jaw(1_100, 0.5));
+    state = updateHiddenMissionCounter(state, 'jaw_open_count', 2, jaw(1_300, 0.1));
+    state = updateHiddenMissionCounter(state, 'jaw_open_count', 2, jaw(2_100, 0.48));
+
+    expect(state.count).toBe(2);
+    expect(
+      missionResultFromCounter({
+        playerId: 'p1',
+        missionId: 'm1',
+        verify: 'jaw_open_count',
+        target: 2,
+        state
+      }).success
+    ).toBe(true);
+  });
+
+  it('counts nods only after the head returns near neutral', () => {
+    let state = { count: 0, previousActive: false };
+    const nod = (timestamp: number, headPitch: number) =>
+      updateHiddenMissionCounter(state, 'nod_count', 2, {
+        ...expressionSignalsFromBlendshapes(undefined, undefined, timestamp),
+        headPitch
+      });
+
+    state = nod(1_000, 18);
+    state = nod(2_100, 12);
+    state = nod(3_200, 18);
+    state = nod(4_300, 4);
+    state = nod(5_400, 18);
+
+    expect(state.count).toBe(2);
+  });
+
   it('does not count repeated brow raises inside the mission cooldown', () => {
     let state = { count: 0, previousActive: false };
     const active = (timestamp: number) =>
@@ -129,23 +168,4 @@ describe('expression-pipeline', () => {
     expect(state.count).toBe(2);
   });
 
-  it('marks no-jaw-open missions failed without exposing raw landmarks', () => {
-    const state = updateHiddenMissionCounter(
-      { count: 0, previousActive: false },
-      'no_jaw_open',
-      0,
-      expressionSignalsFromBlendshapes(categories({ jawOpen: 0.8 }))
-    );
-
-    expect(state.failed).toBe(true);
-    expect(
-      missionResultFromCounter({
-        playerId: 'p1',
-        missionId: 'm1',
-        verify: 'no_jaw_open',
-        target: 0,
-        state
-      })
-    ).toEqual({ playerId: 'p1', missionId: 'm1', count: 1, success: false });
-  });
 });

@@ -111,11 +111,12 @@ type ExpressionSignals = {           // expression-pipeline 출력
   winkRight: boolean;
   browRaise: number;
   cheekPuff: number;
+  mouthPucker: number;
   headYaw: number; headPitch: number; headRoll: number;
 };
 
 // 히든 미션: 비공개 배정 + 로컬 카운트 결과만 서버로
-type HiddenMission = { playerId: string; prompt: string; verify: 'wink_count' | 'smile_count' | 'no_jaw_open' | 'brow_count'; target: number };
+type HiddenMission = { playerId: string; prompt: string; verify: 'wink_count' | 'smile_count' | 'jaw_open_count' | 'brow_count' | 'nod_count'; target: number };
 type MissionResult  = { playerId: string; count: number; success: boolean };
 
 // 진실게임: 답변 구간 텔 판정

@@ -505,9 +505,9 @@ function visibleTellLabel(tell: NonNullable<GameSession['bluffResult']>['tell'])
 function hiddenMissionSignalHint(verify: HiddenMissionVerify | undefined): string {
   if (verify === 'wink_count') return '윙크처럼 보이는 깜빡임';
   if (verify === 'smile_count') return '작은 미소가 스친 순간';
+  if (verify === 'jaw_open_count') return '입이 살짝 열린 순간';
   if (verify === 'brow_count') return '눈썹을 치켜뜬 움직임';
-  if (verify === 'cheek_puff_count') return '볼이 살짝 부푼 움직임';
-  if (verify === 'no_jaw_open') return '입 벌림 신호';
+  if (verify === 'nod_count') return '고개를 작게 끄덕인 움직임';
   return '보이는 표정 신호';
 }
 

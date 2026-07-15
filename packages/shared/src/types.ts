@@ -107,9 +107,9 @@ export type ExpressionSignals = {
 export type HiddenMissionVerify =
   | 'wink_count'
   | 'smile_count'
-  | 'no_jaw_open'
+  | 'jaw_open_count'
   | 'brow_count'
-  | 'cheek_puff_count';
+  | 'nod_count';
 
 export type HiddenMission = {
   id: string;

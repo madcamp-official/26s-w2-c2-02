@@ -211,11 +211,14 @@ function createLocalGame(room: Room, participants: Participant[], kind: GameKind
     { prompt: '자연스럽게 미소 3번 짓기', verify: 'smile_count', target: 3 },
     { prompt: '작은 미소 리액션 4번 하기', verify: 'smile_count', target: 4 },
     { prompt: '아무 말 없이 조용히 미소 5번 만들기', verify: 'smile_count', target: 5 },
-    { prompt: '이번 라운드 동안 입 크게 벌리지 않기', verify: 'no_jaw_open', target: 0 },
-    { prompt: '큰 리액션이 나와도 입 벌림을 참기', verify: 'no_jaw_open', target: 0 },
+    { prompt: '대답하기 직전에 입을 살짝 2번 벌리기', verify: 'jaw_open_count', target: 2 },
+    { prompt: '놀란 척 아주 짧게 입을 3번 열기', verify: 'jaw_open_count', target: 3 },
     { prompt: '눈썹을 살짝 3번 올리기', verify: 'brow_count', target: 3 },
     { prompt: '반응할 때 눈썹을 4번 들어 올리기', verify: 'brow_count', target: 4 },
-    { prompt: '카메라 쪽으로 눈썹을 5번 올리기', verify: 'brow_count', target: 5 }
+    { prompt: '카메라 쪽으로 눈썹을 5번 올리기', verify: 'brow_count', target: 5 },
+    { prompt: '듣는 척하면서 고개를 2번 살짝 끄덕이기', verify: 'nod_count', target: 2 },
+    { prompt: '상대 말 끝에 맞춰 고개를 3번 작게 끄덕이기', verify: 'nod_count', target: 3 },
+    { prompt: '생각난 척 고개를 4번 짧게 끄덕이기', verify: 'nod_count', target: 4 }
   ];
   const shuffled = [...templates].sort(() => Math.random() - 0.5);
 
@@ -1347,12 +1350,12 @@ function hiddenMissionSignalNudge(verify: HiddenMissionVerify | undefined): stri
       ? '윙크처럼 보이는 깜빡임'
       : verify === 'smile_count'
         ? '작은 미소가 스친 순간'
-        : verify === 'brow_count'
-          ? '눈썹을 치켜뜬 움직임'
-          : verify === 'cheek_puff_count'
-            ? '볼이 살짝 부푼 움직임'
-            : verify === 'no_jaw_open'
-              ? '입 벌림 신호'
+        : verify === 'jaw_open_count'
+          ? '입이 살짝 열린 순간'
+          : verify === 'brow_count'
+            ? '눈썹을 치켜뜬 움직임'
+            : verify === 'nod_count'
+              ? '고개를 작게 끄덕인 움직임'
               : '보이는 표정 신호';
   return `방금 누군가 ${clue} 살짝 보인 것 같은데...? 못 본 척 자연스럽게 이어가자.`;
 }

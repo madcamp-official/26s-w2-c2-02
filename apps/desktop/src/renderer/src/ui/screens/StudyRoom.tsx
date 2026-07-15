@@ -353,7 +353,7 @@ export function StudyRoom({
       previousReport.success === result.success;
     if (alreadyReported) return;
 
-    if (result.count > 0 || result.success || privateMission.verify === 'no_jaw_open') {
+    if (result.count > 0 || result.success) {
       reportedMissionRef.current = {
         missionId: privateMission.id,
         count: result.count,
