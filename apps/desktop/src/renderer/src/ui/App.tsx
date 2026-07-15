@@ -320,8 +320,14 @@ export function App() {
 
   // An ended room is never joinable. This also covers a participant who receives
   // the terminal snapshot while they are already in the waiting or study screen.
+  // Only fire on the *transition* into 'ended' (tracked via ref), not on every
+  // subsequent screen change — otherwise leaving Retrospective (e.g. "홈으로" /
+  // "한 번 더 집중하기") immediately snaps back because room.status is still 'ended'.
+  const prevRoomStatusRef = useRef(activeRoom.room.status);
   useEffect(() => {
-    if (activeRoom.room.status === 'ended' && screen !== 'retrospective') {
+    const prevStatus = prevRoomStatusRef.current;
+    prevRoomStatusRef.current = activeRoom.room.status;
+    if (activeRoom.room.status === 'ended' && prevStatus !== 'ended' && screen !== 'retrospective') {
       go('retrospective');
     }
   }, [screen, activeRoom.room.status]);
