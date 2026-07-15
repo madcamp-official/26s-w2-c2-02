@@ -1,6 +1,7 @@
 import type {
   ChatMessage,
   ChatSendInput,
+  FocusRankingBroadcast,
   RoomiMessage,
   RoomSnapshot,
   RoomSubscriptionInput,
@@ -24,6 +25,7 @@ export const realtimeEvents = {
     roomUpdated: 'room:updated',
     roomiMessage: 'roomi:message',
     chatMessage: 'chat:message',
+    focusRankingUpdated: 'focus:ranking-updated',
     error: 'error'
   }
 } as const;
@@ -47,5 +49,6 @@ export type ServerToClientEvents = {
   [realtimeEvents.server.roomUpdated]: (snapshot: RoomSnapshot) => void;
   [realtimeEvents.server.roomiMessage]: (message: RoomiMessage) => void;
   [realtimeEvents.server.chatMessage]: (message: ChatMessage) => void;
+  [realtimeEvents.server.focusRankingUpdated]: (payload: FocusRankingBroadcast) => void;
   [realtimeEvents.server.error]: (message: string) => void;
 };

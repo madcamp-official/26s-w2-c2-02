@@ -87,6 +87,7 @@ Client events are defined in `packages/shared/src/realtime-events.ts`.
 | `room:snapshot` | server to client | Send the current room snapshot to a newly subscribed client. |
 | `room:updated` | server to client | Broadcast the latest room snapshot. |
 | `roomi:message` | server to client | Send a typed Roomi operator message. Session-start messages go to the room; `focus_recovery` messages are delivered only to `targetParticipantId`. |
+| `focus:ranking-updated` | server to client | Broadcast `{ roomId, ranking: FocusRankingEntry[] }` — the live focus-minutes ranking while a session is `studying`. Fires immediately on any `participant:update-status`/`room:leave` during the session, plus a 12s heartbeat (`focusRankingHeartbeatMs`) so ranking keeps ticking for a participant who never changes status. Reuses the same `getFocusRanking` formula as `POST /sessions/end`, so live and final numbers never diverge. |
 | `error` | server to client | Report a recoverable realtime error. |
 
 ## Live-session Roomi messages
@@ -94,6 +95,12 @@ Client events are defined in `packages/shared/src/realtime-events.ts`.
 - A successful `POST /sessions` generates a `start` message through Ollama and broadcasts it to every subscribed participant. If Ollama is unavailable, Roomi sends a deterministic template instead.
 - During a `studying` session, a `distracted` or `away` status update can generate a private `focus_recovery` message for that participant. The server limits this to one message per participant per five minutes.
 - The renderer listens for `roomi:message` and displays the latest message in the StudyRoom Roomi panel. Focus-recovery text never travels through `room:updated` snapshots.
+
+## Live focus ranking
+
+- The server tracks accumulated focused seconds per participant in-memory (`RoomService`'s `focusTrackers`), keyed off every `ParticipantStatus` transition. `focus:ranking-updated` exposes that live, before session end.
+- Before a session is `studying`, no `focus:ranking-updated` events are sent — ranking is meaningless until focus tracking starts.
+- The StudyRoom screen renders this as "실시간 집중 순위"; the same `FocusRankingEntry[]` shape also appears in `StudySession.summary.ranking` once `POST /sessions/end` runs.
 
 REST joins also publish `room:updated` to clients already subscribed to the room, so a host waiting in the room sees new participants without refreshing.
 

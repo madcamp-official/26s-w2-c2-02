@@ -584,6 +584,73 @@ describe('RoomService focus ranking', () => {
   });
 });
 
+describe('RoomService live focus ranking broadcast', () => {
+  it('notifies listeners with the current ranking when a status changes mid-session', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    service.startSession(created.room.id, host.id);
+
+    const payloads: Array<{ roomId: string; ranking: unknown[] }> = [];
+    service.onFocusRankingUpdated((payload) => payloads.push(payload));
+
+    service.updateParticipantStatus(created.room.id, host.id, 'distracted');
+
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]?.roomId).toBe(created.room.id);
+    expect(payloads[0]?.ranking).toEqual(service.getFocusRanking(created.room.id));
+  });
+
+  it('does not broadcast a ranking update before the session has started', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+
+    const payloads: unknown[] = [];
+    service.onFocusRankingUpdated((payload) => payloads.push(payload));
+
+    service.updateParticipantStatus(created.room.id, host.id, 'online');
+
+    expect(payloads).toHaveLength(0);
+  });
+
+  it('notifies listeners with the frozen ranking when a participant leaves mid-session', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    const joined = service.joinRoom({ nickname: 'member', inviteCode: created.room.inviteCode });
+    const member = joined.participants.at(-1)!;
+    service.startSession(created.room.id, host.id);
+
+    const payloads: Array<{ roomId: string; ranking: unknown[] }> = [];
+    service.onFocusRankingUpdated((payload) => payloads.push(payload));
+
+    service.leaveRoom(created.room.id, member.id);
+
+    expect(payloads).toHaveLength(1);
+    expect(
+      (payloads[0]?.ranking as Array<{ participantId: string; left: boolean }>).find(
+        (entry) => entry.participantId === member.id
+      )?.left
+    ).toBe(true);
+  });
+
+  it('stops notifying an unsubscribed listener', () => {
+    const service = createService();
+    const created = service.createRoom({ nickname: 'host' });
+    const host = created.participants[0];
+    service.startSession(created.room.id, host.id);
+
+    const payloads: unknown[] = [];
+    const unsubscribe = service.onFocusRankingUpdated((payload) => payloads.push(payload));
+    unsubscribe();
+
+    service.updateParticipantStatus(created.room.id, host.id, 'distracted');
+
+    expect(payloads).toHaveLength(0);
+  });
+});
+
 describe('RoomService.leaveRoom host delegation', () => {
   it('promotes the earliest remaining participant when the host leaves', () => {
     const service = createService();

@@ -3,6 +3,7 @@ import {
   createInviteCode,
   normalizeInviteCode,
   type ChatMessage,
+  type FocusRankingEntry,
   type Goal,
   type Participant,
   type ParticipantStatus,
@@ -58,6 +59,7 @@ type RoomDraft = {
   currentSession?: StudySession;
   realtime: 'local' | 'server';
   videoJoin?: VideoJoinInfo;
+  focusRanking: FocusRankingEntry[];
 };
 
 const now = () => new Date().toISOString();
@@ -127,7 +129,8 @@ const fallbackRoom: RoomDraft = {
   ],
   goals: [],
   roomiMessages: [],
-  chatMessages: []
+  chatMessages: [],
+  focusRanking: []
 };
 
 function createRoomDraft(nickname: string, settings: RoomSettings): RoomDraft {
@@ -163,7 +166,8 @@ function createRoomDraft(nickname: string, settings: RoomSettings): RoomDraft {
     ],
     goals: [],
     roomiMessages: [],
-    chatMessages: []
+    chatMessages: [],
+    focusRanking: []
   };
 }
 
@@ -211,7 +215,8 @@ function joinRoomDraft(nickname: string, inviteCode: string): RoomDraft {
     ],
     goals: [],
     roomiMessages: [],
-    chatMessages: []
+    chatMessages: [],
+    focusRanking: []
   };
 }
 
@@ -225,7 +230,8 @@ function roomSessionToDraft(session: RoomSession): RoomDraft {
     roomiMessages: session.snapshot.roomiMessages,
     chatMessages: session.snapshot.chatMessages,
     currentSession: session.snapshot.currentSession,
-    videoJoin: session.videoJoin
+    videoJoin: session.videoJoin,
+    focusRanking: []
   };
 }
 
@@ -299,6 +305,13 @@ export function App() {
         setRoomDraft((current) =>
           current && current.room.id === message.roomId
             ? { ...current, chatMessages: [...current.chatMessages, message].slice(-100) }
+            : current
+        );
+      },
+      (payload) => {
+        setRoomDraft((current) =>
+          current && current.room.id === payload.roomId
+            ? { ...current, focusRanking: payload.ranking }
             : current
         );
       }
@@ -849,6 +862,7 @@ export function App() {
             room={activeRoom.room}
             currentSession={activeRoom.currentSession}
             videoJoin={activeRoom.videoJoin}
+            focusRanking={activeRoom.focusRanking}
             onUpdatePresence={setCurrentSessionPresence}
             onStartBreak={startCurrentBreak}
             go={go}

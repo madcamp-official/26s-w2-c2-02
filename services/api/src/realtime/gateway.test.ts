@@ -1,6 +1,11 @@
 import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { realtimeEvents, type RoomiMessage, type RoomSnapshot } from '@roomi/shared';
+import {
+  realtimeEvents,
+  type FocusRankingBroadcast,
+  type RoomiMessage,
+  type RoomSnapshot
+} from '@roomi/shared';
 import { io as createClient, type Socket } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { InMemoryRoomStore } from '../adapters/storage/in-memory-room-store';
@@ -34,6 +39,12 @@ describe('realtime gateway', () => {
 
   function once(client: Socket, event: string): Promise<RoomSnapshot> {
     return new Promise((resolve) => client.once(event, resolve));
+  }
+
+  function onceFocusRanking(client: Socket): Promise<FocusRankingBroadcast> {
+    return new Promise((resolve) =>
+      client.once(realtimeEvents.server.focusRankingUpdated, resolve)
+    );
   }
 
   beforeEach(async () => {
@@ -177,5 +188,131 @@ describe('realtime gateway', () => {
     const [hostSnapshot, memberSnapshot] = await Promise.all([hostUpdate, memberUpdate]);
     expect(hostSnapshot.roomiMessages).toEqual([]);
     expect(memberSnapshot.roomiMessages).toHaveLength(1);
+  });
+
+  it('broadcasts a live focus ranking update to everyone in the room when a status changes', async () => {
+    const created = roomService.createRoom({ nickname: 'host' });
+    const started = roomService.startSession(created.room.id, created.participants[0].id);
+    const joined = roomService.joinRoom({ nickname: 'member', inviteCode: started.room.inviteCode });
+    const member = joined.participants.at(-1)!;
+    const [hostClient, memberClient] = await Promise.all([connectClient(), connectClient()]);
+    await Promise.all([
+      subscribe(hostClient, started.room.id, created.participants[0].id),
+      subscribe(memberClient, started.room.id, member.id)
+    ]);
+
+    const hostRanking = onceFocusRanking(hostClient);
+    const memberRanking = onceFocusRanking(memberClient);
+
+    memberClient.emit(realtimeEvents.client.updateStatus, {
+      roomId: started.room.id,
+      participantId: member.id,
+      status: 'focused'
+    });
+
+    const [hostPayload, memberPayload] = await Promise.all([hostRanking, memberRanking]);
+
+    expect(hostPayload.roomId).toBe(started.room.id);
+    expect(hostPayload.ranking.map((entry) => entry.participantId)).toContain(member.id);
+    expect(memberPayload).toEqual(hostPayload);
+  });
+
+  it('does not broadcast a focus ranking update before the session has started', async () => {
+    const created = roomService.createRoom({ nickname: 'host' });
+    const hostId = created.participants[0].id;
+    const client = await connectClient();
+    await subscribe(client, created.room.id, hostId);
+
+    let receivedRanking = false;
+    client.once(realtimeEvents.server.focusRankingUpdated, () => {
+      receivedRanking = true;
+    });
+
+    const update = once(client, realtimeEvents.server.roomUpdated);
+    client.emit(realtimeEvents.client.updateStatus, {
+      roomId: created.room.id,
+      participantId: hostId,
+      status: 'online'
+    });
+    await update;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(receivedRanking).toBe(false);
+  });
+});
+
+describe('realtime gateway focus ranking heartbeat', () => {
+  let httpServer: HttpServer;
+  let roomService: RoomService;
+  let port: number;
+  const clients: Socket[] = [];
+
+  function connectClient(): Promise<Socket> {
+    const client = createClient(`http://localhost:${port}`, {
+      transports: ['websocket']
+    });
+    clients.push(client);
+    return new Promise((resolve) => client.on('connect', () => resolve(client)));
+  }
+
+  function subscribe(
+    client: Socket,
+    roomId: string,
+    participantId: string
+  ): Promise<RoomSnapshot | undefined> {
+    return new Promise((resolve) => {
+      client.emit(realtimeEvents.client.subscribeRoom, { roomId, participantId }, resolve);
+    });
+  }
+
+  function onceFocusRanking(client: Socket): Promise<FocusRankingBroadcast> {
+    return new Promise((resolve) =>
+      client.once(realtimeEvents.server.focusRankingUpdated, resolve)
+    );
+  }
+
+  beforeEach(async () => {
+    roomService = new RoomService(new InMemoryRoomStore());
+    httpServer = createServer();
+    registerRealtimeGateway(httpServer, roomService, new RoomiOrchestrator(), {
+      focusRecoveryDelayMs: 0,
+      focusRankingHeartbeatMs: 20
+    });
+    await new Promise<void>((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
+    port = (httpServer.address() as AddressInfo).port;
+  });
+
+  afterEach(async () => {
+    clients.forEach((client) => client.disconnect());
+    clients.length = 0;
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  });
+
+  it('keeps broadcasting ranking updates on a heartbeat even with no status change', async () => {
+    const created = roomService.createRoom({ nickname: 'host' });
+    const started = roomService.startSession(created.room.id, created.participants[0].id);
+    const client = await connectClient();
+    await subscribe(client, started.room.id, created.participants[0].id);
+
+    const payload = await onceFocusRanking(client);
+    expect(payload.roomId).toBe(started.room.id);
+  });
+
+  it('stops the heartbeat once the session ends', async () => {
+    const created = roomService.createRoom({ nickname: 'host' });
+    const started = roomService.startSession(created.room.id, created.participants[0].id);
+    const client = await connectClient();
+    await subscribe(client, started.room.id, created.participants[0].id);
+    await onceFocusRanking(client);
+
+    roomService.endSession(started.room.id, created.participants[0].id);
+
+    let receivedAfterEnd = false;
+    client.once(realtimeEvents.server.focusRankingUpdated, () => {
+      receivedAfterEnd = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    expect(receivedAfterEnd).toBe(false);
   });
 });

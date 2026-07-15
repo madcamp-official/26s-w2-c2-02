@@ -87,6 +87,11 @@ export type FocusRankingEntry = {
   left: boolean;
 };
 
+export type FocusRankingBroadcast = {
+  roomId: string;
+  ranking: FocusRankingEntry[];
+};
+
 export type SessionSummary = {
   focusMinutes: number;
   goalCompletionRate: number;

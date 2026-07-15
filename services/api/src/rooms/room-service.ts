@@ -1,6 +1,7 @@
 import type {
   ChatMessage,
   CreateRoomInput,
+  FocusRankingBroadcast,
   FocusRankingEntry,
   Goal,
   JoinRoomInput,
@@ -24,6 +25,7 @@ import type { VideoProvider } from '../video/daily-video-provider';
 
 type RoomUpdatedListener = (snapshot: RoomSnapshot) => void;
 type RoomiMessageListener = (message: RoomiMessage) => void;
+type FocusRankingListener = (payload: FocusRankingBroadcast) => void;
 type AddRoomiMessageInput = Omit<RoomiMessage, 'id' | 'createdAt'>;
 type AddChatMessageInput = { roomId: string; participantId: string; text: string };
 const CHAT_MESSAGE_MAX_LENGTH = 500;
@@ -40,6 +42,7 @@ export class RoomService {
   private readonly dailyRooms = new Map<string, { name: string; roomUrl: string }>();
   private readonly roomUpdatedListeners = new Set<RoomUpdatedListener>();
   private readonly roomiMessageListeners = new Set<RoomiMessageListener>();
+  private readonly focusRankingListeners = new Set<FocusRankingListener>();
   // Keyed by roomId, then participantId. Every ParticipantStatus transition funnels through
   // updateParticipantStatus, so this is the single seam a future focus-detection integration
   // (MediaPipe, ML) needs to call into — no other ranking code has to change.
@@ -175,6 +178,11 @@ export class RoomService {
     );
     this.store.update(snapshot);
     this.emitRoomUpdated(snapshot);
+
+    if (snapshot.room.status === 'studying') {
+      this.emitFocusRanking(roomId);
+    }
+
     return snapshot;
   }
 
@@ -535,6 +543,11 @@ export class RoomService {
 
     this.store.update(snapshot);
     this.emitRoomUpdated(snapshot);
+
+    if (snapshot.room.status === 'studying') {
+      this.emitFocusRanking(roomId);
+    }
+
     return snapshot;
   }
 
@@ -566,6 +579,16 @@ export class RoomService {
 
     return () => {
       this.roomUpdatedListeners.delete(listener);
+    };
+  }
+
+  // Lets the gateway push live focus minutes to clients without them polling
+  // /sessions/end. Reuses getFocusRanking, so there is only one ranking formula.
+  onFocusRankingUpdated(listener: FocusRankingListener): () => void {
+    this.focusRankingListeners.add(listener);
+
+    return () => {
+      this.focusRankingListeners.delete(listener);
     };
   }
 
@@ -788,6 +811,11 @@ export class RoomService {
 
   private emitRoomUpdated(snapshot: RoomSnapshot) {
     this.roomUpdatedListeners.forEach((listener) => listener(snapshot));
+  }
+
+  private emitFocusRanking(roomId: string) {
+    const ranking = this.getFocusRanking(roomId);
+    this.focusRankingListeners.forEach((listener) => listener({ roomId, ranking }));
   }
 
   private withVisibleMessages(snapshot: RoomSnapshot, participantId?: string): RoomSnapshot {
