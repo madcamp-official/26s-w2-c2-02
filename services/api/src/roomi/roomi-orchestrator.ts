@@ -1,4 +1,4 @@
-import type { GoalRefinement } from '@roomi/shared';
+import type { GameKind, GoalRefinement } from '@roomi/shared';
 
 export type RoomiPromptKind =
   | 'goal_refine'
@@ -80,6 +80,7 @@ export type FacePartyGameMessageInput = {
   playerCount?: number;
   winnerNickname?: string;
   visibleSignals?: string[];
+  playStyles?: string[];
   tone?: FacePartyGameTone;
 };
 
@@ -93,13 +94,24 @@ export type FacePartyGameReactionInput = FacePartyGameMessageInput & {
     | 'relay_advanced';
   actorNickname?: string;
   targetNickname?: string;
+  actorPlayStyle?: string;
+  targetPlayStyle?: string;
   points?: number;
 };
 
 export class RoomiOrchestrator {
   constructor(private readonly generator?: TextGenerator) {}
 
-  async refineGoal(rawGoal: string, sessionMinutes: number): Promise<GoalRefinement> {
+  async refineGoal(
+    rawGoal: string,
+    sessionMinutes: number,
+    mode: 'study_goal' | 'play_style' = 'study_goal',
+    gameKind: GameKind = 'hidden_mission'
+  ): Promise<GoalRefinement> {
+    if (mode === 'play_style') {
+      return this.refinePlayStyle(rawGoal, gameKind);
+    }
+
     if (this.generator) {
       try {
         const refinedText = this.sanitizeRefinedText(
@@ -121,6 +133,28 @@ export class RoomiOrchestrator {
     }
 
     return this.templateRefinement(rawGoal, sessionMinutes);
+  }
+
+  private async refinePlayStyle(rawStyle: string, gameKind: GameKind): Promise<GoalRefinement> {
+    if (this.generator) {
+      try {
+        const refinedText = this.sanitizeRefinedText(
+          await this.generator.generateText(this.buildPlayStylePrompt(rawStyle, gameKind))
+        );
+
+        if (refinedText && this.isKoreanText(refinedText)) {
+          return {
+            refinedText,
+            reason: '루미가 이번 게임에서 써먹기 좋은 플레이 스타일로 골랐어요.',
+            source: 'ollama'
+          };
+        }
+      } catch (error) {
+        this.logGeneratorFailure('goal_refine', error);
+      }
+    }
+
+    return this.templatePlayStyle(rawStyle, gameKind);
   }
 
   async generateStartMessage(input: StartMessageInput): Promise<string> {
@@ -323,13 +357,15 @@ export class RoomiOrchestrator {
   private templateGameIntroMessage(input: FacePartyGameMessageInput): string {
     const name = this.faceGameName(input.game);
     const round = input.roundNumber ? ` ${input.roundNumber}라운드.` : '';
-    return `${name}${round} 가볍게 시작해보자. 타이밍, 제스처, 시선 방향, 표정 움직임처럼 눈에 보이는 단서만 사용할게.`;
+    const styles = this.formatPlayStyles(input.playStyles);
+    return `${name}${round} 가볍게 시작해보자. 타이밍, 제스처, 시선 방향, 표정 움직임처럼 눈에 보이는 단서만 사용할게.${styles}`;
   }
 
   private templateGameRevealMessage(input: FacePartyGameMessageInput): string {
     const winner = input.winnerNickname ? `${input.winnerNickname}이 이번 라운드를 가져갔어.` : '공개 시간이야.';
     const signals = this.formatVisibleSignals(input.visibleSignals);
-    return `${winner} 참고한 단서는 눈에 보이는 신호뿐이야${signals}.`;
+    const styles = this.formatPlayStyles(input.playStyles);
+    return `${winner} 참고한 단서는 눈에 보이는 신호뿐이야${signals}.${styles}`;
   }
 
   private templateGameReactionMessage(input: FacePartyGameReactionInput): string {
@@ -337,30 +373,33 @@ export class RoomiOrchestrator {
     const target = input.targetNickname ? ` ${input.targetNickname}에게` : '';
     const points = input.points ? ` +${input.points}점.` : '';
     const signals = this.formatVisibleSignals(input.visibleSignals);
+    const actorStyle = input.actorPlayStyle ? ` 오늘 스타일 "${input.actorPlayStyle}"도 꽤 살아났어.` : '';
+    const targetStyle = input.targetPlayStyle ? ` ${input.targetPlayStyle} 모드로 받아쳐보자.` : '';
 
     if (input.event === 'mission_success') {
-      return `${actor}의 비밀 미션 성공${signals}.${points}`;
+      return `${actor}의 비밀 미션 성공${signals}.${points}${actorStyle}`;
     }
     if (input.event === 'mission_fail') {
-      return `${actor}의 비밀 미션 기록이 공개됐어${signals}. 공개 때 참고할 단서가 됐어.`;
+      return `${actor}의 비밀 미션 기록이 공개됐어${signals}. 공개 때 참고할 단서가 됐어.${actorStyle}`;
     }
     if (input.event === 'bluff_bet') {
-      return `${actor}가${target} 블러프 판정을 걸었어. 타이밍, 제스처, 표정 움직임만 보자.`;
+      return `${actor}가${target} 블러프 판정을 걸었어. 타이밍, 제스처, 표정 움직임만 보자.${targetStyle}`;
     }
     if (input.event === 'bluff_cracked') {
-      return `${actor}의 포커페이스가 흔들렸어${signals}.${points}`;
+      return `${actor}의 포커페이스가 흔들렸어${signals}.${points}${actorStyle}`;
     }
     if (input.event === 'bluff_held') {
-      return `${actor}가 포커페이스를 지켰어${signals}.${points}`;
+      return `${actor}가 포커페이스를 지켰어${signals}.${points}${actorStyle}`;
     }
-    return `${actor}가${target} 카피캣 릴레이를 넘겼어${signals}.${points}`;
+    return `${actor}가${target} 카피캣 릴레이를 넘겼어${signals}.${points}${actorStyle}${targetStyle}`;
   }
 
   private templateGameSummaryMessage(input: FacePartyGameMessageInput): string {
     const name = this.faceGameName(input.game);
     const players = input.playerCount ? `${input.playerCount}명` : '이번 방';
     const signals = this.formatVisibleSignals(input.visibleSignals);
-    return `${name}이 ${players}과 함께 끝났어. 감정이나 진실 여부를 추측하지 않고 보이는 신호만 참고했어${signals}.`;
+    const styles = this.formatPlayStyles(input.playStyles);
+    return `${name}이 ${players}과 함께 끝났어. 감정이나 진실 여부를 추측하지 않고 보이는 신호만 참고했어${signals}.${styles}`;
   }
 
   private buildHiddenMissionPrompt(input: HiddenMissionPromptInput): string {
@@ -413,8 +452,9 @@ export class RoomiOrchestrator {
       `참가자 수: ${input.playerCount ?? '미지정'}`,
       `승자: ${input.winnerNickname ?? '미지정'}`,
       `보이는 신호: ${(input.visibleSignals ?? []).join(', ') || '제공 없음'}`,
+      `참가자 플레이 스타일: ${(input.playStyles ?? []).join(', ') || '제공 없음'}`,
       `톤: ${input.tone ?? '친근함'}`,
-      '규칙: 반드시 한국어로만 출력. 보이는 신호만 언급하고 감정, 거짓말, 의도, 호감, 건강, 정체성 특성을 탐지했다고 말하지 마.',
+      '규칙: 반드시 한국어로만 출력. 보이는 신호와 참가자가 직접 정한 플레이 스타일만 언급하고 감정, 거짓말, 의도, 호감, 건강, 정체성 특성을 탐지했다고 말하지 마.',
       '짧은 한두 문장만 출력해.'
     ].join('\n');
   }
@@ -426,10 +466,12 @@ export class RoomiOrchestrator {
       `이벤트: ${input.event}`,
       `행동한 참가자: ${input.actorNickname ?? '미지정'}`,
       `대상 참가자: ${input.targetNickname ?? '미지정'}`,
+      `행동한 참가자 플레이 스타일: ${input.actorPlayStyle ?? '제공 없음'}`,
+      `대상 참가자 플레이 스타일: ${input.targetPlayStyle ?? '제공 없음'}`,
       `점수: ${input.points ?? '없음'}`,
       `보이는 신호: ${(input.visibleSignals ?? []).join(', ') || '제공 없음'}`,
       `톤: ${input.tone ?? '장난스럽고 가벼움'}`,
-      '규칙: 반드시 한국어로만 출력. 게임 행동과 보이는 신호만 언급하고 감정, 거짓말, 의도, 호감, 건강, 정체성 특성을 탐지했다고 말하지 마.',
+      '규칙: 반드시 한국어로만 출력. 게임 행동, 보이는 신호, 참가자가 직접 정한 플레이 스타일만 언급하고 감정, 거짓말, 의도, 호감, 건강, 정체성 특성을 탐지했다고 말하지 마.',
       '짧은 한 문장만 출력해.'
     ].join('\n');
   }
@@ -498,9 +540,19 @@ export class RoomiOrchestrator {
     return '카피캣 릴레이';
   }
 
+  private toFacePartyGameKind(kind: GameKind): FacePartyGameKind {
+    if (kind === 'copycat_relay') return 'copycat';
+    return kind;
+  }
+
   private formatVisibleSignals(signals?: string[]): string {
     if (!signals || signals.length === 0) return '';
     return `: ${signals.join(', ')}`;
+  }
+
+  private formatPlayStyles(styles?: string[]): string {
+    if (!styles || styles.length === 0) return '';
+    return ` 오늘의 플레이 스타일도 같이 살펴봤어: ${styles.join(', ')}.`;
   }
 
   private isKoreanText(text: string): boolean {
@@ -511,6 +563,35 @@ export class RoomiOrchestrator {
     return {
       refinedText: `${sessionMinutes}분 동안 '${rawGoal}'에 집중해서 끝내기`,
       reason: '루미가 기본 형식으로 정리했어요.',
+      source: 'template'
+    };
+  }
+
+  private templatePlayStyle(rawStyle: string, gameKind: GameKind): GoalRefinement {
+    const fallbackByGame: Record<GameKind, string[]> = {
+      hidden_mission: [
+        '들키면 더 억울해하는 비밀 요원처럼 굴기',
+        '표정은 차분하게 두고 리액션만 아주 살짝 늦게 하기',
+        '웃기 직전에 고개를 돌리는 무표정 장인 되기'
+      ],
+      poker_bluff: [
+        '괜히 자신감 넘치는 분석가처럼 말하기',
+        '의심받을수록 더 침착한 척하기',
+        '표정은 차갑게, 말투는 다정하게 유지하기'
+      ],
+      copycat_relay: [
+        '디테일 하나를 집요하게 따라 하는 카피 장인 되기',
+        '처음엔 못 알아들은 척하다가 갑자기 정확히 따라 하기',
+        '작은 표정 변화까지 과장해서 넘겨주기'
+      ]
+    };
+    const trimmed = rawStyle.trim();
+
+    return {
+      refinedText: trimmed || fallbackByGame[gameKind][0],
+      reason: trimmed
+        ? '루미가 입력한 스타일을 게임에서 쓰기 좋게 정리했어요.'
+        : `${this.faceGameName(this.toFacePartyGameKind(gameKind))}에 어울리는 기본 스타일을 골랐어요.`,
       source: 'template'
     };
   }
@@ -526,6 +607,26 @@ export class RoomiOrchestrator {
       '- 따뜻하고 간결한 한 문장, 이모지·따옴표·태그·라벨 없이',
       '- 다듬어진 목표 문장 한 줄만 출력하고 다른 설명은 붙이지 마',
       `다시 한번 확인: 참가자 목표는 "${rawGoal}"야. 다른 주제를 지어내지 말고 이 목표만 다듬어.`
+    ].join('\n');
+  }
+
+  private buildPlayStylePrompt(rawStyle: string, gameKind: GameKind): string {
+    const inputLine = rawStyle.trim()
+      ? `참가자가 적은 초안: "${rawStyle.trim()}"`
+      : '참가자가 아직 초안을 적지 않았으니 새로 추천해줘.';
+
+    return [
+      '너는 표정 파티 게임 진행자 "루미"야.',
+      `게임: ${this.faceGameName(this.toFacePartyGameKind(gameKind))}`,
+      inputLine,
+      '대기실에서 참가자 한 명이 설정할 "오늘의 플레이 스타일" 한 줄을 만들어줘.',
+      '규칙:',
+      '- 반드시 한국어로만 출력',
+      '- 참가자가 따라 할 수 있는 장난스러운 말투나 행동 스타일일 것',
+      '- 게임 판정을 직접 조작하거나 승리를 보장하는 내용은 금지',
+      '- 감정, 거짓말, 의도, 건강, 정체성 같은 민감 추론은 금지',
+      '- 28자 안팎의 한 문장, 따옴표·라벨·이모지 없이',
+      '플레이 스타일 문장만 출력해.'
     ].join('\n');
   }
 

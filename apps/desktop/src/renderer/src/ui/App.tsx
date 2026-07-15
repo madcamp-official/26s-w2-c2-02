@@ -465,12 +465,22 @@ export function App() {
     });
   };
 
-  const refineCurrentGoal = (rawGoal: string) =>
-    refineGoal({ rawGoal, sessionMinutes: activeRoom.room.settings.sessionMinutes }).catch(() => ({
-      refinedText: rawGoal,
-      reason: 'Local fallback while the API is unavailable.',
+  const refineCurrentGoal = (rawGoal: string) => {
+    const activityKind = activeRoom.room.settings.activityKind;
+    const isPlayStyle = activityKind !== 'study';
+    return refineGoal({
+      rawGoal,
+      sessionMinutes: activeRoom.room.settings.sessionMinutes,
+      mode: isPlayStyle ? 'play_style' : 'study_goal',
+      gameKind: isPlayStyle ? activityKind : activeRoom.room.settings.defaultGameKind
+    }).catch(() => ({
+      refinedText: isPlayStyle ? localPlayStyleFallback(activityKind, rawGoal) : rawGoal,
+      reason: isPlayStyle
+        ? '루미가 로컬 기본 스타일을 골랐어요.'
+        : 'API를 사용할 수 없어 입력한 목표를 그대로 저장해요.',
       source: 'template' as const
     }));
+  };
 
   const startCurrentGame = (
     kind: GameKind = roomDraft?.room.settings.defaultGameKind ?? 'hidden_mission'
@@ -503,10 +513,15 @@ export function App() {
           lastSeenAt: now()
         }))
       };
+      const playStyles = current.goals
+        .map((goal) => goal.rawText.trim())
+        .filter(Boolean);
       return appendLocalRoomiMessage(
         next,
         'game_intro',
-        `${gameLabel(kind)} 시작! 눈에 보이는 표정과 움직임만 보고 가볍게 반응해보자.`
+        `${gameLabel(kind)} 시작! 눈에 보이는 표정과 움직임만 보고 가볍게 반응해보자.${
+          playStyles.length > 0 ? ` 오늘의 플레이 스타일도 살려볼게: ${playStyles.join(', ')}.` : ''
+        }`
       );
     });
   };
@@ -1148,6 +1163,14 @@ function gameLabel(kind: GameKind) {
   if (kind === 'hidden_mission') return '숨은 표정 미션';
   if (kind === 'poker_bluff') return '포커페이스 블러프';
   return '카피캣 릴레이';
+}
+
+function localPlayStyleFallback(kind: GameKind, rawStyle: string) {
+  const trimmed = rawStyle.trim();
+  if (trimmed) return trimmed;
+  if (kind === 'hidden_mission') return '들키면 더 억울해하는 비밀 요원처럼 굴기';
+  if (kind === 'poker_bluff') return '의심받을수록 더 침착한 척하기';
+  return '디테일 하나를 집요하게 따라 하는 카피 장인 되기';
 }
 
 function resolvePrivateMission(current: RoomDraft, game: GameSession | undefined) {

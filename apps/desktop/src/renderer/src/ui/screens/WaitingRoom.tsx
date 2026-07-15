@@ -61,6 +61,14 @@ export function WaitingRoom({
   const [isJoiningSession, setIsJoiningSession] = useState(false);
   const sessionActionLockRef = useRef(false);
   const [sessionActionError, setSessionActionError] = useState<string | null>(null);
+  const promptLabel = isStudyMode ? '내 목표' : '오늘의 플레이 스타일';
+  const promptPlaceholder = isStudyMode
+    ? '이번 세션에 집중할 한 가지를 적어주세요'
+    : '예: 절대 웃지 않는 사람인 척하기';
+  const refineButtonLabel = isStudyMode ? '루미에게 다듬기' : '루미에게 추천받기';
+  const refiningLabel = isStudyMode ? '루미가 다듬는 중...' : '루미가 고르는 중...';
+  const saveSuggestionLabel = isStudyMode ? '이 목표로 저장' : '이 스타일로 저장';
+  const requiredPhrase = isStudyMode ? '목표를' : '플레이 스타일을';
 
   const submitGoal = () => {
     const trimmed = goalText.trim();
@@ -71,7 +79,7 @@ export function WaitingRoom({
 
   const refineGoal = async () => {
     const trimmed = goalText.trim();
-    if (!trimmed) {
+    if (!trimmed && isStudyMode) {
       setRefineError('먼저 다듬을 목표를 적어주세요.');
       return;
     }
@@ -82,7 +90,11 @@ export function WaitingRoom({
       setRefinement(await onRefineGoal(trimmed));
     } catch {
       setRefinement(null);
-      setRefineError('루미가 목표를 다듬지 못했어요. 잠시 후 다시 시도해주세요.');
+      setRefineError(
+        isStudyMode
+          ? '루미가 목표를 다듬지 못했어요. 잠시 후 다시 시도해주세요.'
+          : '루미가 플레이 스타일을 추천하지 못했어요. 잠시 후 다시 시도해주세요.'
+      );
     } finally {
       setIsRefining(false);
     }
@@ -119,7 +131,11 @@ export function WaitingRoom({
     } catch {
       sessionActionLockRef.current = false;
       setIsJoiningSession(false);
-      setSessionActionError('스터디룸에 입장하지 못했어요. 잠시 후 다시 시도해 주세요.');
+      setSessionActionError(
+        isStudyMode
+          ? '스터디룸에 입장하지 못했어요. 잠시 후 다시 시도해 주세요.'
+          : '게임방에 입장하지 못했어요. 잠시 후 다시 시도해 주세요.'
+      );
     }
   };
 
@@ -163,7 +179,9 @@ export function WaitingRoom({
                     ? isStudyMode
                       ? '이미 공부 중이에요'
                       : '이미 게임이 진행 중이에요'
-                    : '다 같이 목표를 정해볼까요?'}
+                    : isStudyMode
+                      ? '다 같이 목표를 정해볼까요?'
+                      : '오늘의 플레이 스타일을 정해볼까요?'}
                 </h1>
               </div>
             </div>
@@ -173,8 +191,10 @@ export function WaitingRoom({
             {inProgress
               ? isStudyMode
                 ? '목표만 정하면 진행 중인 세션에 바로 합류할 수 있어요.'
-                : '목표만 정하면 진행 중인 게임방에 바로 합류할 수 있어요.'
-              : '각자 목표를 적으면 루미가 세션 안에 끝낼 수 있는 크기로 다듬어줘요.'}
+                : '플레이 스타일만 정하면 진행 중인 게임방에 바로 합류할 수 있어요.'
+              : isStudyMode
+                ? '각자 목표를 적으면 루미가 세션 안에 끝낼 수 있는 크기로 다듬어줘요.'
+                : '각자 오늘의 캐릭터를 정하면 루미가 게임 중에 가볍게 살려줄 수 있어요.'}
           </p>
           {sessionActionError && (
             <p className="onb-hint onb-hint--error" role="alert">
@@ -183,12 +203,12 @@ export function WaitingRoom({
           )}
 
           <label className="waiting__label" htmlFor="goal">
-            내 목표
+            {promptLabel}
           </label>
           <input
             id="goal"
             className="field waiting__goal-input"
-            placeholder="이번 세션에 집중할 한 가지를 적어주세요"
+            placeholder={promptPlaceholder}
             value={goalText}
             onChange={(event) => {
               setGoalText(event.target.value);
@@ -199,7 +219,7 @@ export function WaitingRoom({
           />
           <div className="waiting__goal-actions">
             <button type="button" className="btn btn--primary" onClick={refineGoal} disabled={isRefining}>
-              {isRefining ? '루미가 다듬는 중...' : '루미에게 다듬기'}
+              {isRefining ? refiningLabel : refineButtonLabel}
             </button>
           </div>
 
@@ -214,13 +234,16 @@ export function WaitingRoom({
                 <p className="lumi-suggest__note">{refinement.reason}</p>
                 <div className="lumi-suggest__actions">
                   <button type="button" className="btn btn--primary" onClick={applyRefinement}>
-                    이 목표로 저장
+                    {saveSuggestionLabel}
                   </button>
                 </div>
               </>
             ) : (
               <p className="lumi-suggest__lead">
-                {refineError ?? '목표를 적으면 세션에 맞는 크기로 다듬어줄게요.'}
+                {refineError ??
+                  (isStudyMode
+                    ? '목표를 적으면 세션에 맞는 크기로 다듬어줄게요.'
+                    : '비워두고 눌러도 루미가 게임에 맞는 스타일을 추천해줄게요.')}
               </p>
             )}
           </section>
@@ -271,10 +294,10 @@ export function WaitingRoom({
                 disabled={isJoiningSession || !hasGoal}
                 onClick={joinSession}
               >
-                {isJoiningSession ? '입장 중' : '스터디룸 참여하기'}
+                {isJoiningSession ? '입장 중' : isStudyMode ? '스터디룸 참여하기' : '게임방 참여하기'}
               </button>
               {!hasGoal && (
-                <p className="waiting__goal-required">먼저 목표를 적어야 참여할 수 있어요.</p>
+                <p className="waiting__goal-required">먼저 {requiredPhrase} 정해야 참여할 수 있어요.</p>
               )}
             </>
           ) : isHost ? (
@@ -285,16 +308,16 @@ export function WaitingRoom({
                 disabled={isStartingSession || !hasGoal}
                 onClick={startSession}
               >
-                {isStartingSession ? '방 생성중' : '세션 시작하기'}
+                {isStartingSession ? '방 생성중' : isStudyMode ? '세션 시작하기' : '게임 시작하기'}
               </button>
               {!hasGoal && (
-                <p className="waiting__goal-required">먼저 목표를 적어야 시작할 수 있어요.</p>
+                <p className="waiting__goal-required">먼저 {requiredPhrase} 정해야 시작할 수 있어요.</p>
               )}
             </>
           ) : (
             <div className="waiting__wait-note" role="status">
               <span className="waiting__wait-dot" aria-hidden="true" />
-              <span>방장이 세션을 시작하면 참여 버튼이 열려요.</span>
+              <span>{isStudyMode ? '방장이 세션을 시작하면 참여 버튼이 열려요.' : '방장이 게임을 시작하면 참여 버튼이 열려요.'}</span>
             </div>
           )}
 

@@ -3,6 +3,7 @@ import {
   realtimeEvents,
   type GameSession,
   type MissionResult,
+  type RoomSnapshot,
   type ClientToServerEvents,
   type ServerToClientEvents
 } from '@roomi/shared';
@@ -291,6 +292,7 @@ export function registerRealtimeGateway(
     const text = await roomiOrchestrator.generateGameIntroMessage({
       game: toFacePartyGameKind(game.kind),
       playerCount: snapshot?.participants.length,
+      playStyles: playStyles(snapshot),
       tone: 'playful'
     });
     roomService.addRoomiMessage({ roomId, kind: 'game_intro', text });
@@ -303,6 +305,7 @@ export function registerRealtimeGateway(
       game: 'hidden_mission',
       event: result.success ? 'mission_success' : 'mission_fail',
       actorNickname: actor?.nickname,
+      actorPlayStyle: playStyleFor(snapshot, result.playerId),
       points: result.success ? 10 : undefined,
       visibleSignals: [`미션 집계 ${result.count}회`],
       tone: 'playful'
@@ -319,6 +322,8 @@ export function registerRealtimeGateway(
       event: 'bluff_bet',
       actorNickname: actor?.nickname,
       targetNickname: target?.nickname,
+      actorPlayStyle: playStyleFor(snapshot, participantId),
+      targetPlayStyle: playStyleFor(snapshot, targetId),
       tone: 'playful'
     });
     roomService.addRoomiMessage({ roomId, kind: 'tell_hint', text });
@@ -334,6 +339,7 @@ export function registerRealtimeGateway(
       game: 'poker_bluff',
       event: result.cracked ? 'bluff_cracked' : 'bluff_held',
       actorNickname: target?.nickname,
+      actorPlayStyle: playStyleFor(snapshot, targetId),
       points: result.cracked ? undefined : 8,
       visibleSignals: result.tell ? [visibleTellLabel(result.tell)] : ['흔들림 없는 타이밍'],
       tone: 'playful'
@@ -355,6 +361,8 @@ export function registerRealtimeGateway(
       event: 'relay_advanced',
       actorNickname: actor?.nickname,
       targetNickname: target?.nickname,
+      actorPlayStyle: playStyleFor(snapshot, fromId),
+      targetPlayStyle: playStyleFor(snapshot, toId),
       points: Math.round(Math.max(0, Math.min(1, similarity)) * 10),
       visibleSignals: [`유사도 ${Math.round(Math.max(0, Math.min(1, similarity)) * 100)}%`],
       tone: 'playful'
@@ -373,6 +381,7 @@ export function registerRealtimeGateway(
       playerCount: snapshot?.participants.length,
       winnerNickname,
       visibleSignals: visibleSignalsForGame(game),
+      playStyles: playStyles(snapshot),
       tone: 'playful'
     });
     roomService.addRoomiMessage({ roomId, kind: 'game_reveal', text });
@@ -410,6 +419,19 @@ function visibleTellLabel(tell: NonNullable<GameSession['bluffResult']>['tell'])
   if (tell === 'jaw') return '입 벌림';
   if (tell === 'brow') return '눈썹 움직임';
   return '보이는 표정 신호';
+}
+
+function playStyleFor(snapshot: RoomSnapshot | undefined, participantId: string): string | undefined {
+  return snapshot?.goals
+    .find((goal) => goal.participantId === participantId)
+    ?.rawText.trim() || undefined;
+}
+
+function playStyles(snapshot: RoomSnapshot | undefined): string[] | undefined {
+  const styles = snapshot?.goals
+    .map((goal) => goal.rawText.trim())
+    .filter(Boolean);
+  return styles && styles.length > 0 ? styles : undefined;
 }
 
 function logGameMessageFailure(error: unknown) {

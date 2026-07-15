@@ -202,15 +202,19 @@ export function createApp(
   });
 
   app.post('/goals/refine', async (request, response) => {
-    // The raw goal stays server-side; only the refined text and reason go back.
-    const { rawGoal, sessionMinutes } = request.body as GoalRefineInput;
+    // The raw goal/style stays server-side; only the refined text and reason go back.
+    const { rawGoal, sessionMinutes, mode = 'study_goal', gameKind } = request.body as GoalRefineInput;
 
-    if (typeof rawGoal !== 'string' || !rawGoal.trim() || typeof sessionMinutes !== 'number') {
+    if (
+      typeof rawGoal !== 'string' ||
+      typeof sessionMinutes !== 'number' ||
+      (mode !== 'play_style' && !rawGoal.trim())
+    ) {
       response.status(400).json({ message: 'rawGoal (string) and sessionMinutes (number) are required' });
       return;
     }
 
-    const refinement = await roomiOrchestrator.refineGoal(rawGoal, sessionMinutes);
+    const refinement = await roomiOrchestrator.refineGoal(rawGoal, sessionMinutes, mode, gameKind);
     response.json(refinement);
   });
 

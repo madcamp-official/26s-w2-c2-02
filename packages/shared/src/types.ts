@@ -263,6 +263,8 @@ export type GoalSubmitInput = {
 export type GoalRefineInput = {
   rawGoal: string;
   sessionMinutes: number;
+  mode?: 'study_goal' | 'play_style';
+  gameKind?: GameKind;
 };
 
 export type SessionStartInput = {

@@ -13,8 +13,8 @@ the code and docs are migrated together.
 | `POST` | `/rooms` | Create a party room with a host participant and return the caller participant id. |
 | `POST` | `/rooms/join` | Join an existing party room by invite code and return the caller participant id. |
 | `GET` | `/rooms/:inviteCode` | Read a room snapshot by invite code. |
-| `POST` | `/rooms/:roomId/goals` | Legacy prompt/mission slot. Upserts the calling participant's text (`participantId`, `rawText`) and returns the room snapshot. |
-| `POST` | `/goals/refine` | Legacy text helper. Refines a raw prompt (`rawGoal`, `sessionMinutes`) via Ollama and returns `{ refinedText, reason, source }`. Always `200`; `source` is `template` when the LLM is unavailable. |
+| `POST` | `/rooms/:roomId/goals` | Legacy prompt/mission slot. In study rooms this stores the participant goal; in game rooms this stores the participant's "today's play style" text (`participantId`, `rawText`) and returns the room snapshot. |
+| `POST` | `/goals/refine` | Legacy text helper. With `mode: 'study_goal'` it refines a raw study goal (`rawGoal`, `sessionMinutes`). With `mode: 'play_style'` and `gameKind`, it can recommend a game play style even when `rawGoal` is empty. Returns `{ refinedText, reason, source }`; `source` is `template` when the LLM is unavailable. |
 | `GET` | `/v1/models` | Forward an OpenAI-compatible model list request to the configured internal LLM server. |
 | `POST` | `/v1/chat/completions` | Forward an OpenAI-compatible chat completion request to the configured internal LLM server. |
 | `POST` | `/focus/predict` | Forward a local face-analysis feature window to the internal ML server's `/v1/focus/predict` endpoint. Returns the ML response unchanged, `502` when unavailable, and `504` on timeout. |
@@ -60,6 +60,10 @@ and rolls back the participant instead of returning a local-only video session.
   study-room flow with break controls; `hidden_mission`, `poker_bluff`, and
   `copycat_relay` create game rooms. Break settings and break controls are only
   available when `activityKind === 'study'`.
+- The waiting-room text slot is mode-aware. Study rooms label it as `내 목표`
+  and use `/goals/refine` to narrow the goal. Game rooms label it as `오늘의
+  플레이 스타일`, allow empty-text recommendations from Roomi, and require a
+  saved style before entering the active game room.
 - In the active room, the host can start `hidden_mission`, `poker_bluff`, or
   `copycat_relay` when `room.settings.activityKind` is a game kind. The desktop
   app sends `room.settings.defaultGameKind`, which is chosen during room
@@ -72,7 +76,8 @@ and rolls back the participant instead of returning a local-only video session.
 - Roomi game host messages are emitted through `roomi:message` on game start,
   player reactions, and reveal. The API asks the configured LLM for these lines
   and falls back to templates when the LLM is unavailable; prompts include only
-  game actions and visible expression signals, not raw camera frames.
+  game actions, visible expression signals, and participant-authored play style
+  text, not raw camera frames.
 - The server owns the round timer through `currentSession.startedAt`,
   `currentSession.plannedMinutes`, and optional `breakEndsAt`. Clients calculate
   remaining time from server timestamps, so late joiners see the same clock.

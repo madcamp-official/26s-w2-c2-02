@@ -68,12 +68,19 @@ broadcasts public game snapshots without hidden mission text until reveal. The
 renderer uses local expression signals to update mission progress, while the API
 remains the authority for multiplayer results.
 
+The waiting-room text slot still uses the compatibility `goals` collection, but
+its product meaning depends on `activityKind`. Study rooms treat it as the
+participant's study goal. Game rooms treat it as that player's "today's play
+style", can ask Roomi to recommend one through `/goals/refine` with
+`mode: 'play_style'`, and pass the saved style into game host-message prompts so
+Roomi can reference player-authored characters during live reactions.
+
 Roomi's live game host lines are generated on the API side in Korean for game
 start, mission results, bluff bets/results, relay progress, and reveal. The
 orchestrator calls the configured LLM when available and uses Korean template
 fallback messages otherwise. These prompts only receive player nicknames, game
-actions, scores, and visible expression signal labels; raw video frames and
-facial landmarks stay out of the LLM path.
+actions, scores, participant-authored play styles, and visible expression signal
+labels; raw video frames and facial landmarks stay out of the LLM path.
 
 When the central API is unavailable, the desktop renderer can enter a local
 single-machine demo room so UI and local expression work can continue. That path

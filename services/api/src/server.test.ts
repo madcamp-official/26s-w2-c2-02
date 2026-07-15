@@ -452,6 +452,23 @@ describe('POST /goals/refine', () => {
     expect(body.source).toBe('ollama');
     expect(body.refinedText).toBe('25분 집중: 수학 예제 3문제');
   });
+
+  it('allows an empty rawGoal when recommending a game play style', async () => {
+    const generator: TextGenerator = { generateText: async () => '의심받을수록 더 침착한 척하기' };
+    await startApp(new RoomiOrchestrator(generator));
+
+    const response = await refine({
+      rawGoal: '',
+      sessionMinutes: 25,
+      mode: 'play_style',
+      gameKind: 'poker_bluff'
+    });
+    const body = (await response.json()) as { refinedText: string; source: string };
+
+    expect(response.status).toBe(200);
+    expect(body.source).toBe('ollama');
+    expect(body.refinedText).toBe('의심받을수록 더 침착한 척하기');
+  });
 });
 
 describe('POST /focus/predict', () => {

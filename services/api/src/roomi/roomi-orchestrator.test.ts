@@ -49,6 +49,35 @@ describe('RoomiOrchestrator.refineGoal', () => {
     expect(result.refinedText).toContain('영어 단어');
     expect(result.refinedText).toContain('50');
   });
+
+  it('generates a play style recommendation for game rooms', async () => {
+    const calls: string[] = [];
+    const orchestrator = new RoomiOrchestrator({
+      generateText: async (prompt) => {
+        calls.push(prompt);
+        return '의심받을수록 더 침착한 척하기';
+      }
+    });
+
+    const result = await orchestrator.refineGoal('', 50, 'play_style', 'poker_bluff');
+
+    expect(result.source).toBe('ollama');
+    expect(result.refinedText).toBe('의심받을수록 더 침착한 척하기');
+    expect(result.reason).toContain('플레이 스타일');
+    expect(calls[0]).toContain('포커페이스 블러프');
+    expect(calls[0]).toContain('오늘의 플레이 스타일');
+    expect(calls[0]).toContain('한국어');
+  });
+
+  it('falls back to a game-specific play style template', async () => {
+    const orchestrator = new RoomiOrchestrator();
+
+    const result = await orchestrator.refineGoal('', 50, 'play_style', 'copycat_relay');
+
+    expect(result.source).toBe('template');
+    expect(result.refinedText).toContain('카피');
+    expect(result.reason).toContain('카피캣 릴레이');
+  });
 });
 
 describe('RoomiOrchestrator live-session messages', () => {
@@ -249,7 +278,8 @@ describe('RoomiOrchestrator face party games', () => {
 
     const intro = await orchestrator.generateGameIntroMessage({
       game: 'poker_bluff',
-      roundNumber: 2
+      roundNumber: 2,
+      playStyles: ['의심받을수록 더 침착한 척하기']
     });
     const reveal = await orchestrator.generateGameRevealMessage({
       game: 'hidden_mission',
@@ -264,6 +294,7 @@ describe('RoomiOrchestrator face party games', () => {
 
     expect(intro).toContain('포커페이스 블러프');
     expect(intro).toContain('눈에 보이는 단서');
+    expect(intro).toContain('플레이 스타일');
     expect(reveal).toContain('Ara');
     expect(reveal).toContain('gesture timing');
     expect(summary).toContain('보이는 신호');

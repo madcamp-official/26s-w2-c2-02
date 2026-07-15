@@ -1,16 +1,16 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { Goal, Participant, Room, RoomStatus } from '@roomi/shared';
+import type { Goal, Participant, Room, RoomActivityKind, RoomStatus } from '@roomi/shared';
 import { WaitingRoom } from './WaitingRoom';
 
-function room(status: RoomStatus = 'waiting'): Room {
+function room(status: RoomStatus = 'waiting', activityKind: RoomActivityKind = 'study'): Room {
   return {
     id: 'room-1',
     inviteCode: 'ABCDEF',
     hostUserId: 'user-host',
     settings: {
-      activityKind: 'study',
-      defaultGameKind: 'hidden_mission',
+      activityKind,
+      defaultGameKind: activityKind === 'study' ? 'hidden_mission' : activityKind,
       sessionMinutes: 50,
       breakMode: 'room',
       breakMinutes: 10,
@@ -97,7 +97,7 @@ describe('WaitingRoom', () => {
 
     const startButton = screen.getByRole('button', { name: '세션 시작하기' });
     expect(startButton).toBeDisabled();
-    expect(screen.getByText('먼저 목표를 적어야 시작할 수 있어요.')).toBeInTheDocument();
+    expect(screen.getByText((_, element) => element?.textContent === '먼저 목표를 정해야 시작할 수 있어요.')).toBeInTheDocument();
     expect(props.onStartSession).not.toHaveBeenCalled();
   });
 
@@ -113,7 +113,7 @@ describe('WaitingRoom', () => {
 
     const joinButton = screen.getByRole('button', { name: '스터디룸 참여하기' });
     expect(joinButton).toBeDisabled();
-    expect(screen.getByText('먼저 목표를 적어야 참여할 수 있어요.')).toBeInTheDocument();
+    expect(screen.getByText((_, element) => element?.textContent === '먼저 목표를 정해야 참여할 수 있어요.')).toBeInTheDocument();
     expect(props.onJoinSession).not.toHaveBeenCalled();
   });
 
@@ -219,5 +219,33 @@ describe('WaitingRoom', () => {
     fireEvent.click(screen.getByRole('button', { name: '이 목표로 저장' }));
 
     expect(props.onSubmitGoal).toHaveBeenCalledWith('미적분 3단원 핵심 문제 10개 풀기');
+  });
+
+  it('uses the goal slot as a play style prompt in game rooms', async () => {
+    const props = {
+      ...baseProps(),
+      room: room('waiting', 'poker_bluff'),
+      goals: [] as Goal[],
+      onRefineGoal: vi.fn().mockResolvedValue({
+        refinedText: '의심받을수록 더 침착한 척하기',
+        reason: '포커페이스 블러프에 어울리는 스타일이에요.',
+        source: 'template' as const
+      })
+    };
+    render(<WaitingRoom {...props} />);
+
+    expect(screen.getByRole('heading', { level: 1, name: '오늘의 플레이 스타일을 정해볼까요?' })).toBeInTheDocument();
+    expect(screen.getByLabelText('오늘의 플레이 스타일')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '게임 시작하기' })).toBeDisabled();
+    expect(
+      screen.getByText((_, element) => element?.textContent === '먼저 플레이 스타일을 정해야 시작할 수 있어요.')
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '루미에게 추천받기' }));
+
+    expect(await screen.findByText('의심받을수록 더 침착한 척하기')).toBeInTheDocument();
+    expect(props.onRefineGoal).toHaveBeenCalledWith('');
+    fireEvent.click(screen.getByRole('button', { name: '이 스타일로 저장' }));
+    expect(props.onSubmitGoal).toHaveBeenCalledWith('의심받을수록 더 침착한 척하기');
   });
 });
