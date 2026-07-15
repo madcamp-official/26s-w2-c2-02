@@ -1,4 +1,5 @@
 import type { FeatureWindowV1, MlFocusLabel, PredictResponse } from './focus-ml-client';
+import { gazeDivergenceDegrees } from './gaze';
 import { headPoseFromMatrix, type HeadPose } from './head-pose';
 
 /**
@@ -15,7 +16,8 @@ export type FocusSignalName =
   | 'eyes_closed'
   | 'head_turned'
   | 'head_down'
-  | 'yawning';
+  | 'yawning'
+  | 'gaze_diverged';
 
 export type LandmarkPoint = {
   x: number;
@@ -43,11 +45,16 @@ export type RuleSettings = {
   yawningSeconds: number;
   /** An eye closure shorter than this is a blink; a longer one means drowsy. */
   blinkMaxSeconds: number;
+  /** Degrees the eyes may point away from where the head faces before it counts. */
+  gazeDivergenceDegreesThreshold: number;
+  /** How long that divergence must hold before it counts as looking elsewhere. */
+  gazeDivergedSeconds: number;
   faceMissingPenalty: number;
   eyesClosedPenalty: number;
   headTurnedPenalty: number;
   headDownPenalty: number;
   yawningPenalty: number;
+  gazeDivergedPenalty: number;
 };
 
 export type FrameSignals = {
@@ -62,11 +69,18 @@ export type FrameSignals = {
    * case where the ratios above are still used to derive an angle.
    */
   headPose: HeadPose | null;
+  /**
+   * Degrees the eyes point away from where the head faces. Null when the mesh has
+   * no iris landmarks, which leaves `gazeDiverged` false: an unmeasured gaze must
+   * never be scored as if it had been measured and found wanting.
+   */
+  gazeDivergence: number | null;
   mouthAspectRatio: number;
   eyesClosed: boolean;
   headTurned: boolean;
   headDown: boolean;
   mouthOpen: boolean;
+  gazeDiverged: boolean;
 };
 
 export type FocusSnapshot = {
@@ -83,6 +97,11 @@ export type FocusSnapshot = {
    */
   blinksPerMinute: number;
   yawnCount: number;
+  /**
+   * How much the head jitters across the window. Reported, not scored: fidgeting
+   * says restless, and restless people are often still working.
+   */
+  motionAmount: number;
   current: Omit<FrameSignals, 'timestamp'>;
 };
 
@@ -96,18 +115,32 @@ export const defaultRuleSettings: RuleSettings = {
   focusedThreshold: 70,
   faceMissingSeconds: 5,
   eyesClosedSeconds: 3,
-  headTurnedSeconds: 10,
-  headDownSeconds: 10,
+  // Duration is where the sensitivity comes from. A head held away from the desk
+  // for a few seconds is already a real turn, and the angles below cannot be pushed
+  // much further without eating the margin that the measured range bought.
+  headTurnedSeconds: 3,
+  headDownSeconds: 5,
   eyeAspectRatioThreshold: 0.19,
   // Sitting and studying comfortably spans roughly +-25 degrees of yaw and up to
   // +20 of pitch, so both thresholds sit outside that band: inside it, ordinary
-  // reading and shifting in a chair would read as distraction. A real turn away
-  // from the desk goes well past these.
-  headTurnDegreesThreshold: 30,
+  // reading and shifting in a chair would read as distraction. These are the only
+  // numbers here measured on a real person rather than reasoned, so the margin over
+  // 25 stays deliberate — the motion boost already spends a degree of it.
+  headTurnDegreesThreshold: 28,
   headDownDegreesThreshold: 25,
   mouthAspectRatioThreshold: 0.6,
-  yawningSeconds: 1.5,
+  // A yawn holds the mouth wide for a couple of seconds; talking and laughing open
+  // it in bursts. What keeps those out is mostly the 0.6 ratio above — a mouth that
+  // wide is not a word — so this only has to outlast a burst, not a whole yawn.
+  yawningSeconds: 1,
   blinkMaxSeconds: 1,
+  // Eyes rove constantly while reading, so this rule leans on duration rather than
+  // a tight angle. At a normal 60cm desk distance the far edge of a 27" monitor is
+  // about 27 degrees off-axis, which is the floor this cannot go under: reading your
+  // own screen must never register. 30 keeps a small margin over it, and five seconds
+  // of holding it is reading something else rather than glancing at a notification.
+  gazeDivergenceDegreesThreshold: 30,
+  gazeDivergedSeconds: 5,
   faceMissingPenalty: 70,
   eyesClosedPenalty: 45,
   headTurnedPenalty: 30,
@@ -115,7 +148,10 @@ export const defaultRuleSettings: RuleSettings = {
   // A yawn says tired, not distracted, and tired people are usually still working.
   // The penalty is small on purpose: it should nudge the score toward a break
   // suggestion, not on its own drag someone out of `focused`.
-  yawningPenalty: 15
+  yawningPenalty: 15,
+  // Same weight as a turned head: both mean attention has settled somewhere off
+  // the desk, and only the body part giving it away differs.
+  gazeDivergedPenalty: 30
 };
 
 export const emptyFocusSnapshot: FocusSnapshot = {
@@ -127,21 +163,25 @@ export const emptyFocusSnapshot: FocusSnapshot = {
     eyes_closed: 0,
     head_turned: 0,
     head_down: 0,
-    yawning: 0
+    yawning: 0,
+    gaze_diverged: 0
   },
   blinksPerMinute: 0,
   yawnCount: 0,
+  motionAmount: 0,
   current: {
     facePresent: false,
     eyeAspectRatio: 0,
     headYawRatio: 0,
     headPitchRatio: 0,
     headPose: null,
+    gazeDivergence: null,
     mouthAspectRatio: 0,
     eyesClosed: false,
     headTurned: false,
     headDown: false,
-    mouthOpen: false
+    mouthOpen: false,
+    gazeDiverged: false
   }
 };
 
@@ -160,11 +200,13 @@ export function extractFrameSignals(
       headYawRatio: 0,
       headPitchRatio: 0,
       headPose: null,
+      gazeDivergence: null,
       mouthAspectRatio: 0,
       eyesClosed: false,
       headTurned: false,
       headDown: false,
-      mouthOpen: false
+      mouthOpen: false,
+      gazeDiverged: false
     };
   }
 
@@ -181,6 +223,7 @@ export function extractFrameSignals(
   const headYawRatio = (nose.x - faceCenterX) / faceWidth;
   const headPitchRatio = (nose.y - eyeCenterY) / faceHeight;
   const headPose = headPoseFromMatrix(matrix);
+  const gazeDivergence = gazeDivergenceDegrees(face);
   const frame = { headYawRatio, headPitchRatio, headPose };
   // Widen the turn threshold slightly while the head is in motion, so a quick
   // glance that passes through a wide angle is not counted as turning away.
@@ -193,12 +236,16 @@ export function extractFrameSignals(
     headYawRatio,
     headPitchRatio,
     headPose,
+    gazeDivergence,
     mouthAspectRatio,
     eyesClosed: eyeAspectRatio < settings.eyeAspectRatioThreshold,
     headTurned:
       Math.abs(frameYawDegrees(frame)) > settings.headTurnDegreesThreshold + motionBoost,
     headDown: framePitchDegrees(frame) > settings.headDownDegreesThreshold,
-    mouthOpen: mouthAspectRatio > settings.mouthAspectRatioThreshold
+    mouthOpen: mouthAspectRatio > settings.mouthAspectRatioThreshold,
+    gazeDiverged:
+      gazeDivergence !== null &&
+      Math.abs(gazeDivergence) > settings.gazeDivergenceDegreesThreshold
   };
 }
 
@@ -223,7 +270,8 @@ export function classifyFocus(windowFrames: FrameSignals[], settings: RuleSettin
     eyes_closed: getLatestDuration(windowFrames, (frame) => frame.eyesClosed),
     head_turned: getLatestDuration(windowFrames, (frame) => frame.headTurned),
     head_down: getLatestDuration(windowFrames, (frame) => frame.headDown),
-    yawning: getLatestDuration(windowFrames, (frame) => frame.mouthOpen)
+    yawning: getLatestDuration(windowFrames, (frame) => frame.mouthOpen),
+    gaze_diverged: getLatestDuration(windowFrames, (frame) => frame.gazeDiverged)
   };
   const activeSignals: FocusSignalName[] = [];
   let penalty = 0;
@@ -248,6 +296,10 @@ export function classifyFocus(windowFrames: FrameSignals[], settings: RuleSettin
     activeSignals.push('yawning');
     penalty += settings.yawningPenalty;
   }
+  if (durations.gaze_diverged >= settings.gazeDivergedSeconds) {
+    activeSignals.push('gaze_diverged');
+    penalty += settings.gazeDivergedPenalty;
+  }
 
   const score = clamp(Math.round(100 - penalty), 0, 100);
   const label = getFocusLabel(score, activeSignals, settings);
@@ -261,17 +313,22 @@ export function classifyFocus(windowFrames: FrameSignals[], settings: RuleSettin
     yawnCount: countSignalRuns(windowFrames, (frame) => frame.mouthOpen, {
       minSeconds: settings.yawningSeconds
     }),
+    // Frames with no face are dropped first: the jump between the last seen pose
+    // and the pose found after the gap is not movement anyone made.
+    motionAmount: getMotionAmount(windowFrames.filter((frame) => frame.facePresent)),
     current: {
       facePresent: latest.facePresent,
       eyeAspectRatio: latest.eyeAspectRatio,
       headYawRatio: latest.headYawRatio,
       headPitchRatio: latest.headPitchRatio,
       headPose: latest.headPose,
+      gazeDivergence: latest.gazeDivergence,
       mouthAspectRatio: latest.mouthAspectRatio,
       mouthOpen: latest.mouthOpen,
       eyesClosed: latest.eyesClosed,
       headTurned: latest.headTurned,
-      headDown: latest.headDown
+      headDown: latest.headDown,
+      gazeDiverged: latest.gazeDiverged
     }
   };
 }
@@ -383,6 +440,7 @@ export function getFocusLabel(
   if (
     activeSignals.includes('head_turned') ||
     activeSignals.includes('head_down') ||
+    activeSignals.includes('gaze_diverged') ||
     score < settings.focusedThreshold
   ) {
     return score >= settings.focusedThreshold - 10 ? 'uncertain' : 'distracted';

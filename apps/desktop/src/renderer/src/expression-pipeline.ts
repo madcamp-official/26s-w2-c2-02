@@ -31,7 +31,7 @@ export const defaultExpressionSettings: ExpressionSettings = {
   smileThreshold: 0.45,
   jawOpenThreshold: 0.45,
   blinkThreshold: 0.42,
-  winkOpenThreshold: 0.38,
+  winkOpenThreshold: 0.25,
   browThreshold: 0.52,
   browReleaseThreshold: 0.25,
   cheekPuffThreshold: 0.35,

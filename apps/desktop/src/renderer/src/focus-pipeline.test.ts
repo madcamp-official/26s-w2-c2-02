@@ -18,11 +18,13 @@ const focusedFrame: Omit<FrameSignals, 'timestamp'> = {
   headYawRatio: 0,
   headPitchRatio: 0,
   headPose: null,
+  gazeDivergence: 0,
   mouthAspectRatio: 0.1,
   eyesClosed: false,
   headTurned: false,
   headDown: false,
-  mouthOpen: false
+  mouthOpen: false,
+  gazeDiverged: false
 };
 
 /** Frames spanning `seconds`, sampled every 100ms, ending at t = seconds * 1000. */
@@ -93,6 +95,21 @@ describe('classifyFocus', () => {
     expect(snapshot.label).toBe('focused');
   });
 
+  it('uses shorter sustained thresholds for turned and lowered heads', () => {
+    expect(
+      classifyFocus(
+        frameRun(defaultRuleSettings.headTurnedSeconds, { headTurned: true, headYawRatio: 0.4 }),
+        defaultRuleSettings
+      ).activeSignals
+    ).toContain('head_turned');
+    expect(
+      classifyFocus(
+        frameRun(defaultRuleSettings.headDownSeconds, { headDown: true, headPitchRatio: 0.5 }),
+        defaultRuleSettings
+      ).activeSignals
+    ).toContain('head_down');
+  });
+
   it('can report away immediately when face missing delay is disabled', () => {
     const snapshot = classifyFocus(
       frameRun(0, { facePresent: false }),
@@ -135,6 +152,16 @@ describe('fatigue signals', () => {
     expect(snapshot.label).toBe('focused');
   });
 
+  it('catches a short yawn, since the 0.6 ratio already excludes speech', () => {
+    // A mouth this wide is not a word, so the duration guard only has to outlast a
+    // burst of talking rather than a whole yawn. Runs to the window end, since an
+    // active signal is one that is still going.
+    const frames = windowWithRuns(7, { starts: [5.8], runSeconds: 1.5, apply: yawning });
+
+    expect(classifyFocus(frames, defaultRuleSettings).durations.yawning).toBe(1.2);
+    expect(classifyFocus(frames, defaultRuleSettings).activeSignals).toContain('yawning');
+  });
+
   it('does not mistake talking for yawning', () => {
     const frames = windowWithRuns(20, {
       starts: [2, 5, 8, 11, 14],
@@ -152,6 +179,19 @@ describe('fatigue signals', () => {
     const frames = windowWithRuns(30, { starts: [2, 12, 22], runSeconds: 2, apply: yawning });
 
     expect(classifyFocus(frames, defaultRuleSettings).yawnCount).toBe(3);
+  });
+
+  it('measures head jitter over the window, ignoring frames with no face', () => {
+    // The jump between the pose last seen and the pose found after a dropout is not
+    // movement anyone made, so those frames must not inflate the reading.
+    const still = classifyFocus(frameRun(10), defaultRuleSettings);
+    expect(still.motionAmount).toBe(0);
+
+    const withDropout = classifyFocus(
+      windowWithRuns(10, { starts: [4], runSeconds: 2, apply: { facePresent: false } }),
+      defaultRuleSettings
+    );
+    expect(withDropout.motionAmount).toBe(0);
   });
 
   it('reports the blink rate per minute', () => {
@@ -384,6 +424,20 @@ describe('extractFrameSignals', () => {
     expect(left.headTurned).toBe(true);
     expect(right.headTurned).toBe(true);
     expect(comfortable.headTurned).toBe(false);
+  });
+
+  it('keeps the margin between the measured comfortable range and the threshold', () => {
+    // 25 degrees is the edge of the range measured on a real person, and it must
+    // stay clear even while moving, when the motion boost widens the threshold by a
+    // degree. The gap either side of this pair is the whole reason the angle was not
+    // lowered further for sensitivity.
+    const face = syntheticFace({ noseY: 0.5 });
+    const moving = { x: 0.5, y: 0.5 };
+    const atRange = extractFrameSignals(face, defaultRuleSettings, 0, moving, yawMatrix(25));
+    const past = extractFrameSignals(face, defaultRuleSettings, 0, null, yawMatrix(29));
+
+    expect(atRange.headTurned).toBe(false);
+    expect(past.headTurned).toBe(true);
   });
 });
 

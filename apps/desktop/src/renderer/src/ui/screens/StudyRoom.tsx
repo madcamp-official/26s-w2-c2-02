@@ -25,6 +25,7 @@ import {
   type Participant,
   type ParticipantStatus,
   type Room,
+  type RoomActivityKind,
   type RoomiMessage,
   type StudySession,
   type VideoJoinInfo
@@ -36,8 +37,10 @@ import { useDailyRoom } from '../../use-daily-room';
 import {
   defaultRuleSettings,
   type FocusLabel,
-  type FocusSnapshot
+  type FocusSnapshot,
+  type RuleSettings
 } from '../../focus-pipeline';
+import { focusIndices, type FocusIndices, type FocusSessionReport } from '../../focus-stats';
 import { useFocusDetection } from '../../use-focus-detection';
 import {
   missionResultFromCounter,
@@ -65,25 +68,43 @@ type DistractionCard = {
   answer: string;
 };
 
+const distractionCardMinDelayMs = 10_000;
+const distractionCardMaxDelayMs = 30_000;
+const accusationWindowMs = 1_500;
+const accusationCooldownMs = 10_000;
+const distractionScoreThreshold = 70;
+const focusCheckCooldownMs = 45_000;
+const calibrationMarginDegrees = 5;
+const calibrationMarginScore = 10;
+
 type KeyedMissionCounterState = MissionCounterState & {
   missionKey: string;
+};
+
+type MissionAccusationPrompt = {
+  targetId: string;
+  missionId: string;
+  choices: string[];
+  answer: string;
 };
 
 interface StudyRoomProps extends ScreenProps {
   currentParticipantId: string;
   isHost: boolean;
-  onEndSession: () => void;
-  onLeaveRoom: () => void;
+  onEndSession: (focusReport?: FocusSessionReport) => void;
+  onLeaveRoom: (focusReport?: FocusSessionReport) => void;
   onToggleGoalAchieved: (achieved: boolean) => void;
   onUpdatePresence: (status: ParticipantStatus) => void;
   onStartBreak: () => void | Promise<void>;
   onStartGame?: (kind: GameKind) => void;
   onSubmitMissionResult?: (result: MissionResult) => void;
+  onWinByMissionGuess?: (winnerId: string, targetId: string, missionId: string) => void;
   onSubmitBluffBet?: (targetId: string, predictsCrack: boolean) => void;
   onSubmitBluffSignals?: (signals: ExpressionSignals) => void;
   onAdvanceRelay?: (toId: string, similarity: number) => void;
   onReadyNextRound?: () => void;
   onSendChatMessage?: (text: string) => void;
+  onUpdateFocusReport?: (focusReport: FocusSessionReport) => void;
   participants: Participant[];
   goals: Goal[];
   roomiMessages: RoomiMessage[];
@@ -98,17 +119,36 @@ interface StudyRoomProps extends ScreenProps {
 
 const statusLabel: Record<ParticipantStatus, string> = {
   online: '대기',
-  focused: '참여 중',
+  focused: '공부 중',
   distracted: '주의 이탈',
   away: '자리 비움',
   break: '휴식',
   paused: '눈 감김'
 };
 
-const studyRoomRuleSettings = {
+/**
+ * The face games run through this same screen, where `공부 중` would be a lie.
+ * Mirrors how the waiting room already splits the two.
+ */
+function presenceLabel(status: ParticipantStatus, activityKind: RoomActivityKind) {
+  if (status === 'focused' && activityKind !== 'study') return '게임 중';
+  return statusLabel[status];
+}
+
+/**
+ * Hiding your face is itself a move in the face games, so a game room flips to
+ * `자리 비움` the instant detection loses the face. Study rooms keep the 5 second
+ * default: a sip of water or a hand crossing the face is not leaving, and focus
+ * time stops accruing for anyone marked away.
+ */
+const gameRoomRuleSettings = {
   ...defaultRuleSettings,
   faceMissingSeconds: 0
 };
+
+export function ruleSettingsForActivity(activityKind: RoomActivityKind) {
+  return activityKind === 'study' ? defaultRuleSettings : gameRoomRuleSettings;
+}
 
 const distractionCards: Omit<DistractionCard, 'id'>[] = [
   {
@@ -134,6 +174,150 @@ const distractionCards: Omit<DistractionCard, 'id'>[] = [
   }
 ];
 
+/** Newest-last score samples as an SVG polyline path inside a `width` x `height` box. */
+export function focusScoreTrendPoints(history: number[], width: number, height: number) {
+  if (history.length < 2) {
+    return '';
+  }
+
+  const top = Math.max(...history);
+  const bottom = Math.min(...history);
+  // A flat run has no range to scale against; draw it down the middle rather than
+  // dividing by zero and sending every point to the top edge.
+  const span = top - bottom || 1;
+
+  return history
+    .map((score, index) => {
+      const x = (index / (history.length - 1)) * width;
+      const y = height - ((score - bottom) / span) * height;
+      return `${round2(x)},${round2(top === bottom ? height / 2 : y)}`;
+    })
+    .join(' ');
+}
+
+function round2(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+export function FocusScoreTrend({ history, score }: { history: number[]; score?: number }) {
+  const points = focusScoreTrendPoints(history, 240, 48);
+  const previous = history.at(-2);
+  const latest = history.at(-1);
+  const delta = previous !== undefined && latest !== undefined ? latest - previous : 0;
+
+  if (score === undefined) {
+    return null;
+  }
+
+  return (
+    <div className="focus-trend">
+      <div className="focus-trend__head">
+        <strong className="focus-trend__score">{score}점</strong>
+        {/* The arrow and sign carry the direction, so the reading never depends on
+            colour alone. */}
+        <span className="focus-trend__delta">
+          {delta === 0 ? '유지' : `${delta > 0 ? '↑' : '↓'} ${delta > 0 ? '+' : '−'}${Math.abs(delta)}`}
+        </span>
+      </div>
+      {points ? (
+        <svg
+          aria-hidden="true"
+          className="focus-trend__spark"
+          preserveAspectRatio="none"
+          viewBox="0 0 240 48"
+        >
+          <polyline points={points} />
+        </svg>
+      ) : (
+        <p className="focus-trend__empty">잠시 후 점수 흐름이 그려져요.</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The fatigue and distraction readings for the local participant.
+ *
+ * Mine only, deliberately: the ranking beside it names everyone, but telling the
+ * room how often someone yawned is exactly the leak the room contract forbids.
+ * Fatigue only suggests a break. Distraction can mark the local participant as
+ * distracted once the session-level reading is high enough, which lets the normal
+ * room scoring drain points through the existing presence tracker.
+ */
+export function FocusDetailPanel({ indices }: { indices: FocusIndices }) {
+  if (!indices.ready) {
+    return (
+      <p className="focus-detail__pending">
+        1분 정도 지나면 내 피로도와 산만함을 보여줄게요.
+      </p>
+    );
+  }
+
+  return (
+    <div className="focus-detail">
+      <FocusGauge
+        label="피로도"
+        value={indices.fatigue}
+        note={indices.restSuggested ? '눈이 자주 감겨요. 잠깐 쉬어가는 게 좋겠어요.' : undefined}
+        rows={[
+          ['하품 빈도', `${indices.yawnsPerHour}회/시간`],
+          ['눈 깜빡임', `${indices.blinksPerMinute}회/분`],
+          ['눈 감김 시간', `${Math.round(indices.eyesClosedRatio * 100)}%`]
+        ]}
+      />
+      <FocusGauge
+        label="산만함"
+        value={indices.distraction}
+        rows={[
+          ['시선 이탈', `${indices.gazeDiversionsPerHour}회/시간`],
+          ['고개 돌림', `${indices.headTurnsPerHour}회/시간`],
+          ['자리 비움', `${indices.awaysPerHour}회/시간`],
+          // An index, not a count: head jitter has no unit anyone would recognise.
+          ['자세 흔들림', `${indices.restlessness}`]
+        ]}
+      />
+      <p className="focus-detail__foot">
+        {indices.observedMinutes}분 관찰 기준 · 피로도는 휴식 제안에, 산만함은 높을 때 점수 흐름에 반영돼요.
+      </p>
+    </div>
+  );
+}
+
+function FocusGauge({
+  label,
+  value,
+  note,
+  rows
+}: {
+  label: string;
+  value: number;
+  note?: string;
+  rows: [string, string][];
+}) {
+  return (
+    <section className="focus-gauge">
+      <div className="focus-gauge__head">
+        <span className="focus-gauge__label">{label}</span>
+        <strong className="focus-gauge__value">{value}</strong>
+      </div>
+      {/* Length carries the reading, so it survives both a colourblind viewer and
+          the fact that the design file has no danger colour to escalate into. */}
+      <div className="focus-gauge__track">
+        <div className="focus-gauge__fill" style={{ width: `${value}%` }} />
+      </div>
+      <dl className="focus-gauge__rows">
+        {rows.map(([name, reading]) => (
+          <div className="focus-gauge__row" key={name}>
+            <dt>{name}</dt>
+            <dd>{reading}</dd>
+          </div>
+        ))}
+      </dl>
+      {note && <p className="focus-gauge__note">{note}</p>}
+    </section>
+  );
+}
+
 export function participantsInStudyRoom(participants: Participant[]) {
   return participants.filter((participant) => participant.status !== 'online');
 }
@@ -156,36 +340,78 @@ export function focusLabelToParticipantStatus(label: FocusLabel): ParticipantSta
   return 'distracted';
 }
 
+export function focusStatusFromSignals(
+  label: FocusLabel,
+  indices: Pick<FocusIndices, 'ready' | 'distraction'>,
+  distractionThreshold = distractionScoreThreshold
+): ParticipantStatus {
+  const baseStatus = focusLabelToParticipantStatus(label);
+  if (baseStatus !== 'focused') return baseStatus;
+  return indices.ready && indices.distraction >= distractionThreshold ? 'distracted' : 'focused';
+}
+
+/**
+ * What the camera sees right now, for the local participant's own tile only.
+ * Other people's tiles fall through to their presence status: the room is told
+ * whether someone is focused, never the specific reason they are not.
+ *
+ * Head and face read straight off the current frame so the label tracks what the
+ * viewer is doing as they do it. Eyes and mouth deliberately wait for the
+ * sustained signal instead: every blink would flash `눈 감김`, and a mouth open
+ * for one frame is talking, not a yawn.
+ */
 export function participantStatusLabel(
   participant: Pick<Participant, 'status'>,
-  focusSnapshot?: Partial<FocusSnapshot>
+  focusSnapshot?: Partial<FocusSnapshot>,
+  activityKind: RoomActivityKind = 'study'
 ) {
-  if (focusSnapshot) {
+  const current = focusSnapshot?.current;
+
+  if (focusSnapshot && current) {
     const activeSignals = new Set(focusSnapshot.activeSignals ?? []);
-    if (focusSnapshot.current?.facePresent === false || activeSignals.has('face_missing')) {
+
+    if (!current.facePresent) {
       return '얼굴 없음';
     }
     if (activeSignals.has('eyes_closed') || focusSnapshot.label === 'sleepy') {
       return '눈 감김';
     }
-    if (activeSignals.has('head_down')) {
-      return '고개 숙임';
-    }
-    if (activeSignals.has('head_turned')) {
-      return '시선 이탈';
-    }
     if (activeSignals.has('yawning')) {
       return '하품';
     }
-    if (focusSnapshot.label === 'uncertain') {
-      return '집중 흔들림';
+    if (current.headDown) {
+      return '고개 숙임';
     }
-    if (focusSnapshot.label === 'distracted') {
-      return '주의 이탈';
+    if (current.headTurned) {
+      return '고개 돌림';
+    }
+    // Eyes rove while reading, so this one only shows once the rule has decided the
+    // gaze actually settled somewhere off-axis, not on the frame that got there.
+    if (activeSignals.has('gaze_diverged')) {
+      return '시선 이탈';
+    }
+    if (current.mouthOpen) {
+      return '입 벌림';
     }
   }
 
-  return statusLabel[participant.status];
+  return presenceLabel(participant.status, activityKind);
+}
+
+/**
+ * The focus verdict, shown next to the detail label so the two are never
+ * confused: the detail says what is happening, this says whether it counts as
+ * focus. Derived from presence so a tile reads the same for everyone.
+ */
+export function focusVerdictLabel(status: ParticipantStatus) {
+  if (status === 'focused') return '집중중';
+  if (status === 'break') return '휴식';
+  if (status === 'online') return '대기';
+  return '집중 안 함';
+}
+
+function shouldAskFocusConfirmation(status: ParticipantStatus) {
+  return status === 'distracted' || status === 'away' || status === 'paused';
 }
 
 function tileDotClass(status: ParticipantStatus) {
@@ -193,6 +419,40 @@ function tileDotClass(status: ParticipantStatus) {
   if (status === 'distracted') return 'tile__dot--distracted';
   if (status === 'paused') return 'tile__dot--paused';
   return '';
+}
+
+function adaptRuleSettingsForFocusedConfirmation(
+  settings: RuleSettings,
+  snapshot: FocusSnapshot
+): RuleSettings {
+  const current = snapshot.current;
+  const activeSignals = new Set(snapshot.activeSignals);
+  const headYaw = Math.abs(current.headPose?.headYaw ?? current.headYawRatio * 90);
+  const headPitch = current.headPose?.headPitch ?? current.headPitchRatio * 90;
+  const gazeDivergence = Math.abs(current.gazeDivergence ?? 0);
+
+  return {
+    ...settings,
+    focusedThreshold: Math.min(
+      settings.focusedThreshold,
+      Math.max(0, snapshot.score - calibrationMarginScore)
+    ),
+    headTurnDegreesThreshold:
+      activeSignals.has('head_turned') || current.headTurned
+        ? Math.max(settings.headTurnDegreesThreshold, Math.ceil(headYaw + calibrationMarginDegrees))
+        : settings.headTurnDegreesThreshold,
+    headDownDegreesThreshold:
+      activeSignals.has('head_down') || current.headDown
+        ? Math.max(settings.headDownDegreesThreshold, Math.ceil(headPitch + calibrationMarginDegrees))
+        : settings.headDownDegreesThreshold,
+    gazeDivergenceDegreesThreshold:
+      activeSignals.has('gaze_diverged') || current.gazeDiverged
+        ? Math.max(
+            settings.gazeDivergenceDegreesThreshold,
+            Math.ceil(gazeDivergence + calibrationMarginDegrees)
+          )
+        : settings.gazeDivergenceDegreesThreshold
+  };
 }
 
 export function reconcilePendingCameraState(reported: boolean, requested: boolean) {
@@ -279,11 +539,13 @@ export function StudyRoom({
   onStartBreak,
   onStartGame,
   onSubmitMissionResult,
+  onWinByMissionGuess,
   onSubmitBluffBet,
   onSubmitBluffSignals,
   onAdvanceRelay,
   onReadyNextRound,
   onSendChatMessage,
+  onUpdateFocusReport,
   participants,
   goals,
   roomiMessages,
@@ -315,6 +577,18 @@ export function StudyRoom({
   const [distractionSolvedId, setDistractionSolvedId] = useState<string | null>(null);
   const [distractionVisible, setDistractionVisible] = useState(true);
   const [distractionWrong, setDistractionWrong] = useState(false);
+  const [distractionCycle, setDistractionCycle] = useState(0);
+  const [activeMissionActorId, setActiveMissionActorId] = useState<string | null>(null);
+  const [accusationPrompt, setAccusationPrompt] = useState<MissionAccusationPrompt | null>(null);
+  const [accusationCooldownUntil, setAccusationCooldownUntil] = useState(0);
+  const [calibratedRuleSettings, setCalibratedRuleSettings] = useState<RuleSettings | null>(null);
+  const [calibratedDistractionThreshold, setCalibratedDistractionThreshold] = useState(
+    distractionScoreThreshold
+  );
+  const [dismissedRestSuggestion, setDismissedRestSuggestion] = useState(false);
+  const [focusCheckDismissedUntil, setFocusCheckDismissedUntil] = useState(0);
+  const lastReportedFocusKeyRef = useRef('');
+  const previousMissionCountsRef = useRef<Map<string, number>>(new Map());
   const reportedMissionRef = useRef<{ missionId: string; count: number; success: boolean } | null>(null);
   const { callObject, localMedia, participantsByRoomiId, restart } =
     useDailyRoom(videoJoin);
@@ -325,6 +599,11 @@ export function StudyRoom({
       ? (localDailyParticipant.tracks.video.track ?? null)
       : null;
   const localVideoTrack = dailyVideoTrack ?? localFallbackVideoTrack;
+  const isStudyMode = room.settings.activityKind === 'study';
+  const ruleSettings = useMemo(
+    () => calibratedRuleSettings ?? ruleSettingsForActivity(room.settings.activityKind),
+    [calibratedRuleSettings, room.settings.activityKind]
+  );
   const focusDetection = useFocusDetection({
     enabled: cameraOn && typeof MediaStream !== 'undefined',
     track: localVideoTrack ?? null,
@@ -333,9 +612,40 @@ export function StudyRoom({
       userId: currentParticipantId,
       sessionId: currentGame?.id ?? currentSession?.id ?? room.id
     },
-    settings: studyRoomRuleSettings
+    settings: ruleSettings
   });
   const missionKey = currentGame && privateMission ? `${currentGame.round.id}:${privateMission.id}` : '';
+  const myFocusScore = focusRanking.find(
+    (entry) => entry.participantId === currentParticipantId
+  )?.score;
+  const [scoreHistory, setScoreHistory] = useState<number[]>([]);
+  const [focusDetailOpen, setFocusDetailOpen] = useState(false);
+  const myFocusIndices = useMemo(
+    () => focusIndices(focusDetection.sessionStats),
+    [focusDetection.sessionStats]
+  );
+  const myFocusReport = useMemo(() => toFocusSessionReport(myFocusIndices), [myFocusIndices]);
+  const focusPresenceStatus = focusStatusFromSignals(
+    focusDetection.focusSnapshot.label,
+    myFocusIndices,
+    calibratedDistractionThreshold
+  );
+  const shouldShowRestSuggestion =
+    isStudyMode && myFocusIndices.restSuggested && !dismissedRestSuggestion;
+  const shouldShowFocusCheck =
+    isStudyMode &&
+    focusDetection.status === 'running' &&
+    shouldAskFocusConfirmation(focusPresenceStatus) &&
+    timestamp >= focusCheckDismissedUntil;
+
+  // Keyed on the score value rather than the ranking array: the array is a fresh
+  // reference on every render, which would loop through this setState.
+  useEffect(() => {
+    if (myFocusScore === undefined) return;
+    setScoreHistory((history) =>
+      history.at(-1) === myFocusScore ? history : [...history, myFocusScore].slice(-60)
+    );
+  }, [myFocusScore]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setTimestamp(Date.now()), 1_000);
@@ -372,9 +682,23 @@ export function StudyRoom({
   }, [dailyVideoTrack, videoJoin]);
 
   useEffect(() => {
-    const nextStatus = focusLabelToParticipantStatus(focusDetection.focusSnapshot.label);
-    if (focusDetection.status === 'running') onUpdatePresence(nextStatus);
-  }, [focusDetection.focusSnapshot.label, focusDetection.status, onUpdatePresence]);
+    if (focusDetection.status === 'running') onUpdatePresence(focusPresenceStatus);
+  }, [focusDetection.status, focusPresenceStatus, onUpdatePresence]);
+
+  useEffect(() => {
+    if (!isStudyMode || !onUpdateFocusReport) return;
+    const key = focusReportKey(myFocusReport);
+    if (key === lastReportedFocusKeyRef.current) return;
+    lastReportedFocusKeyRef.current = key;
+    onUpdateFocusReport(myFocusReport);
+  }, [isStudyMode, myFocusReport, onUpdateFocusReport]);
+
+  useEffect(() => {
+    setCalibratedRuleSettings(null);
+    setCalibratedDistractionThreshold(distractionScoreThreshold);
+    setDismissedRestSuggestion(false);
+    setFocusCheckDismissedUntil(0);
+  }, [room.id, room.settings.activityKind]);
 
   useEffect(() => {
     setMissionState({ missionKey, count: 0, previousActive: false });
@@ -382,10 +706,21 @@ export function StudyRoom({
   }, [missionKey]);
 
   useEffect(() => {
+    setDistractionCycle(0);
+    setDistractionCard(null);
+    setDistractionSolvedId(null);
+    setDistractionVisible(false);
+    setDistractionWrong(false);
+    previousMissionCountsRef.current = new Map();
+    setActiveMissionActorId(null);
+    setAccusationPrompt(null);
+    setAccusationCooldownUntil(0);
+  }, [currentGame?.round.id]);
+
+  useEffect(() => {
     const shouldShowDistraction =
       currentGame?.kind === 'hidden_mission' &&
-      currentGame.status === 'in_round' &&
-      participants.length > 1;
+      currentGame.status === 'in_round';
 
     if (!shouldShowDistraction || !currentGame) {
       setDistractionCard(null);
@@ -395,12 +730,60 @@ export function StudyRoom({
       return;
     }
 
-    const card = createDistractionCard(currentGame.round.id, currentGame.round.index);
-    setDistractionCard(card);
+    if (distractionCard && distractionSolvedId !== distractionCard.id) return;
+
     setDistractionSolvedId(null);
-    setDistractionVisible(true);
+    setDistractionVisible(false);
     setDistractionWrong(false);
-  }, [currentGame?.id, currentGame?.kind, currentGame?.round.id, currentGame?.round.index, currentGame?.status, participants.length]);
+
+    const delayMs =
+      distractionCardMinDelayMs +
+      Math.floor(Math.random() * (distractionCardMaxDelayMs - distractionCardMinDelayMs + 1));
+    const timerId = window.setTimeout(() => {
+      const card = createDistractionCard(currentGame.round.id, currentGame.round.index);
+      setDistractionCard(card);
+      setDistractionSolvedId(null);
+      setDistractionVisible(true);
+      setDistractionWrong(false);
+    }, delayMs);
+
+    return () => window.clearTimeout(timerId);
+  }, [
+    currentGame?.id,
+    currentGame?.kind,
+    currentGame?.round.id,
+    currentGame?.round.index,
+    currentGame?.status,
+    distractionCard,
+    distractionCycle,
+    distractionSolvedId
+  ]);
+
+  useEffect(() => {
+    if (currentGame?.kind !== 'hidden_mission' || currentGame.status !== 'in_round') {
+      previousMissionCountsRef.current = new Map();
+      setActiveMissionActorId(null);
+      setAccusationPrompt(null);
+      return;
+    }
+
+    let latestActorId: string | null = null;
+    const nextCounts = new Map(previousMissionCountsRef.current);
+    for (const result of currentGame.missionResults ?? []) {
+      const previousCount = previousMissionCountsRef.current.get(result.playerId) ?? 0;
+      if (result.count > previousCount) latestActorId = result.playerId;
+      nextCounts.set(result.playerId, result.count);
+    }
+    previousMissionCountsRef.current = nextCounts;
+    if (!latestActorId) return;
+
+    setActiveMissionActorId(latestActorId);
+    const timerId = window.setTimeout(() => {
+      setActiveMissionActorId((current) => (current === latestActorId ? null : current));
+    }, accusationWindowMs);
+
+    return () => window.clearTimeout(timerId);
+  }, [currentGame?.kind, currentGame?.missionResults, currentGame?.round.id, currentGame?.status]);
 
   const distractionLocksMission = Boolean(
     distractionCard &&
@@ -489,7 +872,6 @@ export function StudyRoom({
   const myBluffBet = currentGame?.bluffBets?.find(
     (bet) => bet.participantId === currentParticipantId
   );
-  const isStudyMode = room.settings.activityKind === 'study';
   const goalCardTitle = isStudyMode ? '공부 목표' : '플레이 스타일';
   const emptyGoalText = isStudyMode ? '등록된 목표가 없어요' : '등록된 플레이 스타일이 없어요';
   const ranking = rankGameScores(currentGame, participants);
@@ -530,12 +912,45 @@ export function StudyRoom({
     if (!distractionCard) return;
     if (choice === distractionCard.answer) {
       setDistractionSolvedId(distractionCard.id);
+      setDistractionCard(null);
       setDistractionVisible(false);
       setDistractionWrong(false);
+      setDistractionCycle((current) => current + 1);
       return;
     }
 
     setDistractionWrong(true);
+  };
+
+  const accuseMissionActor = (targetId: string) => {
+    if (!currentGame || Date.now() < accusationCooldownUntil) return;
+    if (targetId !== activeMissionActorId) return;
+    const mission = currentGame.missions?.find((item) => item.playerId === targetId);
+    if (!mission) return;
+    setAccusationPrompt({
+      targetId,
+      missionId: mission.id,
+      answer: mission.prompt,
+      choices: missionGuessChoices(mission, currentGame.missions ?? [])
+    });
+    setActiveMissionActorId(null);
+  };
+
+  const answerMissionAccusation = (choice: string) => {
+    if (!accusationPrompt) return;
+    if (choice === accusationPrompt.answer) {
+      onWinByMissionGuess?.(
+        currentParticipantId,
+        accusationPrompt.targetId,
+        accusationPrompt.missionId
+      );
+      setAccusationPrompt(null);
+      return;
+    }
+
+    setAccusationPrompt(null);
+    setActiveMissionActorId(null);
+    setAccusationCooldownUntil(Date.now() + accusationCooldownMs);
   };
 
   const submitChat = (event: FormEvent<HTMLFormElement>) => {
@@ -544,6 +959,25 @@ export function StudyRoom({
     if (!text) return;
     onSendChatMessage?.(text);
     setChatDraft('');
+  };
+
+  const confirmFocused = () => {
+    setCalibratedRuleSettings((current) =>
+      adaptRuleSettingsForFocusedConfirmation(current ?? ruleSettings, focusDetection.focusSnapshot)
+    );
+    setCalibratedDistractionThreshold((current) =>
+      Math.max(current, Math.min(100, myFocusIndices.distraction + calibrationMarginScore))
+    );
+    setFocusCheckDismissedUntil(Date.now() + focusCheckCooldownMs);
+    onUpdatePresence('focused');
+  };
+
+  const leaveRoom = () => {
+    onLeaveRoom(isStudyMode ? myFocusReport : undefined);
+  };
+
+  const endSession = () => {
+    onEndSession(isStudyMode ? myFocusReport : undefined);
   };
 
   return (
@@ -625,8 +1059,12 @@ export function StudyRoom({
                         <i className={`tile__dot ${tileDotClass(participant.status)}`} />
                         {participantStatusLabel(
                           participant,
-                          isMe ? focusDetection.focusSnapshot : undefined
+                          isMe ? focusDetection.focusSnapshot : undefined,
+                          room.settings.activityKind
                         )}
+                        <span className="tile__verdict">
+                          {focusVerdictLabel(participant.status)}
+                        </span>
                       </span>
                     </footer>
                   </article>
@@ -695,6 +1133,85 @@ export function StudyRoom({
               </p>
             </div>
           </section>
+
+          {shouldShowRestSuggestion && (
+            <section className="study-card focus-nudge focus-nudge--rest" aria-label="휴식 제안">
+              <div>
+                <span className="focus-nudge__eyebrow">휴식 제안</span>
+                <h2>피로도가 높아졌어요</h2>
+                <p>눈 감김과 하품 신호가 쌓였어요. 잠깐 쉬고 돌아오면 점수를 지키기 좋아요.</p>
+              </div>
+              <div className="focus-nudge__actions">
+                <button type="button" className="btn btn--primary" onClick={() => void onStartBreak()}>
+                  쉬기
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  onClick={() => setDismissedRestSuggestion(true)}
+                >
+                  계속하기
+                </button>
+              </div>
+            </section>
+          )}
+
+          {shouldShowFocusCheck && (
+            <section className="study-card focus-nudge" aria-label="집중 상태 확인">
+              <div>
+                <span className="focus-nudge__eyebrow">집중 확인</span>
+                <h2>혹시 집중 안하고 있어?</h2>
+                <p>
+                  카메라 신호나 산만 지표가 높게 잡혔어요. 오탐이면 지금 자세를 기준으로 조금 더
+                  넓게 판단할게요.
+                </p>
+              </div>
+              <div className="focus-nudge__actions">
+                <button type="button" className="btn btn--primary" onClick={confirmFocused}>
+                  집중 중이야
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  onClick={() => setFocusCheckDismissedUntil(Date.now() + focusCheckCooldownMs)}
+                >
+                  알겠어
+                </button>
+              </div>
+            </section>
+          )}
+
+          {currentGame?.kind === 'hidden_mission' && currentGame.status === 'in_round' && (
+            <section className="study-card study-accuse" aria-label="미션 수행자 지목">
+              <div className="study-card__head">
+                <h2 className="study-card__title">지목</h2>
+                {timestamp < accusationCooldownUntil && (
+                  <span className="study-accuse__cooldown">
+                    {Math.ceil((accusationCooldownUntil - timestamp) / 1_000)}초
+                  </span>
+                )}
+              </div>
+              <div className="study-accuse__grid">
+                {participants.slice(0, 4).map((participant) => {
+                  const disabled =
+                    timestamp < accusationCooldownUntil ||
+                    participant.id !== activeMissionActorId ||
+                    Boolean(accusationPrompt);
+                  return (
+                    <button
+                      type="button"
+                      className="study-accuse__button"
+                      disabled={disabled}
+                      key={participant.id}
+                      onClick={() => accuseMissionActor(participant.id)}
+                    >
+                      {participant.nickname}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           <section className="study-card study-chat" aria-label="채팅">
             <h2 className="study-card__title">채팅</h2>
@@ -768,6 +1285,16 @@ export function StudyRoom({
               {focusRanking.length > 0 && (
                 <section className="study-card" aria-label="실시간 집중 순위">
                   <h2 className="study-card__title">실시간 집중 순위</h2>
+                  <FocusScoreTrend history={scoreHistory} score={myFocusScore} />
+                  <button
+                    aria-expanded={focusDetailOpen}
+                    className="focus-detail__toggle"
+                    onClick={() => setFocusDetailOpen((open) => !open)}
+                    type="button"
+                  >
+                    {focusDetailOpen ? '자세히 접기' : '자세히 보기'}
+                  </button>
+                  {focusDetailOpen && <FocusDetailPanel indices={myFocusIndices} />}
                   <ol className="retro-ranking">
                     {focusRanking.map((entry, index) => {
                       const isSelf = entry.participantId === currentParticipantId;
@@ -784,7 +1311,7 @@ export function StudyRoom({
                             {isSelf && ' (나)'}
                             {entry.left && ' (나감)'}
                           </span>
-                          <span className="retro-ranking__minutes">{entry.focusMinutes}분</span>
+                          <span className="retro-ranking__minutes">{entry.score}점</span>
                         </li>
                       );
                     })}
@@ -1025,7 +1552,7 @@ export function StudyRoom({
             )}
           </div>
         )}
-        <button type="button" className="ctrl ctrl--leave" onClick={onLeaveRoom} aria-label="나가기">
+        <button type="button" className="ctrl ctrl--leave" onClick={leaveRoom} aria-label="나가기">
           <LogOut size={20} />
         </button>
       </div>
@@ -1045,9 +1572,30 @@ export function StudyRoom({
               <button type="button" className="btn btn--ghost" onClick={() => setConfirmEnd(false)}>
                 취소
               </button>
-              <button type="button" className="btn btn--danger" onClick={onEndSession}>
+              <button type="button" className="btn btn--danger" onClick={endSession}>
                 세션 종료
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {accusationPrompt && (
+        <div className="session-end-modal" role="dialog" aria-label="미션 맞추기">
+          <div className="session-end-modal__panel mission-guess-modal">
+            <h2 className="session-end-modal__title">
+              {participantName(participants, accusationPrompt.targetId)}의 미션은?
+            </h2>
+            <div className="mission-guess-modal__choices">
+              {accusationPrompt.choices.map((choice) => (
+                <button
+                  type="button"
+                  className="btn btn--soft"
+                  key={choice}
+                  onClick={() => answerMissionAccusation(choice)}
+                >
+                  {choice}
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -1201,12 +1749,65 @@ function emptyExpressionSignals(): ExpressionSignals {
   };
 }
 
+function toFocusSessionReport(indices: FocusIndices): FocusSessionReport {
+  return {
+    ready: indices.ready,
+    observedMinutes: indices.observedMinutes,
+    eyesClosedRatio: indices.eyesClosedRatio,
+    blinksPerMinute: indices.blinksPerMinute,
+    yawnsPerHour: indices.yawnsPerHour,
+    headTurnsPerHour: indices.headTurnsPerHour,
+    awaysPerHour: indices.awaysPerHour,
+    gazeDiversionsPerHour: indices.gazeDiversionsPerHour,
+    restlessness: indices.restlessness,
+    fatigue: indices.fatigue,
+    distraction: indices.distraction,
+    restSuggested: indices.restSuggested
+  };
+}
+
+function focusReportKey(report: FocusSessionReport) {
+  return [
+    report.ready,
+    report.observedMinutes,
+    report.eyesClosedRatio,
+    report.blinksPerMinute,
+    report.yawnsPerHour,
+    report.headTurnsPerHour,
+    report.awaysPerHour,
+    report.gazeDiversionsPerHour,
+    report.restlessness,
+    report.fatigue,
+    report.distraction,
+    report.restSuggested
+  ].join(':');
+}
+
 function createDistractionCard(roundId: string, roundIndex: number): DistractionCard {
   const template = distractionCards[(Math.max(1, roundIndex) - 1) % distractionCards.length]!;
   return {
-    id: `${roundId}:${template.kind}`,
+    id: `${roundId}:${template.kind}:${Date.now()}`,
     ...template
   };
+}
+
+function missionGuessChoices(answer: HiddenMission, missions: HiddenMission[]) {
+  const fallbackPrompts = [
+    '상대가 볼 때마다 자연스럽게 미소 짓기',
+    '대화 중 한 번 윙크하기',
+    '고개를 끄덕이며 동의하는 척하기',
+    '눈썹을 올리며 놀란 표정 짓기',
+    '입을 살짝 벌리고 생각하는 척하기'
+  ];
+  const prompts = [
+    answer.prompt,
+    ...missions
+      .filter((mission) => mission.id !== answer.id)
+      .map((mission) => mission.prompt),
+    ...fallbackPrompts
+  ];
+  const uniquePrompts = Array.from(new Set(prompts)).slice(0, 4);
+  return uniquePrompts.sort((left, right) => left.localeCompare(right));
 }
 
 function getAudioTracks(stream: MediaStream | null): MediaStreamTrack[] {

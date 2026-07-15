@@ -143,7 +143,7 @@ Client events are defined in `packages/shared/src/realtime-events.ts`.
 | `game:reveal` | server to client | Broadcast the revealed game state, including final scores and missions that are now safe to show. |
 | `chat:message` | server to client | Broadcast a chat message to subscribed room participants. New subscribers receive recent chat messages in the room snapshot. |
 | `roomi:message` | server to client | Send a typed Roomi operator/game message. Game messages cover start, live reactions, and reveal. Targeted messages use `targetParticipantId`. |
-| `focus:ranking-updated` | server to client | Broadcast `{ roomId, ranking: FocusRankingEntry[] }` while a study session is `studying`. It fires on focus-status changes and room leave, plus a 12-second heartbeat so focused time keeps ticking without polling. |
+| `focus:ranking-updated` | server to client | Broadcast `{ roomId, ranking: FocusRankingEntry[] }` while a study session is `studying`. It fires on focus-status changes and room leave, plus a 12-second heartbeat so focused time keeps ticking without polling. Entries are ordered by `score`, which builds at 10 per 5 focused seconds, drains at 5 while `distracted` and 10 while `away`, holds still during `break`/`paused`, and floors at 0. Both `score` and `focusMinutes` include the time since the last status change, so the heartbeat reports live values. |
 | `error` | server to client | Report a recoverable realtime error. |
 
 REST joins also publish `room:updated` to subscribed clients, so a host in the

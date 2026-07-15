@@ -35,6 +35,7 @@ import { StudyRoom } from './screens/StudyRoom';
 import { BreakReturn } from './screens/BreakReturn';
 import { Retrospective } from './screens/Retrospective';
 import type { ScreenId } from './screens/types';
+import type { FocusSessionReport } from '../focus-stats';
 import {
   advanceRelay,
   createRoomSession,
@@ -70,6 +71,7 @@ type RoomDraft = {
   roomiMessages: RoomiMessage[];
   chatMessages: ChatMessage[];
   focusRanking: FocusRankingEntry[];
+  focusReport?: FocusSessionReport;
   currentSession?: StudySession;
   currentGame?: GameSession;
   privateMission?: HiddenMission;
@@ -220,20 +222,20 @@ function createLocalGame(
   const timestamp = now();
   const gameId = `game-${Date.now()}`;
   const templates: Array<Omit<HiddenMission, 'id' | 'playerId'>> = [
-    { prompt: '들키지 않게 윙크 2번 하기', verify: 'wink_count', target: 2 },
-    { prompt: '듣는 척하며 짧은 윙크 3번 섞기', verify: 'wink_count', target: 3 },
-    { prompt: '다른 사람이 말할 때 윙크 4번 넣기', verify: 'wink_count', target: 4 },
-    { prompt: '자연스럽게 미소 3번 짓기', verify: 'smile_count', target: 3 },
-    { prompt: '작은 미소 리액션 4번 하기', verify: 'smile_count', target: 4 },
-    { prompt: '아무 말 없이 조용히 미소 5번 만들기', verify: 'smile_count', target: 5 },
-    { prompt: '대답하기 직전에 입을 살짝 2번 벌리기', verify: 'jaw_open_count', target: 2 },
-    { prompt: '놀란 척 아주 짧게 입을 3번 열기', verify: 'jaw_open_count', target: 3 },
-    { prompt: '눈썹을 살짝 3번 올리기', verify: 'brow_count', target: 3 },
-    { prompt: '반응할 때 눈썹을 4번 들어 올리기', verify: 'brow_count', target: 4 },
-    { prompt: '카메라 쪽으로 눈썹을 5번 올리기', verify: 'brow_count', target: 5 },
-    { prompt: '듣는 척하면서 고개를 2번 살짝 끄덕이기', verify: 'nod_count', target: 2 },
-    { prompt: '상대 말 끝에 맞춰 고개를 3번 작게 끄덕이기', verify: 'nod_count', target: 3 },
-    { prompt: '생각난 척 고개를 4번 짧게 끄덕이기', verify: 'nod_count', target: 4 }
+    { prompt: '들키지 않게 윙크 4번 하기', verify: 'wink_count', target: 4 },
+    { prompt: '듣는 척하며 짧은 윙크 5번 섞기', verify: 'wink_count', target: 5 },
+    { prompt: '다른 사람이 말할 때 윙크 6번 넣기', verify: 'wink_count', target: 6 },
+    { prompt: '자연스럽게 미소 5번 짓기', verify: 'smile_count', target: 5 },
+    { prompt: '작은 미소 리액션 6번 하기', verify: 'smile_count', target: 6 },
+    { prompt: '아무 말 없이 조용히 미소 7번 만들기', verify: 'smile_count', target: 7 },
+    { prompt: '대답하기 직전에 입을 살짝 4번 벌리기', verify: 'jaw_open_count', target: 4 },
+    { prompt: '놀란 척 아주 짧게 입을 5번 열기', verify: 'jaw_open_count', target: 5 },
+    { prompt: '눈썹을 살짝 5번 올리기', verify: 'brow_count', target: 5 },
+    { prompt: '반응할 때 눈썹을 6번 들어 올리기', verify: 'brow_count', target: 6 },
+    { prompt: '카메라 쪽으로 눈썹을 7번 올리기', verify: 'brow_count', target: 7 },
+    { prompt: '듣는 척하면서 고개를 4번 살짝 끄덕이기', verify: 'nod_count', target: 4 },
+    { prompt: '상대 말 끝에 맞춰 고개를 5번 작게 끄덕이기', verify: 'nod_count', target: 5 },
+    { prompt: '생각난 척 고개를 6번 짧게 끄덕이기', verify: 'nod_count', target: 6 }
   ];
   const shuffled = [...templates].sort(() => Math.random() - 0.5);
 
@@ -307,6 +309,17 @@ export function App() {
     joinRoomLockRef.current = false;
     setIsCreatingRoom(false);
     setIsJoiningRoom(false);
+  };
+
+  const returnHome = () => {
+    socketRef.current?.disconnect();
+    socketRef.current = null;
+    setRoomDraft(null);
+    setJoinCode('');
+    setJoinError(undefined);
+    setCreateError(undefined);
+    resetRoomRequestState();
+    go('onboarding-nickname');
   };
 
   useEffect(() => {
@@ -711,9 +724,28 @@ export function App() {
     go('study');
   };
 
-  const leaveCurrentSession = () => {
-    setCurrentSessionPresence('online');
-    go('waiting');
+  const leaveCurrentSession = (focusReport?: FocusSessionReport) => {
+    if (!roomDraft) {
+      go('retrospective');
+      return;
+    }
+
+    if (roomDraft.realtime === 'server') {
+      updateParticipantStatus(socketRef.current, {
+        roomId: roomDraft.room.id,
+        participantId: roomDraft.currentParticipantId,
+        status: 'online'
+      });
+    }
+
+    setRoomDraft((current) =>
+      current ? buildRetrospectiveDraft(current, 'online', focusReport) : current
+    );
+    go('retrospective');
+  };
+
+  const updateCurrentFocusReport = (focusReport: FocusSessionReport) => {
+    setRoomDraft((current) => (current ? { ...current, focusReport } : current));
   };
 
   const startCurrentBreak = async () => {
@@ -873,6 +905,37 @@ export function App() {
         );
       }
       return next;
+    });
+  };
+
+  const winCurrentRoundByMissionGuess = (winnerId: string, targetId: string, missionId: string) => {
+    if (!roomDraft?.currentGame || roomDraft.currentGame.kind !== 'hidden_mission') return;
+    if (roomDraft.realtime === 'server') return;
+
+    setRoomDraft((current) => {
+      if (!current?.currentGame || current.currentGame.kind !== 'hidden_mission') return current;
+      const result: MissionResult = {
+        playerId: targetId,
+        missionId,
+        count: 1,
+        success: true
+      };
+      return appendLocalRoomiMessage(
+        {
+          ...current,
+          currentGame: finishLocalGameRoundWithWinner({
+            ...current.currentGame,
+            missionResults: [
+              ...(current.currentGame.missionResults ?? []).filter(
+                (item) => item.playerId !== targetId
+              ),
+              result
+            ]
+          }, winnerId)
+        },
+        'game_reveal',
+        `${participantNickname(current.participants, winnerId)}가 ${participantNickname(current.participants, targetId)}의 미션을 맞춰 라운드를 가져갔어.`
+      );
     });
   };
 
@@ -1097,7 +1160,7 @@ export function App() {
     });
   };
 
-  const endCurrentSession = () => {
+  const endCurrentSession = (focusReport?: FocusSessionReport) => {
     if (!roomDraft) {
       go('retrospective');
       return;
@@ -1116,6 +1179,9 @@ export function App() {
           setRoomDraft((current) => (current ? { ...current, ...snapshotToDraftPatch(snapshot) } : current));
         })
         .catch((error) => console.warn(error instanceof Error ? error.message : 'Session end failed'));
+      setRoomDraft((current) =>
+        current ? { ...current, focusReport: focusReport ?? current.focusReport } : current
+      );
       go('retrospective');
       return;
     }
@@ -1141,9 +1207,15 @@ export function App() {
         room: { ...current.room, status: 'ended' },
         currentGame,
         currentSession: current.currentSession
-          ? { ...current.currentSession, endedAt: now(), mode: 'ended' }
+          ? sessionWithLocalSummary(
+              current.currentSession,
+              current.goals,
+              current.focusRanking,
+              now()
+            )
           : current.currentSession
       };
+      next.focusReport = focusReport ?? current.focusReport;
       const winner = currentGame?.scores
         ? [...currentGame.scores].sort((left, right) => right.points - left.points)[0]
         : undefined;
@@ -1265,11 +1337,13 @@ export function App() {
             onStartBreak={startCurrentBreak}
             onStartGame={startCurrentGame}
             onSubmitMissionResult={submitCurrentMissionResult}
+            onWinByMissionGuess={winCurrentRoundByMissionGuess}
             onSubmitBluffBet={submitCurrentBluffBet}
             onSubmitBluffSignals={submitCurrentBluffSignals}
             onAdvanceRelay={advanceCurrentRelay}
             onReadyNextRound={readyForNextRound}
             onSendChatMessage={submitCurrentChatMessage}
+            onUpdateFocusReport={updateCurrentFocusReport}
             go={go}
           />
         )}
@@ -1286,7 +1360,11 @@ export function App() {
         {screen === 'retrospective' && (
           <Retrospective
             session={activeRoom.currentSession}
+            currentGame={activeRoom.currentGame}
+            focusRanking={activeRoom.focusRanking}
+            focusReport={activeRoom.focusReport}
             goals={activeRoom.goals}
+            onHome={returnHome}
             participants={activeRoom.participants}
             currentParticipantId={activeRoom.currentParticipantId}
             go={go}
@@ -1313,6 +1391,70 @@ function snapshotToDraftPatch(snapshot: {
     currentSession: snapshot.currentSession,
     currentGame: snapshot.currentGame
   };
+}
+
+function buildRetrospectiveDraft(
+  draft: RoomDraft,
+  currentParticipantStatus: ParticipantStatus,
+  focusReport?: FocusSessionReport
+): RoomDraft {
+  const timestamp = now();
+  const participants = draft.participants.map((participant) =>
+    participant.id === draft.currentParticipantId
+      ? { ...participant, status: currentParticipantStatus, lastSeenAt: timestamp }
+      : participant
+  );
+
+  return {
+    ...draft,
+    focusReport: focusReport ?? draft.focusReport,
+    participants,
+    currentSession: draft.currentSession
+      ? sessionWithLocalSummary(draft.currentSession, draft.goals, draft.focusRanking, timestamp)
+      : draft.currentSession
+  };
+}
+
+function sessionWithLocalSummary(
+  session: StudySession,
+  goals: Goal[],
+  ranking: FocusRankingEntry[],
+  endedAt: string
+): StudySession {
+  const focusMinutes =
+    session.summary?.focusMinutes ??
+    averageFocusMinutes(ranking) ??
+    elapsedSessionMinutes(session, endedAt);
+  const achievedGoals = goals.filter((goal) => goal.achieved).length;
+  const goalCompletionRate =
+    session.summary?.goalCompletionRate ?? (goals.length > 0 ? achievedGoals / goals.length : 0);
+
+  return {
+    ...session,
+    endedAt: session.endedAt ?? endedAt,
+    mode: 'ended',
+    summary: {
+      ...session.summary,
+      focusMinutes,
+      goalCompletionRate,
+      ranking: session.summary?.ranking ?? ranking
+    }
+  };
+}
+
+function averageFocusMinutes(ranking: FocusRankingEntry[]) {
+  if (ranking.length === 0) return undefined;
+  return Math.round(
+    ranking.reduce((total, entry) => total + entry.focusMinutes, 0) / ranking.length
+  );
+}
+
+function elapsedSessionMinutes(session: StudySession, endedAt: string) {
+  const elapsedMinutes = Math.max(
+    0,
+    (Date.parse(endedAt) - Date.parse(session.startedAt)) / 60_000
+  );
+  return Math.round(Math.min(elapsedMinutes, session.plannedMinutes));
 }
 
 function finishLocalGameRound(game: GameSession, forceReveal = false): GameSession {
@@ -1343,6 +1485,51 @@ function finishLocalGameRound(game: GameSession, forceReveal = false): GameSessi
   ];
 
   if (forceReveal || game.round.index >= game.totalRounds) {
+    return {
+      ...game,
+      status: 'reveal',
+      round: { ...game.round, status: 'reveal', revealAt: timestamp },
+      scores,
+      completedRounds,
+      nextRoundReadyParticipantIds: [],
+      nextRoundStartsAt: undefined,
+      updatedAt: timestamp
+    };
+  }
+
+  const nextRoundStartsAt = new Date(Date.now() + 5 * 60_000).toISOString();
+  return {
+    ...game,
+    status: 'between_round',
+    round: { ...game.round, status: 'between_round', revealAt: timestamp, nextStartsAt: nextRoundStartsAt },
+    scores,
+    completedRounds,
+    nextRoundReadyParticipantIds: [],
+    nextRoundStartsAt,
+    updatedAt: timestamp
+  };
+}
+
+function finishLocalGameRoundWithWinner(game: GameSession, winnerId: string): GameSession {
+  const timestamp = now();
+  const scores = game.scores.map((score) => ({
+    ...score,
+    points: score.points + (score.participantId === winnerId ? 10 : 0)
+  }));
+  const completedRounds = [
+    ...(game.completedRounds ?? []),
+    {
+      roundIndex: game.round.index,
+      status: game.round.index >= game.totalRounds ? 'revealed' as const : 'completed' as const,
+      endedAt: timestamp,
+      scores,
+      missionResults: game.missionResults,
+      bluffResult: game.bluffResult,
+      relayLinks: game.relayLinks
+    }
+  ];
+
+  if (game.round.index >= game.totalRounds) {
     return {
       ...game,
       status: 'reveal',

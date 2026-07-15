@@ -121,6 +121,16 @@
   box-shadow: 0 0 0 3px rgba(138, 125, 240, 0.12);
 }
 
+.create-opt--disabled {
+  opacity: 0.58;
+}
+
+.create-opt--disabled:hover {
+  border-color: var(--border);
+  box-shadow: none;
+  transform: none;
+}
+
 .create-opt__title {
   font-size: 14px;
   font-weight: 700;

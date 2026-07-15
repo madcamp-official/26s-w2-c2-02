@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   ExpressionSignals,
   GameSession,
@@ -7,13 +7,20 @@ import type {
   Participant,
   Room
 } from '@roomi/shared';
+import type { FocusSnapshot } from '../../focus-pipeline';
+import { focusIndices } from '../../focus-stats';
 import {
   DailyParticipantMedia,
+  FocusDetailPanel,
   focusLabelToParticipantStatus,
+  focusScoreTrendPoints,
+  focusStatusFromSignals,
+  focusVerdictLabel,
   formatSessionTime,
   participantStatusLabel,
   participantsInStudyRoom,
   reconcilePendingCameraState,
+  ruleSettingsForActivity,
   setDailyCameraEnabled,
   shouldUseLocalCameraFallback,
   remainingSessionSeconds,
@@ -27,19 +34,52 @@ const focusDetectionMock = vi.hoisted(() => ({
     focusSnapshot: {
       label: 'focused',
       score: 100,
-      activeSignals: [],
-      durations: { face_missing: 0, eyes_closed: 0, head_turned: 0, head_down: 0 },
+      activeSignals: [] as FocusSnapshot['activeSignals'],
+      durations: {
+        face_missing: 0,
+        eyes_closed: 0,
+        head_turned: 0,
+        head_down: 0,
+        yawning: 0,
+        gaze_diverged: 0
+      },
+      blinksPerMinute: 0,
+      yawnCount: 0,
+      motionAmount: 0,
       current: {
         facePresent: true,
         eyeAspectRatio: 0.3,
         headYawRatio: 0,
         headPitchRatio: 0,
+        headPose: null,
+        gazeDivergence: 0,
+        mouthAspectRatio: 0.1,
         eyesClosed: false,
         headTurned: false,
-        headDown: false
-      }
+        headDown: false,
+        mouthOpen: false,
+        gazeDiverged: false
+      } as FocusSnapshot['current']
     },
-    detectionSnapshot: { faces: 1, landmarks: 468, fps: 30, lastUpdatedAt: '10:00:00' },
+    // An unstarted session: every rate reads zero and the detail panel stays on
+    // its "not enough observed yet" copy.
+    sessionStats: {
+      startedAt: 0,
+      updatedAt: 0,
+      faceFrames: 0,
+      eyesClosedFrames: 0,
+      blinks: 0,
+      yawns: 0,
+      headTurns: 0,
+      headDowns: 0,
+      aways: 0,
+      gazeDiversions: 0,
+      motionSum: 0,
+      motionSamples: 0,
+      previousSignals: [],
+      previousEyesClosed: false
+    },
+    detectionSnapshot: { faces: 1, landmarks: 478, fps: 30, lastUpdatedAt: '10:00:00' },
     mlPrediction: null,
     mlStatus: 'idle',
     mlError: null,
@@ -51,24 +91,70 @@ vi.mock('../../use-focus-detection', () => ({
   useFocusDetection: () => focusDetectionMock.snapshot
 }));
 
+/**
+ * A frame of someone facing the screen with nothing firing. Kept in one place so
+ * a new signal on FrameSignals fails typecheck here once, not at every call site.
+ */
+function attentiveFrame(
+  overrides: Partial<FocusSnapshot['current']> = {}
+): FocusSnapshot['current'] {
+  return {
+    facePresent: true,
+    eyeAspectRatio: 0.3,
+    headYawRatio: 0,
+    headPitchRatio: 0,
+    headPose: null,
+    gazeDivergence: 0,
+    mouthAspectRatio: 0.1,
+    eyesClosed: false,
+    headTurned: false,
+    headDown: false,
+    mouthOpen: false,
+    gazeDiverged: false,
+    ...overrides
+  };
+}
+
 beforeEach(() => {
   vi.restoreAllMocks();
   focusDetectionMock.snapshot.expressionSignals = null;
+  focusDetectionMock.snapshot.sessionStats = {
+    startedAt: 0,
+    updatedAt: 0,
+    faceFrames: 0,
+    eyesClosedFrames: 0,
+    blinks: 0,
+    yawns: 0,
+    headTurns: 0,
+    headDowns: 0,
+    aways: 0,
+    gazeDiversions: 0,
+    motionSum: 0,
+    motionSamples: 0,
+    previousSignals: [],
+    previousEyesClosed: false
+  };
   focusDetectionMock.snapshot.focusSnapshot = {
     label: 'focused',
     score: 100,
     activeSignals: [],
-    durations: { face_missing: 0, eyes_closed: 0, head_turned: 0, head_down: 0 },
-    current: {
-      facePresent: true,
-      eyeAspectRatio: 0.3,
-      headYawRatio: 0,
-      headPitchRatio: 0,
-      eyesClosed: false,
-      headTurned: false,
-      headDown: false
-    }
+    durations: {
+      face_missing: 0,
+      eyes_closed: 0,
+      head_turned: 0,
+      head_down: 0,
+      yawning: 0,
+      gaze_diverged: 0
+    },
+    blinksPerMinute: 0,
+    yawnCount: 0,
+    motionAmount: 0,
+    current: attentiveFrame()
   };
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('StudyRoom session clock', () => {
@@ -120,6 +206,49 @@ describe('StudyRoom session clock', () => {
   });
 });
 
+describe('focusScoreTrendPoints', () => {
+  it('draws nothing until there are two samples to connect', () => {
+    expect(focusScoreTrendPoints([], 240, 48)).toBe('');
+    expect(focusScoreTrendPoints([120], 240, 48)).toBe('');
+  });
+
+  it('puts the highest score at the top and the lowest at the bottom', () => {
+    // y grows downward in SVG, so the best score sits at y=0.
+    expect(focusScoreTrendPoints([0, 100], 240, 48)).toBe('0,48 240,0');
+  });
+
+  it('draws a flat run down the middle instead of dividing by zero', () => {
+    expect(focusScoreTrendPoints([50, 50, 50], 240, 48)).toBe('0,24 120,24 240,24');
+  });
+
+  it('shows a drop as a fall toward the bottom edge', () => {
+    const points = focusScoreTrendPoints([100, 50, 0], 240, 48);
+
+    expect(points).toBe('0,0 120,24 240,48');
+  });
+});
+
+describe('ruleSettingsForActivity', () => {
+  it('gives study rooms the full grace period before calling someone away', () => {
+    // Focus time stops accruing while a participant is away, so a blip in
+    // detection must not cost them credit for studying.
+    expect(ruleSettingsForActivity('study').faceMissingSeconds).toBe(5);
+  });
+
+  it('marks a hidden face as away immediately in the face games', () => {
+    expect(ruleSettingsForActivity('hidden_mission').faceMissingSeconds).toBe(0);
+    expect(ruleSettingsForActivity('poker_bluff').faceMissingSeconds).toBe(0);
+    expect(ruleSettingsForActivity('copycat_relay').faceMissingSeconds).toBe(0);
+  });
+
+  it('changes nothing else between the two modes', () => {
+    const { faceMissingSeconds: _study, ...study } = ruleSettingsForActivity('study');
+    const { faceMissingSeconds: _game, ...game } = ruleSettingsForActivity('hidden_mission');
+
+    expect(study).toEqual(game);
+  });
+});
+
 describe('StudyRoom focus detection status mapping', () => {
   it('maps MediaPipe and ML labels to session presence statuses', () => {
     expect(focusLabelToParticipantStatus('focused')).toBe('focused');
@@ -130,20 +259,69 @@ describe('StudyRoom focus detection status mapping', () => {
     expect(focusLabelToParticipantStatus('paused')).toBe('paused');
   });
 
+  it('uses high session-level distraction as a distracted presence signal', () => {
+    expect(focusStatusFromSignals('focused', { ready: false, distraction: 100 })).toBe('focused');
+    expect(focusStatusFromSignals('focused', { ready: true, distraction: 69 })).toBe('focused');
+    expect(focusStatusFromSignals('focused', { ready: true, distraction: 70 })).toBe('distracted');
+    expect(focusStatusFromSignals('away', { ready: true, distraction: 0 })).toBe('away');
+  });
+
+  it('reacts to head signals on the current frame, without waiting for a sustained run', () => {
+    const participant = createParticipant('participant-host', 'Host');
+    const current = attentiveFrame();
+
+    // activeSignals is empty: the 10s run has not elapsed, but the head is down
+    // right now and the label should already say so.
+    expect(
+      participantStatusLabel(participant, {
+        label: 'focused',
+        activeSignals: [],
+        current: { ...current, headDown: true }
+      })
+    ).toBe('고개 숙임');
+    expect(
+      participantStatusLabel(participant, {
+        label: 'focused',
+        activeSignals: [],
+        current: { ...current, headTurned: true }
+      })
+    ).toBe('고개 돌림');
+  });
+
+  it('waits for the sustained signal before calling an open mouth a yawn', () => {
+    const participant = createParticipant('participant-host', 'Host');
+    const current = attentiveFrame({ mouthAspectRatio: 0.7, mouthOpen: true });
+
+    // A mouth open for one frame is talking, so it must not read as a yawn.
+    expect(
+      participantStatusLabel(participant, { label: 'focused', activeSignals: [], current })
+    ).toBe('입 벌림');
+    expect(
+      participantStatusLabel(participant, { label: 'focused', activeSignals: ['yawning'], current })
+    ).toBe('하품');
+  });
+
+  it('never reveals why someone else is not focused', () => {
+    // No snapshot is passed for other participants, so their tile can only ever
+    // show presence — the room is not told about their head, eyes or mouth.
+    const distracted = createParticipant('participant-other', 'Other');
+    distracted.status = 'distracted';
+
+    expect(participantStatusLabel(distracted)).toBe('주의 이탈');
+  });
+
+  it('separates the focus verdict from the detail label', () => {
+    expect(focusVerdictLabel('focused')).toBe('집중중');
+    expect(focusVerdictLabel('distracted')).toBe('집중 안 함');
+    expect(focusVerdictLabel('away')).toBe('집중 안 함');
+    expect(focusVerdictLabel('paused')).toBe('집중 안 함');
+    expect(focusVerdictLabel('break')).toBe('휴식');
+    expect(focusVerdictLabel('online')).toBe('대기');
+  });
+
   it('shows detailed MediaPipe-derived labels for the local participant', () => {
     const participant = createParticipant('participant-host', 'Host');
-    const current = {
-      facePresent: true,
-      eyeAspectRatio: 0.3,
-      headYawRatio: 0,
-      headPitchRatio: 0,
-      headPose: null,
-      mouthAspectRatio: 0.1,
-      eyesClosed: false,
-      headTurned: false,
-      headDown: false,
-      mouthOpen: false
-    };
+    const current = attentiveFrame();
 
     expect(
       participantStatusLabel(participant, {
@@ -159,20 +337,275 @@ describe('StudyRoom focus detection status mapping', () => {
         current
       })
     ).toBe('눈 감김');
+    // A blink closes the eyes for a fraction of a second, so this one stays on the
+    // sustained signal rather than the frame.
+    expect(
+      participantStatusLabel(participant, {
+        label: 'focused',
+        activeSignals: [],
+        current: { ...current, eyesClosed: true }
+      })
+    ).toBe('공부 중');
+  });
+
+  it('calls an engaged participant playing rather than studying in a game room', () => {
+    const participant = createParticipant('participant-host', 'Host');
+    participant.status = 'focused';
+
+    expect(participantStatusLabel(participant, undefined, 'study')).toBe('공부 중');
+    expect(participantStatusLabel(participant, undefined, 'hidden_mission')).toBe('게임 중');
+  });
+
+  it('waits for the sustained signal before calling off-centre eyes a diversion', () => {
+    const participant = createParticipant('participant-host', 'Host');
+    const current = attentiveFrame({ gazeDivergence: 42, gazeDiverged: true });
+
+    // Eyes sweep past wide angles constantly while reading, so a single frame of
+    // divergence must not show up as looking away.
+    expect(
+      participantStatusLabel(participant, { label: 'focused', activeSignals: [], current })
+    ).toBe('공부 중');
     expect(
       participantStatusLabel(participant, {
         label: 'distracted',
-        activeSignals: ['head_down'],
-        current
-      })
-    ).toBe('고개 숙임');
-    expect(
-      participantStatusLabel(participant, {
-        label: 'uncertain',
-        activeSignals: ['head_turned'],
+        activeSignals: ['gaze_diverged'],
         current
       })
     ).toBe('시선 이탈');
+  });
+
+  it('lets a turned head outrank diverged eyes, since the head is the plainer read', () => {
+    const participant = createParticipant('participant-host', 'Host');
+
+    expect(
+      participantStatusLabel(participant, {
+        label: 'distracted',
+        activeSignals: ['gaze_diverged'],
+        current: attentiveFrame({ headTurned: true, gazeDiverged: true })
+      })
+    ).toBe('고개 돌림');
+  });
+});
+
+describe('FocusDetailPanel', () => {
+  // Two observed minutes. startedAt must be non-zero: zero is the "session has not
+  // begun" sentinel, and every rate would be withheld.
+  const readyStats = {
+    startedAt: 1_000,
+    updatedAt: 121_000,
+    faceFrames: 100,
+    eyesClosedFrames: 10,
+    blinks: 30,
+    yawns: 1,
+    headTurns: 2,
+    headDowns: 0,
+    aways: 1,
+    gazeDiversions: 3,
+    motionSum: 60,
+    motionSamples: 100,
+    previousSignals: [],
+    previousEyesClosed: false
+  };
+
+  it('holds back every rate until the session is long enough to have one', () => {
+    render(<FocusDetailPanel indices={focusIndices({ ...readyStats, updatedAt: 10_000 })} />);
+
+    expect(screen.getByText(/1분 정도 지나면/)).toBeInTheDocument();
+    expect(screen.queryByText('피로도')).not.toBeInTheDocument();
+  });
+
+  it('shows the fatigue and distraction readings the panel is for', () => {
+    render(<FocusDetailPanel indices={focusIndices(readyStats)} />);
+
+    expect(screen.getByText('피로도')).toBeInTheDocument();
+    expect(screen.getByText('산만함')).toBeInTheDocument();
+    expect(screen.getByText('하품 빈도')).toBeInTheDocument();
+    expect(screen.getByText('눈 깜빡임')).toBeInTheDocument();
+    expect(screen.getByText('눈 감김 시간')).toBeInTheDocument();
+    expect(screen.getByText('10%')).toBeInTheDocument();
+    expect(screen.getByText('시선 이탈')).toBeInTheDocument();
+    expect(screen.getByText('고개 돌림')).toBeInTheDocument();
+    expect(screen.getByText('자리 비움')).toBeInTheDocument();
+    expect(screen.getByText('자세 흔들림')).toBeInTheDocument();
+  });
+
+  it('explains how fatigue and distraction are used', () => {
+    render(<FocusDetailPanel indices={focusIndices(readyStats)} />);
+
+    expect(screen.getByText(/피로도는 휴식 제안에/)).toBeInTheDocument();
+    expect(screen.getByText(/산만함은 높을 때 점수 흐름에 반영돼요/)).toBeInTheDocument();
+  });
+
+  it('suggests a break only once fatigue is actually high', () => {
+    const rested = focusIndices(readyStats);
+    expect(rested.restSuggested).toBe(false);
+    render(<FocusDetailPanel indices={rested} />);
+    expect(screen.queryByText(/쉬어가는 게 좋겠어요/)).not.toBeInTheDocument();
+
+    const drowsy = focusIndices({ ...readyStats, eyesClosedFrames: 30 });
+    render(<FocusDetailPanel indices={drowsy} />);
+    expect(screen.getByText(/쉬어가는 게 좋겠어요/)).toBeInTheDocument();
+  });
+});
+
+describe('StudyRoom focus nudges', () => {
+  const readyStats = {
+    startedAt: 1_000,
+    updatedAt: 121_000,
+    faceFrames: 100,
+    eyesClosedFrames: 5,
+    blinks: 20,
+    yawns: 0,
+    headTurns: 0,
+    headDowns: 0,
+    aways: 0,
+    gazeDiversions: 0,
+    motionSum: 30,
+    motionSamples: 100,
+    previousSignals: [],
+    previousEyesClosed: false
+  };
+
+  it('suggests a break when the local fatigue index is high', () => {
+    const participant = createParticipant('participant-host', 'Host');
+    const onStartBreak = vi.fn();
+    focusDetectionMock.snapshot.sessionStats = {
+      ...readyStats,
+      eyesClosedFrames: 30,
+      yawns: 1
+    };
+
+    render(
+      <StudyRoom
+        {...baseStudyRoomProps(participant)}
+        room={createRoom('hidden_mission', 'study')}
+        onStartBreak={onStartBreak}
+      />
+    );
+
+    expect(screen.getByRole('region', { name: '휴식 제안' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '쉬기' }));
+    expect(onStartBreak).toHaveBeenCalledTimes(1);
+  });
+
+  it('drains score through distracted presence when the distraction index is high', async () => {
+    const participant = createParticipant('participant-host', 'Host');
+    const onUpdatePresence = vi.fn();
+    focusDetectionMock.snapshot.sessionStats = {
+      ...readyStats,
+      headTurns: 5,
+      aways: 3,
+      gazeDiversions: 5,
+      motionSum: 250
+    };
+
+    render(
+      <StudyRoom
+        {...baseStudyRoomProps(participant)}
+        room={createRoom('hidden_mission', 'study')}
+        onUpdatePresence={onUpdatePresence}
+      />
+    );
+
+    await waitFor(() => expect(onUpdatePresence).toHaveBeenCalledWith('distracted'));
+    expect(screen.getByRole('region', { name: '집중 상태 확인' })).toBeInTheDocument();
+  });
+
+  it('lets the participant confirm focus and immediately restores focused presence', async () => {
+    const participant = createParticipant('participant-host', 'Host');
+    const onUpdatePresence = vi.fn();
+    focusDetectionMock.snapshot.focusSnapshot = {
+      label: 'distracted',
+      score: 65,
+      activeSignals: ['head_turned'],
+      durations: {
+        face_missing: 0,
+        eyes_closed: 0,
+        head_turned: 3,
+        head_down: 0,
+        yawning: 0,
+        gaze_diverged: 0
+      },
+      blinksPerMinute: 0,
+      yawnCount: 0,
+      motionAmount: 0,
+      current: attentiveFrame({ headTurned: true, headPose: { headYaw: 32, headPitch: 0, headRoll: 0 } })
+    };
+
+    render(
+      <StudyRoom
+        {...baseStudyRoomProps(participant)}
+        room={createRoom('hidden_mission', 'study')}
+        onUpdatePresence={onUpdatePresence}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '집중 중이야' }));
+    await waitFor(() => expect(onUpdatePresence).toHaveBeenCalledWith('focused'));
+  });
+
+  it('shows the focus confirmation when the local verdict is not focused', () => {
+    const participant = createParticipant('participant-host', 'Host');
+    focusDetectionMock.snapshot.focusSnapshot = {
+      label: 'away',
+      score: 0,
+      activeSignals: ['face_missing'],
+      durations: {
+        face_missing: 5,
+        eyes_closed: 0,
+        head_turned: 0,
+        head_down: 0,
+        yawning: 0,
+        gaze_diverged: 0
+      },
+      blinksPerMinute: 0,
+      yawnCount: 0,
+      motionAmount: 0,
+      current: attentiveFrame({ facePresent: false })
+    };
+
+    render(
+      <StudyRoom
+        {...baseStudyRoomProps(participant)}
+        room={createRoom('hidden_mission', 'study')}
+      />
+    );
+
+    expect(screen.getByRole('region', { name: '집중 상태 확인' })).toBeInTheDocument();
+  });
+
+  it('passes the latest focus report when leaving study mode', () => {
+    const participant = createParticipant('participant-host', 'Host');
+    const onLeaveRoom = vi.fn();
+    focusDetectionMock.snapshot.sessionStats = {
+      ...readyStats,
+      eyesClosedFrames: 20,
+      blinks: 48,
+      yawns: 1,
+      headTurns: 4,
+      aways: 1,
+      gazeDiversions: 5,
+      motionSum: 120
+    };
+
+    render(
+      <StudyRoom
+        {...baseStudyRoomProps(participant)}
+        room={createRoom('hidden_mission', 'study')}
+        onLeaveRoom={onLeaveRoom}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '나가기' }));
+
+    expect(onLeaveRoom).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ready: true,
+        observedMinutes: 2,
+        fatigue: expect.any(Number),
+        distraction: expect.any(Number)
+      })
+    );
   });
 });
 
@@ -410,8 +843,9 @@ describe('StudyRoom hidden mission progress', () => {
   });
 
   it('locks hidden mission progress until the distraction card is solved', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
     const host = createParticipant('participant-host', 'Host');
-    const member = { ...createParticipant('participant-member', 'Member'), role: 'member' as const };
     const room = createRoom();
     const privateMission: HiddenMission = {
       id: 'mission-1',
@@ -421,7 +855,7 @@ describe('StudyRoom hidden mission progress', () => {
       target: 1
     };
     const currentGame: GameSession = {
-      ...createGame(room, [host, member], 'hidden_mission'),
+      ...createGame(room, [host], 'hidden_mission'),
       missions: [privateMission]
     };
     const onSubmitMissionResult = vi.fn();
@@ -430,22 +864,34 @@ describe('StudyRoom hidden mission progress', () => {
       <StudyRoom
         {...baseStudyRoomProps(host)}
         currentGame={currentGame}
-        participants={[host, member]}
+        participants={[host]}
         privateMission={privateMission}
         room={room}
         onSubmitMissionResult={onSubmitMissionResult}
       />
     );
 
+    expect(screen.queryByLabelText('루미 방해 카드')).not.toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(9_999);
+    });
+    expect(screen.queryByLabelText('루미 방해 카드')).not.toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+
     expect(screen.getByLabelText('루미 방해 카드')).toBeInTheDocument();
     expect(screen.getByText('방해 카드를 풀어야 미션이 다시 진행돼요.')).toBeInTheDocument();
+    vi.useRealTimers();
 
     focusDetectionMock.snapshot.expressionSignals = expressionSignal({ timestamp: 1_000, smile: 0.8 });
     rerender(
       <StudyRoom
         {...baseStudyRoomProps(host)}
         currentGame={currentGame}
-        participants={[host, member]}
+        participants={[host]}
         privateMission={privateMission}
         room={room}
         onSubmitMissionResult={onSubmitMissionResult}
@@ -468,6 +914,66 @@ describe('StudyRoom hidden mission progress', () => {
         success: true
       })
     );
+  });
+
+  it('opens a mission guess when the actor is accused within the reaction window', async () => {
+    vi.useFakeTimers();
+    const host = createParticipant('participant-host', 'Host');
+    const member = { ...createParticipant('participant-member', 'Member'), role: 'member' as const };
+    const room = createRoom();
+    const hostMission: HiddenMission = {
+      id: 'mission-host',
+      playerId: host.id,
+      prompt: 'Smile once',
+      verify: 'smile_count',
+      target: 1
+    };
+    const memberMission: HiddenMission = {
+      id: 'mission-member',
+      playerId: member.id,
+      prompt: 'Wink once',
+      verify: 'wink_count',
+      target: 1
+    };
+    const currentGame: GameSession = {
+      ...createGame(room, [host, member], 'hidden_mission'),
+      missions: [hostMission, memberMission]
+    };
+    const onWinByMissionGuess = vi.fn();
+
+    const { rerender } = render(
+      <StudyRoom
+        {...baseStudyRoomProps(host)}
+        currentGame={currentGame}
+        participants={[host, member]}
+        room={room}
+        privateMission={hostMission}
+        onWinByMissionGuess={onWinByMissionGuess}
+      />
+    );
+
+    const nextGame = {
+      ...currentGame,
+      missionResults: [
+        { playerId: member.id, missionId: memberMission.id, count: 1, success: false }
+      ]
+    };
+    rerender(
+      <StudyRoom
+        {...baseStudyRoomProps(host)}
+        currentGame={nextGame}
+        participants={[host, member]}
+        room={room}
+        privateMission={hostMission}
+        onWinByMissionGuess={onWinByMissionGuess}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Member' }));
+    expect(screen.getByRole('dialog', { name: '미션 맞추기' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: memberMission.prompt }));
+
+    expect(onWinByMissionGuess).toHaveBeenCalledWith(host.id, member.id, memberMission.id);
   });
 
   it('resets the secret mission count when the round changes even if the mission id is reused', async () => {

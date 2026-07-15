@@ -147,8 +147,7 @@ export function WaitingRoom({
         name: participant.nickname,
         sub: participant.role === 'host' ? '방장' : '',
         status: isStudying ? (isStudyMode ? '공부 중' : '게임 중') : participant.isReady ? '준비완료' : '준비 중',
-        tone: isStudying || participant.isReady ? 'green' : 'muted',
-        initial: participant.nickname.slice(0, 1)
+        tone: isStudying || participant.isReady ? 'green' : 'muted'
       };
     }),
     ...Array.from(
@@ -158,8 +157,7 @@ export function WaitingRoom({
         name: '빈 자리',
         sub: '',
         status: '',
-        tone: 'muted',
-        initial: ''
+        tone: 'muted'
       })
     )
   ];
@@ -270,9 +268,6 @@ export function WaitingRoom({
           <div className="people">
             {people.map((p) => (
               <div className="person" key={p.id}>
-                <span className={`person__avatar${p.initial ? '' : ' person__avatar--empty'}`}>
-                  {p.initial}
-                </span>
                 <div className="person__body">
                   <div className="person__name">{p.name}</div>
                   {p.sub && <div className="person__sub">{p.sub}</div>}

@@ -47,29 +47,63 @@ const GAME_ROUND_MS = 90_000;
 const NEXT_ROUND_WAIT_MS = 5 * 60_000;
 
 export const hiddenMissionTemplates: ReadonlyArray<Omit<HiddenMission, 'id' | 'playerId'>> = [
-  { prompt: '대화 사이에 몰래 윙크 2번 넣기', verify: 'wink_count', target: 2 },
-  { prompt: '누가 말할 때 자연스럽게 윙크 3번 하기', verify: 'wink_count', target: 3 },
-  { prompt: '카메라를 보며 아주 짧게 윙크 4번 하기', verify: 'wink_count', target: 4 },
-  { prompt: '들키지 않게 작게 미소 3번 짓기', verify: 'smile_count', target: 3 },
-  { prompt: '리액션할 때 자연스럽게 미소 4번 섞기', verify: 'smile_count', target: 4 },
-  { prompt: '말을 듣는 척하며 조용히 미소 5번 만들기', verify: 'smile_count', target: 5 },
-  { prompt: '대답하기 직전에 입을 살짝 2번 벌리기', verify: 'jaw_open_count', target: 2 },
-  { prompt: '놀란 척 아주 짧게 입을 3번 열기', verify: 'jaw_open_count', target: 3 },
-  { prompt: '눈썹을 살짝 3번 올리기', verify: 'brow_count', target: 3 },
-  { prompt: '중요한 말이 나올 때 눈썹 리액션 4번 하기', verify: 'brow_count', target: 4 },
-  { prompt: '카메라 쪽으로 눈썹을 5번 들어 올리기', verify: 'brow_count', target: 5 },
-  { prompt: '듣는 척하면서 고개를 2번 살짝 끄덕이기', verify: 'nod_count', target: 2 },
-  { prompt: '상대 말 끝에 맞춰 고개를 3번 작게 끄덕이기', verify: 'nod_count', target: 3 },
-  { prompt: '생각난 척 고개를 4번 짧게 끄덕이기', verify: 'nod_count', target: 4 }
+  { prompt: '대화 사이에 몰래 윙크 4번 넣기', verify: 'wink_count', target: 4 },
+  { prompt: '누가 말할 때 자연스럽게 윙크 5번 하기', verify: 'wink_count', target: 5 },
+  { prompt: '카메라를 보며 아주 짧게 윙크 6번 하기', verify: 'wink_count', target: 6 },
+  { prompt: '들키지 않게 작게 미소 5번 짓기', verify: 'smile_count', target: 5 },
+  { prompt: '리액션할 때 자연스럽게 미소 6번 섞기', verify: 'smile_count', target: 6 },
+  { prompt: '말을 듣는 척하며 조용히 미소 7번 만들기', verify: 'smile_count', target: 7 },
+  { prompt: '대답하기 직전에 입을 살짝 4번 벌리기', verify: 'jaw_open_count', target: 4 },
+  { prompt: '놀란 척 아주 짧게 입을 5번 열기', verify: 'jaw_open_count', target: 5 },
+  { prompt: '눈썹을 살짝 5번 올리기', verify: 'brow_count', target: 5 },
+  { prompt: '중요한 말이 나올 때 눈썹 리액션 6번 하기', verify: 'brow_count', target: 6 },
+  { prompt: '카메라 쪽으로 눈썹을 7번 들어 올리기', verify: 'brow_count', target: 7 },
+  { prompt: '듣는 척하면서 고개를 4번 살짝 끄덕이기', verify: 'nod_count', target: 4 },
+  { prompt: '상대 말 끝에 맞춰 고개를 5번 작게 끄덕이기', verify: 'nod_count', target: 5 },
+  { prompt: '생각난 척 고개를 6번 짧게 끄덕이기', verify: 'nod_count', target: 6 }
 ];
 
 type FocusTrackerEntry = {
   focusedSeconds: number;
+  /** Settled score as of `lastStatusChangeAt`; time since then is projected on read. */
+  score: number;
   lastStatusChangeAt: number;
   status: ParticipantStatus;
   nickname: string;
   left: boolean;
 };
+
+/**
+ * Score movement per 5 seconds spent in a status. Focus builds the score, drifting
+ * off drains it, and being away drains it twice as fast. Statuses that are not
+ * listed (break, paused, online) hold the score still: those are agreed pauses, not
+ * lapses. The score floors at 0 as it accrues rather than at the end, so a long
+ * absence cannot dig a hole someone has to climb out of before they earn again.
+ */
+const scorePerFiveSeconds: Partial<Record<ParticipantStatus, number>> = {
+  focused: 10,
+  distracted: -5,
+  away: -10
+};
+
+/**
+ * Focus totals for `entry` as of `nowMs`, counting the time since its last status
+ * change. Pure: callers either read this or write it back to settle the tracker.
+ */
+function projectFocus(entry: FocusTrackerEntry, nowMs: number) {
+  if (entry.left) {
+    return { focusedSeconds: entry.focusedSeconds, score: entry.score };
+  }
+
+  const elapsedSeconds = Math.max(0, (nowMs - entry.lastStatusChangeAt) / 1000);
+  const rate = scorePerFiveSeconds[entry.status] ?? 0;
+
+  return {
+    focusedSeconds:
+      entry.status === 'focused' ? entry.focusedSeconds + elapsedSeconds : entry.focusedSeconds,
+    score: Math.max(0, entry.score + rate * (elapsedSeconds / 5))
+  };
+}
 
 export class RoomService {
   private readonly dailyRooms = new Map<string, { name: string; roomUrl: string }>();
@@ -351,6 +385,7 @@ export class RoomService {
     snapshot.participants.forEach((participant) => {
       tracker.set(participant.id, {
         focusedSeconds: 0,
+        score: 0,
         lastStatusChangeAt: nowMs,
         status: participant.status,
         nickname: participant.nickname,
@@ -526,7 +561,13 @@ export class RoomService {
     return snapshot;
   }
 
-  getFocusRanking(roomId: string): FocusRankingEntry[] {
+  /**
+   * Reads through the same projection the tracker accrues with, so time since the
+   * last status change is included. Without that a participant who simply stays
+   * focused produces no events, and the ranking heartbeat would rebroadcast a
+   * frozen value for as long as they keep working.
+   */
+  getFocusRanking(roomId: string, nowMs = Date.now()): FocusRankingEntry[] {
     const tracker = this.focusTrackers.get(roomId);
 
     if (!tracker) {
@@ -534,13 +575,17 @@ export class RoomService {
     }
 
     return Array.from(tracker.entries())
-      .map(([participantId, entry]) => ({
-        participantId,
-        focusMinutes: Math.round(entry.focusedSeconds / 60),
-        nickname: entry.nickname,
-        left: entry.left
-      }))
-      .sort((left, right) => right.focusMinutes - left.focusMinutes);
+      .map(([participantId, entry]) => {
+        const projected = projectFocus(entry, nowMs);
+        return {
+          participantId,
+          focusMinutes: Math.round(projected.focusedSeconds / 60),
+          score: Math.round(projected.score),
+          nickname: entry.nickname,
+          left: entry.left
+        };
+      })
+      .sort((left, right) => right.score - left.score);
   }
 
   attachSessionSummary(roomId: string, summary: NonNullable<StudySession['summary']>): RoomSnapshot {
@@ -1039,6 +1084,7 @@ export class RoomService {
       // change of any kind for a room with no tracker yet.
       tracker.set(participantId, {
         focusedSeconds: 0,
+        score: 0,
         lastStatusChangeAt: nowMs,
         status,
         nickname,
@@ -1076,9 +1122,9 @@ export class RoomService {
       return;
     }
 
-    if (entry.status === 'focused') {
-      entry.focusedSeconds += Math.max(0, (nowMs - entry.lastStatusChangeAt) / 1000);
-    }
+    const projected = projectFocus(entry, nowMs);
+    entry.focusedSeconds = projected.focusedSeconds;
+    entry.score = projected.score;
     entry.lastStatusChangeAt = nowMs;
   }
 

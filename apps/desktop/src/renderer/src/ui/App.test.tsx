@@ -301,24 +301,48 @@ describe('App screen router', () => {
     expect(screen.getByText('민지 (나)')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '방장 메뉴' })).not.toBeInTheDocument();
 
+    const onFocusRanking = socketMock.on.mock.calls.find(
+      ([event]) => event === 'focus:ranking-updated'
+    )?.[1] as (payload: unknown) => void;
+    act(() =>
+      onFocusRanking({
+        roomId: 'room-server',
+        ranking: [
+          {
+            participantId: 'participant-minji',
+            focusMinutes: 7,
+            score: 84,
+            nickname: '민지',
+            left: false
+          },
+          {
+            participantId: 'participant-host',
+            focusMinutes: 5,
+            score: 60,
+            nickname: '소요',
+            left: false
+          }
+        ]
+      })
+    );
+
     fireEvent.click(screen.getByRole('button', { name: '나가기' }));
     expect(socketMock.emit).toHaveBeenCalledWith('participant:update-status', {
       roomId: 'room-server',
       participantId: 'participant-minji',
       status: 'online'
     });
-    expect(await screen.findByRole('heading', { level: 1, name: '이미 공부 중이에요' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: '오늘 세션, 잘 마쳤어요!' })).toBeInTheDocument();
+    expect(screen.getAllByText('7분').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('84점').length).toBeGreaterThan(0);
     expect(socketMock.emit).not.toHaveBeenCalledWith('room:leave', {
       roomId: 'room-server',
       participantId: 'participant-minji'
     });
 
-    fireEvent.click(screen.getByRole('button', { name: '방 나가기' }));
-    expect(socketMock.emit).toHaveBeenCalledWith('room:leave', {
-      roomId: 'room-server',
-      participantId: 'participant-minji'
-    });
-    expect(screen.getByText(/민지님/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '홈으로' }));
+    expect(screen.getByRole('heading', { level: 1, name: '어떻게 부르면 될까요?' })).toBeInTheDocument();
+    expect(screen.queryByText('이미 공부 중이에요')).not.toBeInTheDocument();
   });
 
   it('routes an ended room to the retrospective instead of the waiting room', async () => {

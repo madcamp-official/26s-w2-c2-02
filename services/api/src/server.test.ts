@@ -367,8 +367,8 @@ describe('POST /sessions/end', () => {
       const snapshot = (await response.json()) as RoomSnapshot;
 
       expect(snapshot.currentSession?.summary?.ranking).toEqual([
-        { participantId: host.id, focusMinutes: 10, nickname: 'host', left: false },
-        { participantId: member.id, focusMinutes: 5, nickname: 'member', left: false }
+        { participantId: host.id, focusMinutes: 10, score: 1_200, nickname: 'host', left: false },
+        { participantId: member.id, focusMinutes: 5, score: 600, nickname: 'member', left: false }
       ]);
     } finally {
       vi.useRealTimers();
