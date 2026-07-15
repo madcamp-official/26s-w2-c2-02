@@ -360,4 +360,25 @@ describe('RoomiOrchestrator face party games', () => {
     expect(reaction).not.toContain('소요');
     expect(reaction).not.toMatch(/미션|성공|카운트/);
   });
+
+  it('keeps hidden mission reaction prompts tied to the provided visible signal', async () => {
+    const prompts: string[] = [];
+    const orchestrator = new RoomiOrchestrator({
+      generateText: async (prompt) => {
+        prompts.push(prompt);
+        return '방금 누군가 작은 미소를 스친 것 같은데...?';
+      }
+    });
+
+    await orchestrator.generateGameReactionMessage({
+      game: 'hidden_mission',
+      event: 'mission_progress',
+      visibleSignals: ['작은 미소가 스친 순간'],
+      tone: 'playful'
+    });
+
+    expect(prompts[0]).toContain('작은 미소가 스친 순간');
+    expect(prompts[0]).toContain('반드시 보이는 신호에 들어온 행동만');
+    expect(prompts[0]).not.toContain('눈썹을 치켜뜬 것 같은데');
+  });
 });
