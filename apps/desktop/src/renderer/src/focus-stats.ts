@@ -127,9 +127,11 @@ export function focusIndices(stats: FocusSessionStats): FocusIndices {
   // per-frame change in pose ratios, so it also moves with frame rate — and unlike
   // blink rate or PERCLOS there is no published resting level to anchor to. These
   // come from what the arithmetic implies: landmark noise on a still head lands near
-  // 0.3, and deliberately turning to look at something crosses 2. Read the 자세 흔들림
+  // 0.3, and deliberately turning to look at something crosses 2. The floor sits at
+  // that noise level so anything above it registers, which is also what makes this
+  // the loosest reading of the four — hence its weight below. Read the 자세 흔들림
   // meter on the tuning screen for a session and move them.
-  const restlessness = Math.round(normalise(averageMotion, 0.5, 3) * 100);
+  const restlessness = Math.round(normalise(averageMotion, 0.3, 2) * 100);
 
   // Weights are deliberate but unvalidated, which is exactly why these two indices
   // only ever display and suggest. The focus score and the ranking stay on the

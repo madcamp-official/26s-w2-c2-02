@@ -115,14 +115,18 @@ export const defaultRuleSettings: RuleSettings = {
   focusedThreshold: 70,
   faceMissingSeconds: 5,
   eyesClosedSeconds: 3,
-  headTurnedSeconds: 10,
+  // Duration is where the sensitivity comes from. A head held away from the desk
+  // for five seconds is already a real turn, and the angles below cannot be pushed
+  // much further without eating the margin that the measured range bought.
+  headTurnedSeconds: 5,
   headDownSeconds: 10,
   eyeAspectRatioThreshold: 0.19,
   // Sitting and studying comfortably spans roughly +-25 degrees of yaw and up to
   // +20 of pitch, so both thresholds sit outside that band: inside it, ordinary
-  // reading and shifting in a chair would read as distraction. A real turn away
-  // from the desk goes well past these.
-  headTurnDegreesThreshold: 30,
+  // reading and shifting in a chair would read as distraction. These are the only
+  // numbers here measured on a real person rather than reasoned, so the margin over
+  // 25 stays deliberate — the motion boost already spends a degree of it.
+  headTurnDegreesThreshold: 28,
   headDownDegreesThreshold: 25,
   mouthAspectRatioThreshold: 0.6,
   // A yawn holds the mouth wide for a couple of seconds; talking and laughing open
@@ -132,10 +136,11 @@ export const defaultRuleSettings: RuleSettings = {
   blinkMaxSeconds: 1,
   // Eyes rove constantly while reading, so this rule leans on duration rather than
   // a tight angle. At a normal 60cm desk distance the far edge of a 27" monitor is
-  // about 27 degrees off-axis, so 35 sits outside the screen entirely, and holding
-  // it for 8 seconds is reading something else rather than glancing at a notification.
-  gazeDivergenceDegreesThreshold: 35,
-  gazeDivergedSeconds: 8,
+  // about 27 degrees off-axis, which is the floor this cannot go under: reading your
+  // own screen must never register. 30 keeps a small margin over it, and five seconds
+  // of holding it is reading something else rather than glancing at a notification.
+  gazeDivergenceDegreesThreshold: 30,
+  gazeDivergedSeconds: 5,
   faceMissingPenalty: 70,
   eyesClosedPenalty: 45,
   headTurnedPenalty: 30,

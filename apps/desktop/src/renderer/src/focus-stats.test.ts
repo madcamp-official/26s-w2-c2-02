@@ -88,14 +88,23 @@ describe('accumulateFocusStats', () => {
 
 describe('focusIndices', () => {
   it('maps head jitter onto a restlessness index', () => {
+    // 0.3 is the landmark noise floor of a still head and 2 is a deliberate turn.
     // Averages the per-window readings, so a session spent half still and half
     // moving lands between the two.
-    const still = Array.from({ length: 60 }, () => snapshot([], {}, 0.5));
-    const moving = Array.from({ length: 60 }, () => snapshot([], {}, 3));
+    const still = Array.from({ length: 60 }, () => snapshot([], {}, 0.3));
+    const moving = Array.from({ length: 60 }, () => snapshot([], {}, 2));
 
     expect(focusIndices(fold(still)).restlessness).toBe(0);
     expect(focusIndices(fold(moving)).restlessness).toBe(100);
     expect(focusIndices(fold([...still, ...moving])).restlessness).toBe(50);
+  });
+
+  it('registers movement that only just clears the noise floor', () => {
+    // The point of the floor sitting at resting noise: a head that is not quite
+    // still reads as not quite still, rather than rounding down to zero.
+    const barelyMoving = Array.from({ length: 60 }, () => snapshot([], {}, 0.5));
+
+    expect(focusIndices(fold(barelyMoving)).restlessness).toBe(12);
   });
 
   it('does not let time away from the desk read as sitting still', () => {

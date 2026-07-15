@@ -410,6 +410,20 @@ describe('extractFrameSignals', () => {
     expect(right.headTurned).toBe(true);
     expect(comfortable.headTurned).toBe(false);
   });
+
+  it('keeps the margin between the measured comfortable range and the threshold', () => {
+    // 25 degrees is the edge of the range measured on a real person, and it must
+    // stay clear even while moving, when the motion boost widens the threshold by a
+    // degree. The gap either side of this pair is the whole reason the angle was not
+    // lowered further for sensitivity.
+    const face = syntheticFace({ noseY: 0.5 });
+    const moving = { x: 0.5, y: 0.5 };
+    const atRange = extractFrameSignals(face, defaultRuleSettings, 0, moving, yawMatrix(25));
+    const past = extractFrameSignals(face, defaultRuleSettings, 0, null, yawMatrix(29));
+
+    expect(atRange.headTurned).toBe(false);
+    expect(past.headTurned).toBe(true);
+  });
 });
 
 /**
