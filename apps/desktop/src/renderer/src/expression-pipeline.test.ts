@@ -36,17 +36,31 @@ describe('expression-pipeline', () => {
     });
   });
 
-  it('accepts a softer wink when one eye is mostly open', () => {
+  it('accepts a wink only when the other eye stays open', () => {
     const signals = expressionSignalsFromBlendshapes(
       categories({
         eyeBlinkLeft: 0.42,
-        eyeBlinkRight: 0.38
+        eyeBlinkRight: 0.2
       }),
       undefined,
       1234
     );
 
     expect(signals.winkLeft).toBe(true);
+    expect(signals.winkRight).toBe(false);
+  });
+
+  it('does not treat both eyes closing as a wink', () => {
+    const signals = expressionSignalsFromBlendshapes(
+      categories({
+        eyeBlinkLeft: 0.75,
+        eyeBlinkRight: 0.7
+      }),
+      undefined,
+      1234
+    );
+
+    expect(signals.winkLeft).toBe(false);
     expect(signals.winkRight).toBe(false);
   });
 
