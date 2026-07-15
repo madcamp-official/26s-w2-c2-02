@@ -8,7 +8,7 @@ import {
   type GameSession,
   type HiddenMission
 } from '@roomi/shared';
-import { App, resolvePrivateMission } from './App';
+import { App, mergeAssignedMission, mergeIncomingGame, resolvePrivateMission } from './App';
 
 const socketMock = {
   connect: vi.fn(),
@@ -444,6 +444,40 @@ describe('resolvePrivateMission', () => {
         nextGame
       )
     ).toBe(nextMission);
+  });
+});
+
+describe('game mission merging', () => {
+  it('keeps target missions when a same-round public update has no missions', () => {
+    const hostMission = hiddenMission('mission-host', 'participant-host', 'Smile twice');
+    const memberMission = hiddenMission('mission-member', 'participant-member', 'Wink twice');
+    const currentGame = hiddenMissionGame('round-1', [hostMission, memberMission]);
+    const incomingGame = { ...currentGame, missions: [] };
+
+    const merged = mergeIncomingGame(
+      {
+        currentParticipantId: 'participant-host',
+        currentGame,
+        privateMission: hostMission
+      } as Parameters<typeof mergeIncomingGame>[0],
+      incomingGame
+    );
+
+    expect(merged?.missions?.map((mission) => mission.prompt).sort()).toEqual(
+      ['Smile twice', 'Wink twice'].sort()
+    );
+  });
+
+  it('merges private mission assignments into the current game without dropping others', () => {
+    const hostMission = hiddenMission('mission-host', 'participant-host', 'Smile twice');
+    const memberMission = hiddenMission('mission-member', 'participant-member', 'Wink twice');
+    const game = hiddenMissionGame('round-1', [hostMission]);
+
+    const merged = mergeAssignedMission(game, memberMission);
+
+    expect(merged?.missions?.map((mission) => mission.prompt).sort()).toEqual(
+      ['Smile twice', 'Wink twice'].sort()
+    );
   });
 });
 

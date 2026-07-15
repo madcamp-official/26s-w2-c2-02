@@ -337,16 +337,19 @@ export function App() {
       (snapshot) => {
         setRoomDraft((current) =>
           current && current.room.id === snapshot.room.id
-            ? {
+            ? (() => {
+                const currentGame = mergeIncomingGame(current, snapshot.currentGame);
+                return {
                 ...current,
                 room: snapshot.room,
                 participants: snapshot.participants,
                 goals: snapshot.goals,
                 roomiMessages: snapshot.roomiMessages,
                 currentSession: snapshot.currentSession,
-                currentGame: snapshot.currentGame,
-                privateMission: resolvePrivateMission(current, snapshot.currentGame)
-              }
+                  currentGame,
+                  privateMission: resolvePrivateMission(current, currentGame)
+                };
+              })()
             : current
         );
       },
@@ -360,16 +363,27 @@ export function App() {
       (game) => {
         setRoomDraft((current) =>
           current && current.room.id === game.roomId
-            ? {
+            ? (() => {
+                const currentGame = mergeIncomingGame(current, game);
+                return {
                 ...current,
-                currentGame: game,
-                privateMission: resolvePrivateMission(current, game)
-              }
+                  currentGame,
+                  privateMission: resolvePrivateMission(current, currentGame)
+                };
+              })()
             : current
         );
       },
       (mission) => {
-        setRoomDraft((current) => (current ? { ...current, privateMission: mission } : current));
+        setRoomDraft((current) =>
+          current
+            ? {
+                ...current,
+                currentGame: mergeAssignedMission(current.currentGame, mission),
+                privateMission: mission
+              }
+            : current
+        );
       },
       (result) => {
         setRoomDraft((current) =>
@@ -392,11 +406,14 @@ export function App() {
       (game) => {
         setRoomDraft((current) =>
           current && current.room.id === game.roomId
-            ? {
+            ? (() => {
+                const currentGame = mergeIncomingGame(current, game);
+                return {
                 ...current,
-                currentGame: game,
-                privateMission: resolvePrivateMission(current, game)
-              }
+                  currentGame,
+                  privateMission: resolvePrivateMission(current, currentGame)
+                };
+              })()
             : current
         );
       },
@@ -1701,4 +1718,39 @@ export function resolvePrivateMission(
   }
 
   return undefined;
+}
+
+export function mergeIncomingGame(current: RoomDraft, incoming: GameSession | undefined) {
+  if (!incoming) return undefined;
+  if (
+    incoming.kind !== 'hidden_mission' ||
+    current.currentGame?.kind !== 'hidden_mission' ||
+    current.currentGame.id !== incoming.id ||
+    current.currentGame.round.id !== incoming.round.id
+  ) {
+    return incoming;
+  }
+
+  return {
+    ...incoming,
+    missions: mergeMissionLists(current.currentGame.missions, incoming.missions)
+  };
+}
+
+export function mergeAssignedMission(game: GameSession | undefined, mission: HiddenMission) {
+  if (!game || game.kind !== 'hidden_mission') return game;
+  return {
+    ...game,
+    missions: mergeMissionLists(game.missions, [mission])
+  };
+}
+
+function mergeMissionLists(
+  existing: HiddenMission[] | undefined,
+  incoming: HiddenMission[] | undefined
+) {
+  const byPlayerId = new Map<string, HiddenMission>();
+  for (const mission of existing ?? []) byPlayerId.set(mission.playerId, mission);
+  for (const mission of incoming ?? []) byPlayerId.set(mission.playerId, mission);
+  return Array.from(byPlayerId.values());
 }
