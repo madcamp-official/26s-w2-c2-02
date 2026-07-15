@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   createInviteCode,
   normalizeInviteCode,
+  type ChatMessage,
   type Goal,
   type Participant,
   type ParticipantStatus,
@@ -36,6 +37,7 @@ import {
   leaveRoom,
   refineGoal,
   RoomApiError,
+  sendChatMessage,
   setGoalAchieved,
   startBreak,
   startSession,
@@ -52,6 +54,7 @@ type RoomDraft = {
   participants: Participant[];
   goals: Goal[];
   roomiMessages: RoomiMessage[];
+  chatMessages: ChatMessage[];
   currentSession?: StudySession;
   realtime: 'local' | 'server';
   videoJoin?: VideoJoinInfo;
@@ -123,7 +126,8 @@ const fallbackRoom: RoomDraft = {
     }
   ],
   goals: [],
-  roomiMessages: []
+  roomiMessages: [],
+  chatMessages: []
 };
 
 function createRoomDraft(nickname: string, settings: RoomSettings): RoomDraft {
@@ -158,7 +162,8 @@ function createRoomDraft(nickname: string, settings: RoomSettings): RoomDraft {
       }
     ],
     goals: [],
-    roomiMessages: []
+    roomiMessages: [],
+    chatMessages: []
   };
 }
 
@@ -205,7 +210,8 @@ function joinRoomDraft(nickname: string, inviteCode: string): RoomDraft {
       }
     ],
     goals: [],
-    roomiMessages: []
+    roomiMessages: [],
+    chatMessages: []
   };
 }
 
@@ -217,6 +223,7 @@ function roomSessionToDraft(session: RoomSession): RoomDraft {
     participants: session.snapshot.participants,
     goals: session.snapshot.goals,
     roomiMessages: session.snapshot.roomiMessages,
+    chatMessages: session.snapshot.chatMessages,
     currentSession: session.snapshot.currentSession,
     videoJoin: session.videoJoin
   };
@@ -272,6 +279,7 @@ export function App() {
                 participants: snapshot.participants,
                 goals: snapshot.goals,
                 roomiMessages: snapshot.roomiMessages,
+                chatMessages: snapshot.chatMessages,
                 currentSession: snapshot.currentSession
               }
             : current
@@ -286,6 +294,13 @@ export function App() {
       },
       (message) => {
         console.warn(`Room realtime error: ${message}`);
+      },
+      (message) => {
+        setRoomDraft((current) =>
+          current && current.room.id === message.roomId
+            ? { ...current, chatMessages: [...current.chatMessages, message].slice(-100) }
+            : current
+        );
       }
     );
   }, [roomDraft?.room.id, roomDraft?.realtime]);
@@ -512,6 +527,39 @@ export function App() {
           }
         : current
     );
+  };
+
+  const sendCurrentChatMessage = (text: string) => {
+    if (!roomDraft) return;
+
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    const sender = roomDraft.participants.find(
+      (participant) => participant.id === roomDraft.currentParticipantId
+    );
+    const optimisticMessage: ChatMessage = {
+      id: `chat-local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      roomId: roomDraft.room.id,
+      participantId: roomDraft.currentParticipantId,
+      nickname: sender?.nickname ?? '나',
+      text: trimmed,
+      createdAt: new Date().toISOString()
+    };
+
+    setRoomDraft((current) =>
+      current
+        ? { ...current, chatMessages: [...current.chatMessages, optimisticMessage].slice(-100) }
+        : current
+    );
+
+    if (roomDraft.realtime !== 'server') return;
+
+    sendChatMessage(socketRef.current, {
+      roomId: roomDraft.room.id,
+      participantId: roomDraft.currentParticipantId,
+      text: trimmed
+    });
   };
 
   const joinCurrentSession = () => {
@@ -796,6 +844,8 @@ export function App() {
             participants={activeRoom.participants}
             goals={activeRoom.goals}
             roomiMessages={activeRoom.roomiMessages}
+            chatMessages={activeRoom.chatMessages}
+            onSendChatMessage={sendCurrentChatMessage}
             room={activeRoom.room}
             currentSession={activeRoom.currentSession}
             videoJoin={activeRoom.videoJoin}

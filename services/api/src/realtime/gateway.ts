@@ -134,6 +134,20 @@ export function registerRealtimeGateway(
       }
     });
 
+    socket.on(realtimeEvents.client.sendChatMessage, (input) => {
+      let message;
+      try {
+        message = roomService.addChatMessage(input);
+      } catch (error) {
+        socket.emit(realtimeEvents.server.error, errorMessage(error));
+        return;
+      }
+
+      // Sender already renders an optimistic copy locally, so broadcast to
+      // everyone else in the room only — avoids a duplicate bubble for sender.
+      socket.to(message.roomId).emit(realtimeEvents.server.chatMessage, message);
+    });
+
     socket.on(realtimeEvents.client.leaveRoom, (input) => {
       try {
         roomService.leaveRoom(input.roomId, input.participantId);

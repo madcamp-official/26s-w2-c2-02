@@ -236,7 +236,8 @@ describe('App screen router', () => {
               }
             ],
             goals: [],
-            roomiMessages: []
+            roomiMessages: [],
+            chatMessages: []
           }
         })
       })
@@ -275,6 +276,7 @@ describe('App screen router', () => {
         { id: 'goal-minji', roomId: 'room-server', participantId: 'participant-minji', rawText: '영어 단어 100개', createdAt: timestamp }
       ],
       roomiMessages: [],
+      chatMessages: [],
       currentSession: {
         id: 'session-1',
         roomId: 'room-server',
@@ -336,7 +338,8 @@ describe('App screen router', () => {
             },
             participants: [],
             goals: [],
-            roomiMessages: []
+            roomiMessages: [],
+            chatMessages: []
           }
         })
       })
@@ -405,6 +408,7 @@ function stubHostApi() {
             participants: [{ ...participant, status: 'focused' as const }],
             goals: [],
             roomiMessages: [],
+            chatMessages: [],
             currentSession: {
               id: 'session-host',
               roomId: room.id,
@@ -413,7 +417,7 @@ function stubHostApi() {
               mode: 'study' as const
             }
           }
-        : { room, participants: [participant], goals: [], roomiMessages: [] };
+        : { room, participants: [participant], goals: [], roomiMessages: [], chatMessages: [] };
 
       return {
         ok: true,

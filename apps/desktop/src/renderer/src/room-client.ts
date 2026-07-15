@@ -1,5 +1,7 @@
 import { io, type Socket } from 'socket.io-client';
 import type {
+  ChatMessage,
+  ChatSendInput,
   ClientToServerEvents,
   CreateRoomInput,
   GoalRefineInput,
@@ -128,6 +130,13 @@ export function updateParticipantStatus(
   socket?.emit(realtimeEvents.client.updateStatus, input);
 }
 
+export function sendChatMessage(
+  socket: Socket<ServerToClientEvents, ClientToServerEvents> | null,
+  input: ChatSendInput
+) {
+  socket?.emit(realtimeEvents.client.sendChatMessage, input);
+}
+
 export function createRoomSocket() {
   return io(apiBaseUrl, {
     autoConnect: false,
@@ -140,7 +149,8 @@ export function subscribeToRoom(
   input: RoomSubscriptionInput,
   onSnapshot: (snapshot: RoomSnapshot) => void,
   onRoomiMessage: (message: RoomiMessage) => void,
-  onError: (message: string) => void
+  onError: (message: string) => void,
+  onChatMessage?: (message: ChatMessage) => void
 ) {
   socket.connect();
   socket.emit(realtimeEvents.client.subscribeRoom, input, (snapshot) => {
@@ -152,12 +162,18 @@ export function subscribeToRoom(
   socket.on(realtimeEvents.server.roomUpdated, onSnapshot);
   socket.on(realtimeEvents.server.roomiMessage, onRoomiMessage);
   socket.on(realtimeEvents.server.error, onError);
+  if (onChatMessage) {
+    socket.on(realtimeEvents.server.chatMessage, onChatMessage);
+  }
 
   return () => {
     socket.off(realtimeEvents.server.roomSnapshot, onSnapshot);
     socket.off(realtimeEvents.server.roomUpdated, onSnapshot);
     socket.off(realtimeEvents.server.roomiMessage, onRoomiMessage);
     socket.off(realtimeEvents.server.error, onError);
+    if (onChatMessage) {
+      socket.off(realtimeEvents.server.chatMessage, onChatMessage);
+    }
     socket.disconnect();
   };
 }

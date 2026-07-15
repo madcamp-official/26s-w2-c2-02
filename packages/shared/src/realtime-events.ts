@@ -1,4 +1,6 @@
 import type {
+  ChatMessage,
+  ChatSendInput,
   RoomiMessage,
   RoomSnapshot,
   RoomSubscriptionInput,
@@ -14,12 +16,14 @@ export const realtimeEvents = {
     subscribeRoom: 'room:subscribe',
     participantReady: 'participant:ready',
     submitGoal: 'goal:submit',
-    updateStatus: 'participant:update-status'
+    updateStatus: 'participant:update-status',
+    sendChatMessage: 'chat:send'
   },
   server: {
     roomSnapshot: 'room:snapshot',
     roomUpdated: 'room:updated',
     roomiMessage: 'roomi:message',
+    chatMessage: 'chat:message',
     error: 'error'
   }
 } as const;
@@ -35,11 +39,13 @@ export type ClientToServerEvents = {
   [realtimeEvents.client.updateStatus]: (
     input: UpdateParticipantStatusInput
   ) => void;
+  [realtimeEvents.client.sendChatMessage]: (input: ChatSendInput) => void;
 };
 
 export type ServerToClientEvents = {
   [realtimeEvents.server.roomSnapshot]: (snapshot: RoomSnapshot) => void;
   [realtimeEvents.server.roomUpdated]: (snapshot: RoomSnapshot) => void;
   [realtimeEvents.server.roomiMessage]: (message: RoomiMessage) => void;
+  [realtimeEvents.server.chatMessage]: (message: ChatMessage) => void;
   [realtimeEvents.server.error]: (message: string) => void;
 };
