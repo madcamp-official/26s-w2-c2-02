@@ -781,7 +781,8 @@ describe('StudyRoom hidden mission progress', () => {
       />
     );
 
-    expect(screen.getByText(/1라운드 Member 우승 · 2라운드 시작까지/)).toBeInTheDocument();
+    expect(screen.getByText('1라운드 Member 우승')).toHaveClass('study-timer__round-winner');
+    expect(screen.getByText(/2라운드 시작까지/)).toBeInTheDocument();
     expect(screen.getByText('준비 대기 중')).toBeInTheDocument();
   });
 

@@ -500,7 +500,7 @@ export function StudyRoom({
     ? isGameEnded
       ? '게임 종료'
       : isNextRoundWaiting
-      ? `${latestRoundWinner ? `${currentGame.round.index}라운드 ${latestRoundWinner} 우승 · ` : ''}${currentGame.round.index + 1}라운드 시작까지 ${formatSessionTime(remainingSeconds)}`
+      ? `${currentGame.round.index + 1}라운드 시작까지 ${formatSessionTime(remainingSeconds)}`
       : `${currentGame.round.index}/${currentGame.totalRounds ?? 1}라운드`
     : `${room.settings.roundCount ?? 1}라운드 예정`;
   const tileCols = Math.min(2, Math.max(1, Math.ceil(Math.sqrt(displayParticipants.length))));
@@ -551,7 +551,18 @@ export function StudyRoom({
             <div>
               <span className="study-timer__label">{isStudyMode ? '공부 시간' : gameTimerLabel}</span>
               <strong className={`study-timer__value${!isStudyMode ? ' study-timer__value--game' : ''}`}>
-                {isStudyMode ? formatSessionTime(remainingSeconds) : gameTimerValue}
+                {isStudyMode ? (
+                  formatSessionTime(remainingSeconds)
+                ) : (
+                  <>
+                    {isNextRoundWaiting && latestRoundWinner && currentGame && (
+                      <span className="study-timer__round-winner">
+                        {currentGame.round.index}라운드 {latestRoundWinner} 우승
+                      </span>
+                    )}
+                    {gameTimerValue}
+                  </>
+                )}
               </strong>
             </div>
             <div className="study-timer-card__meta">

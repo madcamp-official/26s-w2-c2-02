@@ -331,6 +331,15 @@
   line-height: 1.15;
 }
 
+.study-timer__round-winner {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: 0.67em;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
 .study-card__title {
   font-size: 14px;
   font-weight: 800;
