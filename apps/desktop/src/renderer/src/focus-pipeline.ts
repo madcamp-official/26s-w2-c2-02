@@ -97,6 +97,11 @@ export type FocusSnapshot = {
    */
   blinksPerMinute: number;
   yawnCount: number;
+  /**
+   * How much the head jitters across the window. Reported, not scored: fidgeting
+   * says restless, and restless people are often still working.
+   */
+  motionAmount: number;
   current: Omit<FrameSignals, 'timestamp'>;
 };
 
@@ -120,7 +125,10 @@ export const defaultRuleSettings: RuleSettings = {
   headTurnDegreesThreshold: 30,
   headDownDegreesThreshold: 25,
   mouthAspectRatioThreshold: 0.6,
-  yawningSeconds: 1.5,
+  // A yawn holds the mouth wide for a couple of seconds; talking and laughing open
+  // it in bursts. What keeps those out is mostly the 0.6 ratio above — a mouth that
+  // wide is not a word — so this only has to outlast a burst, not a whole yawn.
+  yawningSeconds: 1,
   blinkMaxSeconds: 1,
   // Eyes rove constantly while reading, so this rule leans on duration rather than
   // a tight angle. At a normal 60cm desk distance the far edge of a 27" monitor is
@@ -155,6 +163,7 @@ export const emptyFocusSnapshot: FocusSnapshot = {
   },
   blinksPerMinute: 0,
   yawnCount: 0,
+  motionAmount: 0,
   current: {
     facePresent: false,
     eyeAspectRatio: 0,
@@ -299,6 +308,9 @@ export function classifyFocus(windowFrames: FrameSignals[], settings: RuleSettin
     yawnCount: countSignalRuns(windowFrames, (frame) => frame.mouthOpen, {
       minSeconds: settings.yawningSeconds
     }),
+    // Frames with no face are dropped first: the jump between the last seen pose
+    // and the pose found after the gap is not movement anyone made.
+    motionAmount: getMotionAmount(windowFrames.filter((frame) => frame.facePresent)),
     current: {
       facePresent: latest.facePresent,
       eyeAspectRatio: latest.eyeAspectRatio,

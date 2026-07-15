@@ -25,6 +25,9 @@ export type FocusSessionStats = {
   headDowns: number;
   aways: number;
   gazeDiversions: number;
+  /** Running total of head jitter, and the frames it was summed over. */
+  motionSum: number;
+  motionSamples: number;
   /** Previous frame's readings, kept only to detect the rising edges above. */
   previousSignals: FocusSignalName[];
   previousEyesClosed: boolean;
@@ -41,6 +44,8 @@ export type FocusIndices = {
   headTurnsPerHour: number;
   awaysPerHour: number;
   gazeDiversionsPerHour: number;
+  /** Head jitter mapped onto 0..100, where 0 is sitting still. */
+  restlessness: number;
   fatigue: number;
   distraction: number;
   restSuggested: boolean;
@@ -66,6 +71,8 @@ export const emptyFocusSessionStats: FocusSessionStats = {
   headDowns: 0,
   aways: 0,
   gazeDiversions: 0,
+  motionSum: 0,
+  motionSamples: 0,
   previousSignals: [],
   previousEyesClosed: false
 };
@@ -94,6 +101,10 @@ export function accumulateFocusStats(
     headDowns: previous.headDowns + rose('head_down'),
     aways: previous.aways + rose('face_missing'),
     gazeDiversions: previous.gazeDiversions + rose('gaze_diverged'),
+    // Only sampled while the face is visible. An absent face reports no motion, and
+    // averaging those zeros in would make leaving the desk look like sitting still.
+    motionSum: previous.motionSum + (current.facePresent ? snapshot.motionAmount : 0),
+    motionSamples: previous.motionSamples + (current.facePresent ? 1 : 0),
     previousSignals: snapshot.activeSignals,
     previousEyesClosed: current.eyesClosed
   };
@@ -111,6 +122,14 @@ export function focusIndices(stats: FocusSessionStats): FocusIndices {
   const headTurnsPerHour = perHour(stats.headTurns);
   const awaysPerHour = perHour(stats.aways);
   const gazeDiversionsPerHour = perHour(stats.gazeDiversions);
+  const averageMotion = stats.motionSamples > 0 ? stats.motionSum / stats.motionSamples : 0;
+  // The shakiest bounds in this file. Head jitter has no natural unit — it is a mean
+  // per-frame change in pose ratios, so it also moves with frame rate — and unlike
+  // blink rate or PERCLOS there is no published resting level to anchor to. These
+  // come from what the arithmetic implies: landmark noise on a still head lands near
+  // 0.3, and deliberately turning to look at something crosses 2. Read the 자세 흔들림
+  // meter on the tuning screen for a session and move them.
+  const restlessness = Math.round(normalise(averageMotion, 0.5, 3) * 100);
 
   // Weights are deliberate but unvalidated, which is exactly why these two indices
   // only ever display and suggest. The focus score and the ranking stay on the
@@ -127,9 +146,13 @@ export function focusIndices(stats: FocusSessionStats): FocusIndices {
     [15, normalise(blinksPerMinute, 18, 32)]
   ]);
   const distraction = weighted([
-    [40, normalise(gazeDiversionsPerHour, 2, 20)],
-    [35, normalise(headTurnsPerHour, 2, 20)],
-    [25, normalise(awaysPerHour, 1, 8)]
+    [35, normalise(gazeDiversionsPerHour, 2, 20)],
+    [30, normalise(headTurnsPerHour, 2, 20)],
+    [20, normalise(awaysPerHour, 1, 8)],
+    // Lightest of the four, and on purpose: the other three caught someone looking
+    // away from the desk, while fidgeting is restlessness, which plenty of people do
+    // while working. It belongs here, but it should not decide the reading alone.
+    [15, restlessness / 100]
   ]);
   const ready = observedSeconds >= minimumObservedSeconds && stats.faceFrames > 0;
 
@@ -142,6 +165,7 @@ export function focusIndices(stats: FocusSessionStats): FocusIndices {
     headTurnsPerHour: round(headTurnsPerHour, 1),
     awaysPerHour: round(awaysPerHour, 1),
     gazeDiversionsPerHour: round(gazeDiversionsPerHour, 1),
+    restlessness,
     fatigue,
     distraction,
     // Suggesting a break off 20 seconds of noise would train people to ignore it.

@@ -58,6 +58,8 @@ const focusDetectionMock = vi.hoisted(() => ({
       headDowns: 0,
       aways: 0,
       gazeDiversions: 0,
+      motionSum: 0,
+      motionSamples: 0,
       previousSignals: [],
       previousEyesClosed: false
     },
@@ -358,6 +360,8 @@ describe('FocusDetailPanel', () => {
     headDowns: 0,
     aways: 1,
     gazeDiversions: 3,
+    motionSum: 60,
+    motionSamples: 100,
     previousSignals: [],
     previousEyesClosed: false
   };
@@ -381,6 +385,7 @@ describe('FocusDetailPanel', () => {
     expect(screen.getByText('시선 이탈')).toBeInTheDocument();
     expect(screen.getByText('고개 돌림')).toBeInTheDocument();
     expect(screen.getByText('자리 비움')).toBeInTheDocument();
+    expect(screen.getByText('자세 흔들림')).toBeInTheDocument();
   });
 
   it('says the readings are private and do not move the score', () => {

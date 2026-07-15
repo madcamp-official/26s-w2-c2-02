@@ -137,6 +137,16 @@ describe('fatigue signals', () => {
     expect(snapshot.label).toBe('focused');
   });
 
+  it('catches a short yawn, since the 0.6 ratio already excludes speech', () => {
+    // A mouth this wide is not a word, so the duration guard only has to outlast a
+    // burst of talking rather than a whole yawn. Runs to the window end, since an
+    // active signal is one that is still going.
+    const frames = windowWithRuns(7, { starts: [5.8], runSeconds: 1.5, apply: yawning });
+
+    expect(classifyFocus(frames, defaultRuleSettings).durations.yawning).toBe(1.2);
+    expect(classifyFocus(frames, defaultRuleSettings).activeSignals).toContain('yawning');
+  });
+
   it('does not mistake talking for yawning', () => {
     const frames = windowWithRuns(20, {
       starts: [2, 5, 8, 11, 14],
@@ -154,6 +164,19 @@ describe('fatigue signals', () => {
     const frames = windowWithRuns(30, { starts: [2, 12, 22], runSeconds: 2, apply: yawning });
 
     expect(classifyFocus(frames, defaultRuleSettings).yawnCount).toBe(3);
+  });
+
+  it('measures head jitter over the window, ignoring frames with no face', () => {
+    // The jump between the pose last seen and the pose found after a dropout is not
+    // movement anyone made, so those frames must not inflate the reading.
+    const still = classifyFocus(frameRun(10), defaultRuleSettings);
+    expect(still.motionAmount).toBe(0);
+
+    const withDropout = classifyFocus(
+      windowWithRuns(10, { starts: [4], runSeconds: 2, apply: { facePresent: false } }),
+      defaultRuleSettings
+    );
+    expect(withDropout.motionAmount).toBe(0);
   });
 
   it('reports the blink rate per minute', () => {

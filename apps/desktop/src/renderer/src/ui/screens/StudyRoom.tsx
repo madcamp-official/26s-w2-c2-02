@@ -264,7 +264,9 @@ export function FocusDetailPanel({ indices }: { indices: FocusIndices }) {
         rows={[
           ['시선 이탈', `${indices.gazeDiversionsPerHour}회/시간`],
           ['고개 돌림', `${indices.headTurnsPerHour}회/시간`],
-          ['자리 비움', `${indices.awaysPerHour}회/시간`]
+          ['자리 비움', `${indices.awaysPerHour}회/시간`],
+          // An index, not a count: head jitter has no unit anyone would recognise.
+          ['자세 흔들림', `${indices.restlessness}`]
         ]}
       />
       <p className="focus-detail__foot">

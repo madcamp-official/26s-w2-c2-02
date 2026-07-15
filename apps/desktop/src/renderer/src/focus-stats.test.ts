@@ -9,11 +9,13 @@ import { emptyFocusSnapshot, type FocusSignalName, type FocusSnapshot } from './
 
 function snapshot(
   activeSignals: FocusSignalName[],
-  current: Partial<FocusSnapshot['current']> = {}
+  current: Partial<FocusSnapshot['current']> = {},
+  motionAmount = 0
 ): FocusSnapshot {
   return {
     ...emptyFocusSnapshot,
     activeSignals,
+    motionAmount,
     current: { ...emptyFocusSnapshot.current, facePresent: true, ...current }
   };
 }
@@ -85,6 +87,28 @@ describe('accumulateFocusStats', () => {
 });
 
 describe('focusIndices', () => {
+  it('maps head jitter onto a restlessness index', () => {
+    // Averages the per-window readings, so a session spent half still and half
+    // moving lands between the two.
+    const still = Array.from({ length: 60 }, () => snapshot([], {}, 0.5));
+    const moving = Array.from({ length: 60 }, () => snapshot([], {}, 3));
+
+    expect(focusIndices(fold(still)).restlessness).toBe(0);
+    expect(focusIndices(fold(moving)).restlessness).toBe(100);
+    expect(focusIndices(fold([...still, ...moving])).restlessness).toBe(50);
+  });
+
+  it('does not let time away from the desk read as sitting still', () => {
+    // A frame with no face reports no motion. Averaging those in would drag the
+    // index down exactly when someone is least at their desk.
+    const present = Array.from({ length: 60 }, () => snapshot([], {}, 3));
+    const gone = Array.from({ length: 60 }, () =>
+      snapshot(['face_missing'], { facePresent: false }, 0)
+    );
+
+    expect(focusIndices(fold([...present, ...gone])).restlessness).toBe(100);
+  });
+
   it('withholds every rate until a session is long enough to have one', () => {
     // One yawn twenty seconds in is not 180 yawns an hour.
     const stats = fold([snapshot([]), snapshot(['yawning'])]);
@@ -120,8 +144,12 @@ describe('focusIndices', () => {
   it('keeps both indices inside 0..100 when every reading is pinned', () => {
     const steps = Array.from({ length: 200 }, (_, index) =>
       index % 2 === 0
-        ? snapshot(['yawning', 'head_turned', 'gaze_diverged', 'face_missing'], { eyesClosed: true })
-        : snapshot([], { eyesClosed: false })
+        ? snapshot(
+            ['yawning', 'head_turned', 'gaze_diverged', 'face_missing'],
+            { eyesClosed: true },
+            5
+          )
+        : snapshot([], { eyesClosed: false }, 5)
     );
     const indices = focusIndices(fold(steps));
 

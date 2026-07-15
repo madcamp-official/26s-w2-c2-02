@@ -599,6 +599,14 @@ export function MediaPipeTest({ go }: ScreenProps) {
             />
             <FeatureMeter label="깜빡임" value={focusSnapshot.blinksPerMinute} unit="회/분" />
             <FeatureMeter label="하품 횟수" value={focusSnapshot.yawnCount} unit="회" />
+            {/* The 산만함 index reads a still head as ~0.3 and a deliberate turn as
+                past 2. Those bounds are inferred, not measured — this is the meter
+                that settles them. */}
+            <FeatureMeter
+              label="자세 흔들림"
+              value={round(focusSnapshot.motionAmount, 2)}
+              unit=""
+            />
             {/* Reads 0 on a mesh without iris landmarks, which is also what the
                 랜드마크 count above would show as 468 instead of 478. */}
             <FeatureMeter
