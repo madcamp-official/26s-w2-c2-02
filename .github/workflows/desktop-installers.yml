@@ -82,6 +82,9 @@ jobs:
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      # 인증서 secret 없으면 identity 자동 탐색을 꺼서 pnpm 심볼릭 링크 구조 때문에
+      # electron-builder가 프로젝트 디렉터리를 서명 대상 파일로 오인하는 문제를 회피한다.
+      CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CSC_LINK != '' }}
 
     steps:
       - name: Checkout
