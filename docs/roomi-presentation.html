@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f4f5f7" />
+  <title>Roomi — AI 운영 스터디룸</title>
+  <style>
+    :root {
+      --purple: #8a7df0;
+      --purple-dark: #6f61df;
+      --purple-soft: #edebfb;
+      --lavender: #efecff;
+      --bg: #f4f5f7;
+      --card: #fff;
+      --ink: #20252e;
+      --text: #3f4550;
+      --muted: #8a9099;
+      --green: #2fa36b;
+      --green-soft: #e7f7ee;
+      --line: #e7e8ec;
+      --shadow: 0 24px 70px rgba(79, 70, 150, 0.12);
+      --font: Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+    body { background: var(--bg); color: var(--ink); font-family: var(--font); }
+    button { font: inherit; }
+
+    .deck { position: relative; width: 100%; height: 100%; }
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      align-content: center;
+      padding: clamp(48px, 7vw, 120px);
+      opacity: 0;
+      visibility: hidden;
+      transform: translateX(34px) scale(.99);
+      transition: opacity .42s ease, transform .42s ease, visibility .42s;
+      background:
+        radial-gradient(circle at 85% 15%, rgba(138,125,240,.12), transparent 26%),
+        var(--bg);
+    }
+    .slide.active { opacity: 1; visibility: visible; transform: none; z-index: 1; }
+    .slide.past { transform: translateX(-34px) scale(.99); }
+    .slide.dark {
+      color: white;
+      background:
+        radial-gradient(circle at 80% 20%, rgba(173,164,244,.26), transparent 32%),
+        linear-gradient(145deg, #20212d, #29243f 64%, #3b3372);
+    }
+
+    .topline { position: absolute; top: 38px; left: clamp(48px,7vw,120px); right: clamp(48px,7vw,120px); display: flex; justify-content: space-between; color: var(--muted); font-size: 14px; font-weight: 700; letter-spacing: .08em; }
+    .brand { display: flex; align-items: center; gap: 9px; color: var(--purple-dark); }
+    .brand-dot { width: 11px; height: 11px; border-radius: 50%; background: var(--purple); box-shadow: 0 0 0 6px var(--purple-soft); }
+    .dark .topline, .dark .brand { color: rgba(255,255,255,.65); }
+
+    .eyebrow { margin: 0 0 18px; color: var(--purple-dark); font-size: clamp(13px,1.3vw,18px); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .dark .eyebrow { color: #c9c3f7; }
+    h1, h2, p { margin-top: 0; }
+    h1 { margin-bottom: 24px; max-width: 1050px; font-size: clamp(54px,7.2vw,112px); line-height: .98; letter-spacing: -.065em; }
+    h2 { margin-bottom: 28px; max-width: 1080px; font-size: clamp(42px,5.5vw,82px); line-height: 1.08; letter-spacing: -.055em; }
+    .lead { max-width: 850px; color: var(--text); font-size: clamp(20px,2vw,30px); line-height: 1.55; letter-spacing: -.02em; }
+    .dark .lead { color: rgba(255,255,255,.74); }
+    .accent { color: var(--purple-dark); }
+    .dark .accent { color: #c9c3f7; }
+
+    .hero { grid-template-columns: 1.15fr .85fr; align-items: center; gap: 5vw; }
+    .hero-copy { z-index: 1; }
+    .hero-art { position: relative; display: grid; place-items: center; min-height: 440px; }
+    .hero-art::before { content: ""; position: absolute; width: 82%; aspect-ratio: 1; border-radius: 50%; background: linear-gradient(145deg, #fff, var(--lavender)); box-shadow: var(--shadow); }
+    .hero-art img { position: relative; width: min(37vw, 520px); max-height: 54vh; object-fit: contain; filter: drop-shadow(0 20px 25px rgba(73,62,147,.15)); }
+    .pill { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 999px; color: var(--purple-dark); background: var(--purple-soft); font-size: 15px; font-weight: 800; }
+
+    .quote { max-width: 1100px; font-size: clamp(48px,7vw,104px); line-height: 1.08; letter-spacing: -.06em; font-weight: 800; }
+    .quote span { color: var(--purple); }
+
+    .split { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: clamp(36px,7vw,110px); }
+    .stack { display: grid; gap: 16px; }
+    .card { padding: 28px 30px; border: 1px solid var(--line); border-radius: 24px; background: rgba(255,255,255,.92); box-shadow: 0 12px 32px rgba(79,70,150,.07); }
+    .card strong { display: block; margin-bottom: 7px; font-size: 21px; }
+    .card p { margin: 0; color: var(--muted); font-size: 17px; line-height: 1.5; }
+    .card.active-card { border-color: #d6d0fb; background: var(--lavender); transform: translateX(18px); }
+    .number { color: var(--purple); font-size: 14px; font-weight: 900; letter-spacing: .12em; }
+
+    .flow { display: grid; grid-template-columns: repeat(4,1fr); gap: 18px; margin-top: 45px; }
+    .flow-step { position: relative; min-height: 205px; padding: 26px; border-radius: 24px; background: white; box-shadow: 0 15px 40px rgba(79,70,150,.08); }
+    .flow-step:not(:last-child)::after { content: "→"; position: absolute; top: 50%; right: -18px; z-index: 2; color: var(--purple); font-size: 25px; font-weight: 800; }
+    .flow-step .icon { display: grid; place-items: center; width: 48px; height: 48px; margin-bottom: 34px; border-radius: 15px; background: var(--purple-soft); font-size: 24px; }
+    .flow-step strong { display: block; margin-bottom: 8px; font-size: 22px; }
+    .flow-step small { color: var(--muted); font-size: 15px; line-height: 1.45; }
+
+    .room-ui { padding: 16px; border-radius: 28px; background: #fff; box-shadow: var(--shadow); transform: rotate(-1.5deg); }
+    .window-bar { display: flex; gap: 7px; padding: 8px 7px 16px; }
+    .window-bar i { width: 10px; height: 10px; border-radius: 50%; background: #e7e8ec; }
+    .room-grid { display: grid; grid-template-columns: 1fr 1fr .72fr; gap: 12px; }
+    .person { position: relative; min-height: 150px; border-radius: 18px; background: linear-gradient(145deg,#292a35,#171821); overflow: hidden; }
+    .person::before { content: ""; position: absolute; width: 62px; height: 62px; left: 50%; top: 31%; transform: translate(-50%,-50%); border-radius: 50%; background: #8a7df0; opacity: .45; }
+    .person::after { content: ""; position: absolute; width: 105px; height: 70px; left: 50%; bottom: -18px; transform: translateX(-50%); border-radius: 55px 55px 0 0; background: #8a7df0; opacity: .3; }
+    .person label { position: absolute; left: 10px; bottom: 10px; z-index: 1; padding: 6px 9px; border-radius: 99px; background: rgba(255,255,255,.9); font-size: 11px; font-weight: 800; }
+    .side-panel { grid-row: span 2; padding: 18px; border-radius: 18px; background: var(--lavender); }
+    .side-panel b { display: block; margin-bottom: 14px; }
+    .message { margin-top: 12px; padding: 13px; border-radius: 14px 14px 14px 4px; color: var(--text); background: white; font-size: 12px; line-height: 1.5; }
+
+    .signal { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 36px; margin-top: 42px; }
+    .signal-card { padding: 34px; border-radius: 26px; background: white; box-shadow: var(--shadow); text-align: center; }
+    .signal-card .big { display: block; margin-bottom: 10px; font-size: clamp(38px,5vw,72px); font-weight: 900; }
+    .signal-card small { color: var(--muted); font-size: 16px; }
+    .signal-arrow { color: var(--purple); font-size: 42px; }
+
+    .privacy { display: flex; align-items: center; justify-content: space-between; gap: 70px; }
+    .privacy-visual { flex: 0 0 38%; display: grid; place-items: center; aspect-ratio: 1; border-radius: 50%; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); }
+    .lock { position: relative; width: 150px; height: 118px; border-radius: 28px; background: #8a7df0; box-shadow: 0 25px 70px rgba(0,0,0,.25); }
+    .lock::before { content: ""; position: absolute; width: 84px; height: 78px; left: 33px; top: -58px; border: 18px solid #c9c3f7; border-bottom: 0; border-radius: 52px 52px 0 0; }
+    .lock::after { content: "•"; position: absolute; inset: 0; display: grid; place-items: center; color: white; font-size: 72px; line-height: 1; }
+
+    .loop { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 55px; }
+    .loop-item { display: grid; place-items: center; width: clamp(145px,18vw,245px); aspect-ratio: 1; padding: 22px; border-radius: 50%; background: white; box-shadow: var(--shadow); text-align: center; }
+    .loop-item b { font-size: clamp(21px,2vw,31px); }
+    .loop-arrow { color: var(--purple); font-size: clamp(24px,3vw,44px); }
+
+    .game-card { display: grid; grid-template-columns: 1.1fr .9fr; align-items: center; gap: 6vw; }
+    .game-mascots { position: relative; min-height: 400px; }
+    .game-mascots img { position: absolute; width: 44%; filter: drop-shadow(0 18px 22px rgba(57,48,121,.18)); }
+    .game-mascots img:nth-child(1) { left: 5%; top: 5%; transform: rotate(-8deg); }
+    .game-mascots img:nth-child(2) { right: 8%; top: 12%; transform: rotate(7deg); }
+    .game-mascots img:nth-child(3) { left: 29%; bottom: -2%; transform: rotate(1deg); }
+
+    .tech-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-top: 40px; }
+    .tech { padding: 24px; border-radius: 20px; background: white; border: 1px solid var(--line); }
+    .tech b { display: block; margin-bottom: 10px; font-size: 19px; }
+    .tech small { color: var(--muted); line-height: 1.45; }
+
+    .team { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 900px; margin-top: 42px; }
+    .member { padding: 28px; border-radius: 22px; background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.12); }
+    .member b { display: block; margin-bottom: 8px; font-size: 24px; }
+    .member span { color: rgba(255,255,255,.62); line-height: 1.55; }
+
+    .controls { position: fixed; right: 24px; bottom: 22px; z-index: 10; display: flex; align-items: center; gap: 8px; }
+    .controls button { display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid rgba(32,37,46,.08); border-radius: 50%; color: var(--text); background: rgba(255,255,255,.84); backdrop-filter: blur(12px); cursor: pointer; transition: transform .15s, background .15s; }
+    .controls button:hover { transform: translateY(-2px); background: white; }
+    .counter { min-width: 52px; color: var(--muted); font-size: 13px; text-align: center; }
+    .progress { position: fixed; left: 0; bottom: 0; z-index: 20; height: 4px; width: 0; background: var(--purple); transition: width .35s ease; }
+    .hint { position: fixed; left: 25px; bottom: 22px; z-index: 10; color: var(--muted); font-size: 12px; }
+
+    @media (max-width: 900px) {
+      .slide { padding: 70px 36px; }
+      .topline { left: 36px; right: 36px; }
+      .hero, .split, .game-card { grid-template-columns: 1fr; }
+      .hero-art { display: none; }
+      .flow { grid-template-columns: 1fr 1fr; }
+      .flow-step:not(:last-child)::after { display: none; }
+      .privacy-visual { display: none; }
+      .tech-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media print {
+      html, body { overflow: visible; background: white; }
+      .deck { height: auto; }
+      .slide { position: relative; visibility: visible; opacity: 1; transform: none; width: 100vw; height: 100vh; page-break-after: always; }
+      .controls, .progress, .hint { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="deck" aria-live="polite">
+    <section class="slide hero active">
+      <div class="topline"><span class="brand"><i class="brand-dot"></i> ROOMI</span><span>AI STUDY ROOM</span></div>
+      <div class="hero-copy">
+        <p class="eyebrow">친구들과 함께 켜두는</p>
+        <h1>AI 운영<br><span class="accent">스터디룸</span></h1>
+        <p class="lead">목표부터 집중, 휴식, 회고까지.<br>루미가 공부의 흐름을 이어줍니다.</p>
+        <span class="pill">🌙 Roomi · 2026</span>
+      </div>
+      <div class="hero-art"><img src="../mascot.png" alt="루미 마스코트" /></div>
+    </section>
+
+    <section class="slide dark">
+      <div class="topline"><span class="brand"><i class="brand-dot"></i> ROOMI</span><span>01 · PROBLEM</span></div>
+      <p class="eyebrow">우리는 이미 함께 공부하고 있습니다</p>
+      <div class="quote">그런데,<br><span>같이 켜두는 것</span>만으로<br>충분할까요?</div>
+    </section>
+
+    <section class="slide">
+      <div class="topline"><span class="brand"><i class="brand-dot"></i> ROOMI</span><span>01 · PROBLEM</span></div>
+      <div class="split">
+        <div>
+          <p class="eyebrow">세션이 흐트러지는 순간</p>
+          <h2>사람이 아니라<br><span class="accent">흐름</span>이 비어 있습니다.</h2>
+          <p class="lead">목표 없이 시작하고, 집중이 풀린 줄도 모른 채, 기록 없이 끝납니다.</p>
+        </div>
+        <div class="stack">
+          <div class="card"><span class="number">01</span><strong>막연한 목표</strong><p>“오늘 공부하기”는 끝을 확인하기 어렵습니다.</p></div>
+          <div class="card active-card"><span class="number">02</span><strong>조용한 이탈</strong><p>흐트러짐은 알아차리기 전에 길어집니다.</p></div>
+          <div class="card"><span class="number">03</span><strong>사라지는 세션</strong><p>무엇을 해냈는지 다음 공부로 이어지지 않습니다.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="topline"><span class="brand"><i class="brand-dot"></i> ROOMI</span><span>02 · SOLUTION</span></div>
+      <p class="eyebrow">Roomi's answer</p>
+      <h2>루미는 회의 도구가 아니라<br><span class="accent">AI 운영자</span>입니다.</h2>
+      <div class="flow">
+        <div class="flow-step"><div class="icon">✦</div><strong>목표 다듬기</strong><small>한 세션 안에 확인 가능한 크기로</small></div>
+        <div class="flow-step"><div class="icon">◎</div><strong>함께 집중</strong><small>최대 4명, 같은 타이머와 상태</small></div>
+        <div class="flow-step"><div class="icon">↗</div><strong>부드러운 복귀</strong><small>필요한 순간, 본인에게만 조용히</small></div>
+        <div class="flow-step"><div class="icon">✓</div><strong>회고와 연결</strong><small>달성 여부와 집중 기록을 다음 세션으로</small></div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="topline"><span class="brand"><i class="brand-dot"></i> ROOMI</span><span>03 · EXPERIENCE</span></div>
+      <div class="split">
+        <div>
+          <p class="eyebrow">함께 있지만 부담스럽지 않게</p>
+          <h2>친구는 곁에,<br>루미는 <span class="accent">진행</span>에.</h2>
+          <p class="lead">영상, 타이머, 목표, 상태가 같은 방에서 실시간으로 이어집니다.</p>
+          <span class="pill">최대 4명 · 닉네임 + 초대 코드</span>
+        </div>
+        <div class="room-ui" aria-label="루미 스터디룸 개념 화면">
+          <div class="window-bar"><i></i><i></i><i></i></div>
+          <div class="room-grid">
+            <div class="person"><label>채훈 · 공부 중</label></div>
+            <div class="person"><label>소요 · 공부 중</label></div>
+            <div class="side-panel"><b>🌙 루미 진행자</b><div class="message">목표가 명확해졌어.<br>이제 25분 동안 한 챕터만 끝내보자!</div><div class="message">집중 흐름 좋아. 그대로 가자 🙌</div></div>
+            <div class="person"><label>민지 · 집중 중</label></div>
+            <div class="person"><label>나 · 공부 중</label></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="topline"><span class="brand"><i class="brand-dot"></i> ROOMI</span><span>03 · EXPERIENCE</span></div>
+      <p class="eyebrow">AI intervention, at the right moment</p>
+      <h2>감시는 줄이고,<br><span class="accent">알아차림</span>을 돕습니다.</h2>
+      <div class="signal">
+        <div class="signal-card"><span class="big">1분</span><small>흐트러짐이 이어지면</small></div>
+        <div class="signal-arrow">→</div>
+        <div class="signal-card"><span class="big">“괜찮아?”</span><small>본인에게만 조용히 확인</small></div>
+      </div>
+    </section>
+
+    <section class="slide dark">
+      <div class="topline"><span class="brand"><i class="brand-dot"></i> ROOMI</span><span>04 · PRIVACY</span></div>
+      <div class="privacy">
+        <div>
+          <p class="eyebrow">Privacy by design</p>
+          <h2>영상은<br><span class="accent">내 기기</span>에 남습니다.</h2>
+          <p class="lead">MediaPipe가 얼굴·눈·고개 신호를 로컬에서 분석합니다. 서버에는 상태만 전송하고, 구체적인 이탈 사유는 다른 참가자에게 공개하지 않습니다.</p>
+        </div>
+        <div class="privacy-visual"><div class="lock"></div></div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="topline"><span class="brand"><i class="brand-dot"></i> ROOMI</span><span>05 · LOOP</span></div>
+      <p class="eyebrow">A session that improves the next</p>
+      <h2>공부가 끝나도<br><span class="accent">흐름은 남습니다.</span></h2>
+      <div class="loop">
+        <div class="loop-item"><b>구체적인<br>목표</b></div><div class="loop-arrow">→</div>
+        <div class="loop-item"><b>실측<br>집중 기록</b></div><div class="loop-arrow">→</div>
+        <div class="loop-item"><b>짧은<br>회고</b></div><div class="loop-arrow">↻</div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="topline"><span class="brand"><i class="brand-dot"></i> ROOMI</span><span>06 · PLAY</span></div>
+      <div class="game-card">
+        <div>
+          <p class="eyebrow">집중 사이, 함께 웃는 시간</p>
+          <h2>쉬는 시간도<br><span class="accent">같이 놀아요.</span></h2>
+          <p class="lead">숨은 표정 미션과 카피캣 릴레이. 같은 카메라 경험이 자연스럽게 플레이로 전환됩니다.</p>
+          <span class="pill">🎭 표정 파티 게임</span>
+        </div>
+        <div class="game-mascots">
+          <img src="../apps/desktop/src/renderer/src/assets/mascot/wink.png" alt="윙크하는 루미" />
+          <img src="../apps/desktop/src/renderer/src/assets/mascot/surprise.png" alt="놀란 루미" />
+          <img src="../apps/desktop/src/renderer/src/assets/mascot/smile.png" alt="웃는 루미" />
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="topline"><span class="brand"><i class="brand-dot"></i> ROOMI</span><span>07 · SYSTEM</span></div>
+      <p class="eyebrow">Built for a real-time room</p>
+      <h2>빠르게 연결하고,<br><span class="accent">로컬에서 지킵니다.</span></h2>
+      <div class="tech-grid">
+        <div class="tech"><b>Electron + React</b><small>데스크톱 경험과 카메라·알림</small></div>
+        <div class="tech"><b>Daily + Socket.IO</b><small>영상과 방 상태의 실시간 동기화</small></div>
+        <div class="tech"><b>MediaPipe</b><small>로컬 집중·표정 신호 추정</small></div>
+        <div class="tech"><b>Gemma 3 · 12B</b><small>목표·복귀·회고 메시지 생성</small></div>
+      </div>
+    </section>
+
+    <section class="slide dark">
+      <div class="topline"><span class="brand"><i class="brand-dot"></i> ROOMI</span><span>08 · TEAM</span></div>
+      <p class="eyebrow">Two makers, one complete session</p>
+      <h2>아이디어가 아니라,<br><span class="accent">완주 가능한 MVP.</span></h2>
+      <div class="team">
+        <div class="member"><b>박채훈</b><span>DGIST CS&EE 21<br>실시간 서버 · 카메라 집중 감지 · API</span></div>
+        <div class="member"><b>박소요</b><span>숙명여대 CS 23<br>데스크톱 UI · 세션 플로우 · LLM 운영자</span></div>
+      </div>
+    </section>
+
+    <section class="slide hero">
+      <div class="topline"><span class="brand"><i class="brand-dot"></i> ROOMI</span><span>THANK YOU</span></div>
+      <div class="hero-copy">
+        <p class="eyebrow">Stay together. Stay in flow.</p>
+        <h1>함께 켜두고,<br><span class="accent">끝까지 해내는 방.</span></h1>
+        <p class="lead">루미가 다음 집중을 시작합니다.</p>
+      </div>
+      <div class="hero-art"><img src="../apps/desktop/src/renderer/src/assets/mascot/smile.png" alt="웃는 루미" /></div>
+    </section>
+  </main>
+
+  <div class="hint">← → 키 또는 화면 클릭</div>
+  <nav class="controls" aria-label="슬라이드 이동">
+    <button id="prev" aria-label="이전 슬라이드">←</button>
+    <span class="counter"><span id="current">1</span> / <span id="total">12</span></span>
+    <button id="next" aria-label="다음 슬라이드">→</button>
+  </nav>
+  <div class="progress" id="progress"></div>
+
+  <script>
+    const slides = [...document.querySelectorAll('.slide')];
+    const currentEl = document.querySelector('#current');
+    const totalEl = document.querySelector('#total');
+    const progressEl = document.querySelector('#progress');
+    let index = Math.max(0, Math.min(slides.length - 1, Number(location.hash.slice(1)) - 1 || 0));
+
+    function show(next) {
+      index = Math.max(0, Math.min(slides.length - 1, next));
+      slides.forEach((slide, i) => {
+        slide.classList.toggle('active', i === index);
+        slide.classList.toggle('past', i < index);
+        slide.setAttribute('aria-hidden', i === index ? 'false' : 'true');
+      });
+      currentEl.textContent = index + 1;
+      totalEl.textContent = slides.length;
+      progressEl.style.width = `${((index + 1) / slides.length) * 100}%`;
+      history.replaceState(null, '', `#${index + 1}`);
+    }
+
+    document.querySelector('#prev').addEventListener('click', (event) => { event.stopPropagation(); show(index - 1); });
+    document.querySelector('#next').addEventListener('click', (event) => { event.stopPropagation(); show(index + 1); });
+    document.addEventListener('keydown', (event) => {
+      if (['ArrowRight', 'PageDown', ' '].includes(event.key)) { event.preventDefault(); show(index + 1); }
+      if (['ArrowLeft', 'PageUp'].includes(event.key)) { event.preventDefault(); show(index - 1); }
+      if (event.key === 'Home') show(0);
+      if (event.key === 'End') show(slides.length - 1);
+      if (event.key.toLowerCase() === 'f') document.documentElement.requestFullscreen?.();
+    });
+    document.querySelector('.deck').addEventListener('click', (event) => { if (!event.target.closest('button')) show(index + 1); });
+    let touchX = 0;
+    document.addEventListener('touchstart', (event) => { touchX = event.changedTouches[0].clientX; }, { passive: true });
+    document.addEventListener('touchend', (event) => { const dx = event.changedTouches[0].clientX - touchX; if (Math.abs(dx) > 45) show(index + (dx < 0 ? 1 : -1)); }, { passive: true });
+    show(index);
+  </script>
+</body>
+</html>
