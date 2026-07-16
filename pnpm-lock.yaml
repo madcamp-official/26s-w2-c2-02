@@ -70,7 +70,7 @@ importers:
         specifier: ^19.0.2
         version: 19.2.3(@types/react@19.2.17)
       electron:
-        specifier: ^33.2.1
+        specifier: 33.4.11
         version: 33.4.11
       electron-builder:
         specifier: ^26.15.3
