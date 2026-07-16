@@ -102,7 +102,12 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
+        # electron-builder가 pnpm의 심볼릭 링크 node_modules 구조를 걷다가
+        # 프로젝트 디렉터리를 서명 대상 파일로 오인하는 문제(#9366 계열)를 피하기 위해
+        # 이 job에서만 npm 스타일 flat node_modules(hoisted)로 설치한다.
         run: pnpm install --frozen-lockfile
+        env:
+          npm_config_node_linker: hoisted
 
       - name: Verify API and desktop
         run: |
